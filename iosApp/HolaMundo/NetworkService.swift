@@ -68,7 +68,7 @@ struct PasswordValidationResponse: Codable {
 class NetworkService {
     static let shared = NetworkService()
     
-    private let baseURL = "http://localhost:3000/api"
+    private let baseURL = "http://192.168.3.149:3333/api"
     private let session: URLSession
     
     private init() {

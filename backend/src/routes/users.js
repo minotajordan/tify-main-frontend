@@ -396,11 +396,11 @@ module.exports = router;
 router.post('/:id/messaging-settings', async (req, res) => {
   try {
     const { id } = req.params;
-    const { platform, handle, isEnabled = true } = req.body;
+    const { platform, handle } = req.body;
     const setting = await prisma.userMessagingSetting.upsert({
       where: { userId_platform: { userId: id, platform } },
-      update: { handle: handle || null, isEnabled },
-      create: { userId: id, platform, handle: handle || null, isEnabled }
+      update: { handle: handle || null },
+      create: { userId: id, platform, handle: handle || null }
     });
     res.status(201).json(setting);
   } catch (error) {
@@ -411,10 +411,10 @@ router.post('/:id/messaging-settings', async (req, res) => {
 router.put('/:id/messaging-settings/:platform', async (req, res) => {
   try {
     const { id, platform } = req.params;
-    const { handle, isEnabled, verified } = req.body;
+    const { handle, verified } = req.body;
     const setting = await prisma.userMessagingSetting.update({
       where: { userId_platform: { userId: id, platform } },
-      data: { handle: handle || null, isEnabled, verified }
+      data: { handle: handle || null, verified }
     });
     res.json(setting);
   } catch (error) {

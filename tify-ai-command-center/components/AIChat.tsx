@@ -1,7 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Send, Bot, User, Sparkles, Terminal } from 'lucide-react';
 import { askTifyBrain } from '../services/geminiService';
-import { useI18n } from '../i18n';
 
 interface ChatMessage {
   id: string;
@@ -11,12 +10,11 @@ interface ChatMessage {
 }
 
 const AIChat: React.FC = () => {
-  const { t } = useI18n();
   const [messages, setMessages] = useState<ChatMessage[]>([
     {
       id: 'welcome',
       role: 'ai',
-      text: t('ai.initialWelcome'),
+      text: "Hello Administrator. I am the Tify Brain. I have full context of your organization's channels, users, and message queues. How can I assist you today?",
       timestamp: new Date()
     }
   ]);
@@ -73,13 +71,13 @@ const AIChat: React.FC = () => {
                <Bot size={24} />
             </div>
             <div>
-              <h3 className="font-bold">{t('ai.headerTitle')}</h3>
-              <p className="text-xs text-indigo-200">{t('ai.powered')}</p>
+              <h3 className="font-bold">Tify Neural Interface</h3>
+              <p className="text-xs text-indigo-200">Powered by Gemini 2.5 Flash</p>
             </div>
          </div>
          <div className="bg-slate-800 px-3 py-1 rounded text-xs font-mono text-green-400 flex items-center gap-2">
             <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse"></span>
-            {t('ai.online')}
+            ONLINE
          </div>
       </div>
 
@@ -138,7 +136,7 @@ const AIChat: React.FC = () => {
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder={t('ai.placeholder')}
+            placeholder="Ask Tify to draft a message, analyze channel stats, or explain verification policies..."
             className="w-full pl-11 pr-14 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white transition-all shadow-inner"
           />
           <button 
@@ -150,7 +148,7 @@ const AIChat: React.FC = () => {
           </button>
         </div>
         <div className="mt-2 text-center text-xs text-gray-400">
-          {t('ai.disclaimer')}
+          AI can make mistakes. Review generated actions before execution.
         </div>
       </div>
     </div>

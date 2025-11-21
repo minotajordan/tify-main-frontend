@@ -3,6 +3,7 @@ const router = express.Router();
 const prisma = require('../config/database');
 const { Prisma } = require('@prisma/client');
 const jwt = require('jsonwebtoken');
+const http = require('http');
 
 // GET /api/messages/channel/:channelId - Obtener mensajes de un canal (con filtros en backend)
 router.get('/channel/:channelId', async (req, res) => {
@@ -80,6 +81,24 @@ router.get('/channel/:channelId', async (req, res) => {
   } catch (error) {
     console.error('Error obteniendo mensajes:', error);
     res.status(500).json({ error: 'Error interno del servidor' });
+  }
+});
+
+// GET /api/messages/:id - Obtener mensaje por id
+router.get('/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const msg = await prisma.message.findUnique({
+      where: { id },
+      include: {
+        sender: { select: { id: true, username: true, fullName: true } },
+        channel: { select: { title: true, icon: true } }
+      }
+    });
+    if (!msg) return res.status(404).json({ error: 'Mensaje no encontrado' });
+    res.json(msg);
+  } catch (error) {
+    res.status(500).json({ error: 'Error obteniendo mensaje' });
   }
 });
 
@@ -226,6 +245,19 @@ router.post('/', async (req, res) => {
         approvals: { include: { approver: { select: { id: true, username: true, fullName: true } } } }
       }
     });
+
+    try {
+      if (isEmergency) {
+        const host = (process.env.EMITTER_BIND_HOST && process.env.EMITTER_BIND_HOST !== '0.0.0.0') ? process.env.EMITTER_BIND_HOST : 'localhost';
+        const port = Number(process.env.EMITTER_HTTP_PORT) || 8766;
+        const payload = JSON.stringify({ id: full.id, channelId: full.channelId, content: full.content, createdAt: new Date().toISOString(), eventAt: full.eventAt ? new Date(full.eventAt).toISOString() : undefined });
+        const req = http.request({ host, port, path: '/event', method: 'POST', headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(payload) } }, () => {});
+        req.on('error', () => {});
+        req.write(payload);
+        req.end();
+      }
+    } catch (e) {}
+
     res.status(201).json(full);
   } catch (error) {
     console.error('Error creando mensaje:', error);

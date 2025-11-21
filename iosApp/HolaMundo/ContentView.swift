@@ -1,8 +1,9 @@
 import SwiftUI
 import UIKit
+import UserNotifications
 
 // MARK: - Models
-struct Channel: Identifiable, Codable {
+struct Channel: Identifiable, Codable, Equatable {
     let id: String
     let title: String
     let description: String
@@ -14,7 +15,7 @@ struct Channel: Identifiable, Codable {
     let isFavorite: Bool?
     let subchannels: [Subchannel]?
     
-    struct Subchannel: Identifiable, Codable {
+    struct Subchannel: Identifiable, Codable, Equatable {
         let id: String
         let title: String
         let icon: String
@@ -230,7 +231,7 @@ extension Date {
 
 // MARK: - API Configuration
 enum APIConfig {
-    static let baseURL = "http://192.168.1.9:3333/api"
+    static let baseURL = "http://192.168.3.149:3333/api"
     static let currentUserId = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
 }
 
@@ -268,7 +269,23 @@ class UserSession: ObservableObject {
         }
       }.resume()
     }
+
+    func syncAPNSTokenIfAvailable() {
+        let token = UserDefaults.standard.string(forKey: "apns_device_token") ?? ""
+        guard !token.isEmpty, !currentUserId.isEmpty,
+              let url = URL(string: "\(APIConfig.baseURL)/users/\(currentUserId)/messaging-settings") else { return }
+        var req = URLRequest(url: url)
+        req.httpMethod = "POST"
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        let body: [String: Any] = [
+            "platform": "PUSH",
+            "handle": token
+        ]
+        req.httpBody = try? JSONSerialization.data(withJSONObject: body)
+        URLSession.shared.dataTask(with: req) { _, _, _ in }.resume()
+    }
 }
+
 
 // MARK: - Persistence Manager
 class PersistenceManager {
@@ -548,12 +565,27 @@ class ChannelDetailViewModel: ObservableObject {
                     let newDetail = try decoder.decode(ChannelDetail.self, from: data)
                     self?.channelDetail = newDetail
                     PersistenceManager.shared.saveChannelDetail(newDetail)
+                    if newDetail.parentId == nil, let subs = newDetail.subchannels, !subs.isEmpty {
+                        let defaultSub = subs.sorted { $0.memberCount > $1.memberCount }.first
+                        if let sub = defaultSub { self?.loadSubchannelDetail(sub.id) }
+                    }
                 } catch {
                     if self?.channelDetail == nil {
                         self?.errorMessage = "Error al parsear datos: \(error.localizedDescription)"
                     }
                     print("Error detallado: \(error)")
                 }
+            }
+        }.resume()
+    }
+
+    private func loadSubchannelDetail(_ subId: String) {
+        guard let url = URL(string: "\(APIConfig.baseURL)/channels/\(subId)?userId=\(UserSession.shared.currentUserId)") else { return }
+        URLSession.shared.dataTask(with: url) { [weak self] data, _, _ in
+            DispatchQueue.main.async {
+                guard let data = data, let detail = try? JSONDecoder().decode(ChannelDetail.self, from: data) else { return }
+                self?.channelDetail = detail
+                PersistenceManager.shared.saveChannelDetail(detail)
             }
         }.resume()
     }
@@ -724,6 +756,7 @@ class ProfileViewModel: ObservableObject {
 // MARK: - Views
 struct ChannelsView: View {
     @StateObject private var viewModel = ChannelsViewModel()
+    @ObservedObject private var session = UserSession.shared
     @State private var searchText = ""
     @State private var referenceCode = ""
     @State private var searching = false
@@ -750,7 +783,7 @@ struct ChannelsView: View {
                             .padding(.horizontal)
                         
                         Button(action: {
-                            viewModel.loadSubscribedChannels()
+                            viewModel.loadChannels(isRefresh: true, publicOnly: true)
                         }) {
                             Label("Reintentar", systemImage: "arrow.clockwise")
                                 .padding(.horizontal, 20)
@@ -859,7 +892,7 @@ struct ChannelsView: View {
                     }
                 }
             }
-            .navigationTitle(isSearchMode ? "Búsqueda" : "Mis Canales")
+            .navigationTitle(isSearchMode ? "Búsqueda" : "Canales")
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
                     HStack(spacing: 8) {
@@ -908,11 +941,8 @@ struct ChannelsView: View {
                                     isSearchMode = false
                                     searchText = ""
                                     referenceCode = ""
-                                    viewModel.loadSubscribedChannels(isRefresh: true)
-                                } else {
-                                    viewModel.loadSubscribedChannels(isRefresh: true)
                                 }
-                                viewModel.loadFavorites()
+                                viewModel.loadChannels(isRefresh: true, publicOnly: true)
                             }) {
                                 Image(systemName: isSearchMode ? "house" : "arrow.clockwise")
                             }
@@ -922,13 +952,26 @@ struct ChannelsView: View {
             }
             .onAppear {
                 UserSession.shared.ensureGuest()
-                if viewModel.channels.isEmpty {
-                    viewModel.loadSubscribedChannels()
-                    viewModel.loadChannels(publicOnly: true)
-                    viewModel.loadFavorites()
-                } else {
+                UserSession.shared.syncAPNSTokenIfAvailable()
+                if !session.currentUserId.isEmpty {
                     viewModel.loadSubscribedChannels(isRefresh: true)
                     viewModel.loadFavorites()
+                } else {
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
+                        if !session.currentUserId.isEmpty {
+                            viewModel.loadSubscribedChannels(isRefresh: true)
+                            viewModel.loadFavorites()
+                            UserSession.shared.syncAPNSTokenIfAvailable()
+                        }
+                    }
+                }
+                viewModel.loadChannels(publicOnly: true)
+            }
+            .onChange(of: session.currentUserId) { newId in
+                if !newId.isEmpty {
+                    viewModel.loadSubscribedChannels(isRefresh: true)
+                    viewModel.loadFavorites()
+                    UserSession.shared.syncAPNSTokenIfAvailable()
                 }
             }
             .sheet(isPresented: $showSearchOverlay) {
@@ -1024,7 +1067,7 @@ class SearchViewModel: ObservableObject {
     @Published var referenceCode: String = ""
 
     func loadSuggestions() {
-        guard let url = URL(string: "\(APIConfig.baseURL)/channels?userId=\(UserSession.shared.currentUserId)") else { return }
+        guard let url = URL(string: "\(APIConfig.baseURL)/channels?isPublic=true") else { return }
         URLSession.shared.dataTask(with: url) { [weak self] data, _, _ in
             DispatchQueue.main.async {
                 guard let data = data else { return }
@@ -1163,6 +1206,16 @@ struct SearchOverlay: View {
             .navigationTitle("Buscar Canales")
             .onAppear {
                 vm.loadSuggestions()
+            }
+            .onChange(of: vm.suggestions) { items in
+                if searchMode == .suggestions && !items.isEmpty {
+                    onSearchResults(items)
+                }
+            }
+            .onChange(of: vm.results) { items in
+                if searchMode != .suggestions {
+                    onSearchResults(items)
+                }
             }
         }
     }
@@ -1414,6 +1467,7 @@ struct SubchannelRow: View {
 struct ChannelDetailView: View {
     let channelId: String
     let channelTitle: String
+    let highlightMessageId: String?
     @StateObject private var viewModel = ChannelDetailViewModel()
     @Environment(\.colorScheme) var colorScheme
     @State private var showingUnsubscribeAlert = false
@@ -1427,6 +1481,12 @@ struct ChannelDetailView: View {
     @State private var regError: String? = nil
     @State private var regSending = false
     @State private var regInfo: String? = nil
+
+    init(channelId: String, channelTitle: String, highlightMessageId: String? = nil) {
+        self.channelId = channelId
+        self.channelTitle = channelTitle
+        self.highlightMessageId = highlightMessageId
+    }
     
     var body: some View {
         ZStack(alignment: .top) {
@@ -1561,19 +1621,27 @@ struct ChannelDetailView: View {
                             Spacer()
                         }
                     } else {
-                        ScrollView {
-                            LazyVStack(spacing: 12) {
-                                ForEach(detail.messages) { message in
-                                    MessageBubble(message: message)
+                        ScrollViewReader { proxy in
+                            ScrollView {
+                                LazyVStack(spacing: 12) {
+                                    ForEach(detail.messages) { message in
+                                        MessageBubble(message: message)
+                                            .id(message.id)
+                                    }
+                                }
+                                .padding()
+                            }
+                            .onAppear {
+                                if let hid = highlightMessageId {
+                                    withAnimation { proxy.scrollTo(hid, anchor: .center) }
                                 }
                             }
-                            .padding()
                         }
                     }
                 }
             }
         }
-        .navigationTitle(channelTitle)
+        .navigationTitle(viewModel.channelDetail?.title ?? channelTitle)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .navigationBarTrailing) {
@@ -1582,7 +1650,7 @@ struct ChannelDetailView: View {
                 } else {
                     Button(action: {
                         withAnimation {
-                            viewModel.loadChannelDetail(channelId: channelId, isRefresh: true)
+                            viewModel.loadChannelDetail(channelId: viewModel.channelDetail?.id ?? channelId, isRefresh: true)
                         }
                     }) {
                         Image(systemName: "arrow.clockwise")
@@ -1598,8 +1666,8 @@ struct ChannelDetailView: View {
             }
         }
         .sheet(isPresented: $viewModel.showCompose) {
-            ComposeMessageView(channelId: channelId) {
-                viewModel.loadChannelDetail(channelId: channelId, isRefresh: true)
+            ComposeMessageView(channelId: viewModel.channelDetail?.id ?? channelId) {
+                viewModel.loadChannelDetail(channelId: viewModel.channelDetail?.id ?? channelId, isRefresh: true)
             }
         }
         .sheet(isPresented: $showRegister) {
@@ -1921,8 +1989,255 @@ struct MessagesView: View {
     }
 }
 
+struct MessageDetailView: View {
+    let messageId: String
+    var onDismiss: (() -> Void)? = nil
+    @Environment(\.dismiss) var dismiss
+    @State private var message: Message?
+    @State private var channel: ChannelDetail?
+    @State private var isLoading = true
+    @State private var error: String?
+    var body: some View {
+        NavigationView {
+            Group {
+                if isLoading { ProgressView("Cargando mensaje...") }
+                else if let error = error { Text(error).foregroundColor(.red) }
+                else if let message = message {
+                    VStack(spacing: 0) {
+                        if let channel = channel {
+                            HStack(spacing: 12) {
+                                Image(systemName: channel.icon).foregroundColor(.blue)
+                                Text(channel.title).font(.headline)
+                                Spacer()
+                            }
+                            .padding()
+                        }
+                        MessageBubble(message: message)
+                            .padding(.horizontal)
+                        Spacer()
+                    }
+                }
+            }
+            .navigationTitle("Mensaje")
+            .toolbar { ToolbarItem(placement: .navigationBarLeading) { Button("Cerrar") { (onDismiss ?? { dismiss() })() } } }
+        }
+        .onAppear { load() }
+    }
+    private func load() {
+        guard let url = URL(string: "\(APIConfig.baseURL)/messages/\(messageId)") else { isLoading = false; error = "URL inválida"; return }
+        URLSession.shared.dataTask(with: url) { data, _, _ in
+            DispatchQueue.main.async {
+                isLoading = false
+                guard let data = data, let msg = try? JSONDecoder().decode(Message.self, from: data) else { error = "No se pudo cargar el mensaje"; return }
+                message = msg
+                if let cUrl = URL(string: "\(APIConfig.baseURL)/channels/\(msg.channelId)") {
+                    URLSession.shared.dataTask(with: cUrl) { d, _, _ in
+                        DispatchQueue.main.async { if let d = d, let det = try? JSONDecoder().decode(ChannelDetail.self, from: d) { channel = det } }
+                    }.resume()
+                }
+            }
+        }.resume()
+    }
+}
+
+class EmergencyMonitor: ObservableObject {
+    @Published var isRunning = false
+    private var timer: Timer?
+    private var knownIds: Set<String> = []
+    private var channelIds: [String] = []
+
+    func start() {
+        if isRunning { return }
+        isRunning = true
+
+        loadSubscriptions { [weak self] ids in
+            guard let self = self else { return }
+            self.channelIds = ids
+            self.pollOnce()
+            DispatchQueue.main.async {
+                self.timer = Timer.scheduledTimer(withTimeInterval: 15, repeats: true) { [weak self] _ in
+                    self?.pollOnce()
+                }
+            }
+        }
+    }
+
+    func stop() {
+        isRunning = false
+        timer?.invalidate()
+        timer = nil
+    }
+
+    private func loadSubscriptions(completion: @escaping ([String])->Void) {
+        guard let url = URL(string: "\(APIConfig.baseURL)/subscriptions/user/\(UserSession.shared.currentUserId)") else {
+            completion([])
+            return
+        }
+        URLSession.shared.dataTask(with: url) { data, _, _ in
+            guard let data = data, let subs = try? JSONDecoder().decode([Subscription].self, from: data) else {
+                completion([])
+                return
+            }
+            let ids = subs.map { $0.channelId }
+            completion(ids)
+        }.resume()
+    }
+
+    private func pollOnce() {
+        guard !channelIds.isEmpty else { return }
+        for cid in channelIds {
+            fetchEmergencies(channelId: cid)
+        }
+    }
+
+    private func fetchEmergencies(channelId: String) {
+        guard let url = URL(string: "\(APIConfig.baseURL)/messages/channel/\(channelId)?quick=emergency") else { return }
+        URLSession.shared.dataTask(with: url) { [weak self] data, _, _ in
+            guard let self = self, let data = data else { return }
+            if let messages = try? JSONDecoder().decode([Message].self, from: data) {
+                for m in messages {
+                    if !self.knownIds.contains(m.id) {
+                        self.knownIds.insert(m.id)
+                        self.notifyEmergency(message: m)
+                    }
+                }
+            }
+        }.resume()
+    }
+
+    private func notifyEmergency(message: Message) {
+        let content = UNMutableNotificationContent()
+        content.sound = .default
+        content.userInfo = ["messageId": message.id, "channelId": message.channelId]
+        let formatted = formatEventShort(message.eventAt)
+        let bodyBase = message.content
+        content.body = formatted != nil ? "\(bodyBase) • \(formatted!)" : bodyBase
+        if let url = URL(string: "\(APIConfig.baseURL)/channels/\(message.channelId)") {
+            URLSession.shared.dataTask(with: url) { data, _, _ in
+                guard let data = data, let detail = try? JSONDecoder().decode(ChannelDetail.self, from: data) else {
+                    content.title = "Emergencia"
+                    let req = UNNotificationRequest(identifier: "emergency_\(message.id)", content: content, trigger: nil)
+                    UNUserNotificationCenter.current().add(req, withCompletionHandler: nil)
+                    return
+                }
+                if let pid = detail.parentId, let purl = URL(string: "\(APIConfig.baseURL)/channels/\(pid)") {
+                    URLSession.shared.dataTask(with: purl) { pdata, _, _ in
+                        var title = detail.title
+                        if let pdata = pdata, let parent = try? JSONDecoder().decode(ChannelDetail.self, from: pdata), let subs = parent.subchannels, !subs.isEmpty {
+                            let principal = subs.sorted { $0.memberCount > $1.memberCount }.first
+                            title = parent.title + ((principal?.id == detail.id) ? "" : " • \(detail.title)")
+                        }
+                        content.title = title
+                        let req = UNNotificationRequest(identifier: "emergency_\(message.id)", content: content, trigger: nil)
+                        UNUserNotificationCenter.current().add(req, withCompletionHandler: nil)
+                    }.resume()
+                } else {
+                    content.title = detail.title
+                    let req = UNNotificationRequest(identifier: "emergency_\(message.id)", content: content, trigger: nil)
+                    UNUserNotificationCenter.current().add(req, withCompletionHandler: nil)
+                }
+            }.resume()
+        }
+    }
+}
+
+struct EmergencyEvent: Codable, Identifiable {
+    let id: String
+    let channelId: String
+    let content: String
+    let createdAt: String
+    let eventAt: String?
+}
+
+func formatEventShort(_ iso: String?) -> String? {
+    guard let iso = iso, let dt = ISO8601DateFormatter().date(from: iso) else { return nil }
+    let fmt = DateFormatter()
+    fmt.locale = Locale(identifier: "es")
+    fmt.dateFormat = "LLL • EEEE d • h:mm a"
+    return fmt.string(from: dt)
+}
+
+class EmergencyEmitterClient: ObservableObject {
+    @Published var isRunning = false
+    private var timer: Timer?
+    private var knownIds: Set<String> = []
+    private let baseURL: String
+
+    init(baseURL: String) {
+        self.baseURL = baseURL
+    }
+
+    func start() {
+        if isRunning { return }
+        isRunning = true
+        pollOnce()
+        DispatchQueue.main.async {
+            self.timer = Timer.scheduledTimer(withTimeInterval: 5, repeats: true) { [weak self] _ in
+                self?.pollOnce()
+            }
+        }
+    }
+
+    func stop() {
+        isRunning = false
+        timer?.invalidate()
+        timer = nil
+    }
+
+    private func pollOnce() {
+        guard let url = URL(string: "\(baseURL)/events") else { return }
+        URLSession.shared.dataTask(with: url) { [weak self] data, _, _ in
+            guard let self = self, let data = data else { return }
+            if let events = try? JSONDecoder().decode([EmergencyEvent].self, from: data) {
+                for e in events {
+                    if !self.knownIds.contains(e.id) {
+                        self.knownIds.insert(e.id)
+                        self.notifyEmergency(event: e)
+                    }
+                }
+            }
+        }.resume()
+    }
+
+    private func notifyEmergency(event: EmergencyEvent) {
+        let content = UNMutableNotificationContent()
+        content.sound = .default
+        content.userInfo = ["messageId": event.id, "channelId": event.channelId]
+        let formatted = formatEventShort(event.eventAt)
+        let bodyBase = event.content
+        content.body = formatted != nil ? "\(bodyBase) • \(formatted!)" : bodyBase
+        if let url = URL(string: "\(APIConfig.baseURL)/channels/\(event.channelId)") {
+            URLSession.shared.dataTask(with: url) { data, _, _ in
+                guard let data = data, let detail = try? JSONDecoder().decode(ChannelDetail.self, from: data) else {
+                    content.title = "Emergencia"
+                    let req = UNNotificationRequest(identifier: "emergency_emitter_\(event.id)", content: content, trigger: nil)
+                    UNUserNotificationCenter.current().add(req, withCompletionHandler: nil)
+                    return
+                }
+                if let pid = detail.parentId, let purl = URL(string: "\(APIConfig.baseURL)/channels/\(pid)") {
+                    URLSession.shared.dataTask(with: purl) { pdata, _, _ in
+                        var title = detail.title
+                        if let pdata = pdata, let parent = try? JSONDecoder().decode(ChannelDetail.self, from: pdata), let subs = parent.subchannels, !subs.isEmpty {
+                            let principal = subs.sorted { $0.memberCount > $1.memberCount }.first
+                            title = parent.title + ((principal?.id == detail.id) ? "" : " • \(detail.title)")
+                        }
+                        content.title = title
+                        let req = UNNotificationRequest(identifier: "emergency_emitter_\(event.id)", content: content, trigger: nil)
+                        UNUserNotificationCenter.current().add(req, withCompletionHandler: nil)
+                    }.resume()
+                } else {
+                    content.title = detail.title
+                    let req = UNNotificationRequest(identifier: "emergency_emitter_\(event.id)", content: content, trigger: nil)
+                    UNUserNotificationCenter.current().add(req, withCompletionHandler: nil)
+                }
+            }.resume()
+        }
+    }
+}
+
 struct ProfileView: View {
     @StateObject private var viewModel = ProfileViewModel()
+    @AppStorage("app_appearance") private var appAppearance: String = "system"
     @State private var showingUnsubscribeAlert = false
     @State private var channelToUnsubscribe: String?
     
@@ -1993,6 +2308,24 @@ struct ProfileView: View {
                         .background(Color(.systemBackground))
                         
                         Divider()
+
+                        VStack(alignment: .leading, spacing: 12) {
+                            HStack {
+                                Image(systemName: "paintbrush")
+                                Text("Apariencia")
+                                    .font(.headline)
+                                Spacer()
+                            }
+                            .padding(.horizontal)
+                            Picker("Apariencia", selection: $appAppearance) {
+                                Text("Sistema").tag("system")
+                                Text("Claro").tag("light")
+                                Text("Oscuro").tag("dark")
+                            }
+                            .pickerStyle(.segmented)
+                            .padding(.horizontal)
+                        }
+                        .padding(.vertical)
                         
                         // Suscripciones
                         VStack(alignment: .leading, spacing: 16) {
@@ -2205,6 +2538,11 @@ struct SubscriptionCard: View {
 struct ContentView: View {
     @State private var selectedTab = 0
     @Environment(\.colorScheme) var colorScheme
+    @AppStorage("app_appearance") private var appAppearance: String = "system"
+    @StateObject private var emergencyMonitor = EmergencyMonitor()
+    @StateObject private var emitterClient = EmergencyEmitterClient(baseURL: "http://192.168.3.149:8766")
+    @StateObject private var router = NotificationRouter.shared
+    @State private var showDeepLink = false
     
     var body: some View {
         TabView(selection: $selectedTab) {
@@ -2230,7 +2568,30 @@ struct ContentView: View {
                 .tag(2)
         }
         .accentColor(.blue)
-        .preferredColorScheme(nil)
+        .preferredColorScheme(appAppearance == "dark" ? .dark : (appAppearance == "light" ? .light : nil))
+        .onAppear {
+            UserSession.shared.ensureGuest()
+            UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .badge, .sound]) { granted, _ in
+                if granted {
+                    emergencyMonitor.start()
+                    emitterClient.start()
+                } else {
+                    print("Notificaciones locales no autorizadas")
+                }
+            }
+        }
+        .onDisappear {
+            emergencyMonitor.stop()
+            emitterClient.stop()
+        }
+        .sheet(isPresented: $showDeepLink) {
+            if let mid = router.targetMessageId {
+                MessageDetailView(messageId: mid) { router.reset(); showDeepLink = false }
+            }
+        }
+        .onChange(of: router.targetMessageId) { _ in
+            showDeepLink = router.targetMessageId != nil
+        }
     }
 }
 
@@ -2314,6 +2675,47 @@ struct ComposeMessageView: View {
             DispatchQueue.main.async {
                 sending = false
                 if error == nil, let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) {
+                    if category == "EMERGENTE", let data = data,
+                       let msg = try? JSONDecoder().decode(Message.self, from: data) {
+                        let c = UNMutableNotificationContent()
+                        c.sound = .default
+                        c.body = (msg.eventInString != nil) ? "\(msg.content) • \(msg.eventInString!)" : msg.content
+                        c.userInfo = ["messageId": msg.id, "channelId": msg.channelId]
+                        if let url = URL(string: "\(APIConfig.baseURL)/channels/\(msg.channelId)") {
+                            URLSession.shared.dataTask(with: url) { d, _, _ in
+                                guard let d = d, let detail = try? JSONDecoder().decode(ChannelDetail.self, from: d) else {
+                                    c.title = "Emergencia"
+                                    let req = UNNotificationRequest(identifier: "emergency_sent_\(msg.id)", content: c, trigger: nil)
+                                    UNUserNotificationCenter.current().add(req, withCompletionHandler: nil)
+                                    return
+                                }
+                                if let pid = detail.parentId, let purl = URL(string: "\(APIConfig.baseURL)/channels/\(pid)") {
+                                    URLSession.shared.dataTask(with: purl) { pd, _, _ in
+                                        var title: String = detail.title
+                                        if let pd = pd, let parent = try? JSONDecoder().decode(ChannelDetail.self, from: pd) {
+                                            if let subs = parent.subchannels, !subs.isEmpty {
+                                                let principal = subs.sorted { $0.memberCount > $1.memberCount }.first
+                                                title = (principal?.id == detail.id) ? parent.title : "\(parent.title) • \(detail.title)"
+                                            } else {
+                                                title = "\(parent.title) • \(detail.title)"
+                                            }
+                                        }
+                                        c.title = title
+                                        let req = UNNotificationRequest(identifier: "emergency_sent_\(msg.id)", content: c, trigger: nil)
+                                        UNUserNotificationCenter.current().add(req, withCompletionHandler: nil)
+                                    }.resume()
+                                } else {
+                                    c.title = detail.title
+                                    let req = UNNotificationRequest(identifier: "emergency_sent_\(msg.id)", content: c, trigger: nil)
+                                    UNUserNotificationCenter.current().add(req, withCompletionHandler: nil)
+                                }
+                            }.resume()
+                        } else {
+                            c.title = "Emergencia"
+                            let req = UNNotificationRequest(identifier: "emergency_sent_\(msg.id)", content: c, trigger: nil)
+                            UNUserNotificationCenter.current().add(req, withCompletionHandler: nil)
+                        }
+                    }
                     dismiss()
                     onSent()
                 } else {

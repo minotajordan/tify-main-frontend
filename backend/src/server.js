@@ -59,6 +59,21 @@ app.use('/api/subscriptions', subscriptionRoutes);
 app.use('/api/auth', authRoutes);
 app.use('/api/organizations', organizationRoutes);
 
+// Webhook para eventos de emergencia del emisor Python
+app.post('/api/hooks/emergency', (req, res) => {
+  const { id, channelId, content, createdAt } = req.body || {};
+  if (!id || !channelId || !content) {
+    return res.status(400).json({ error: 'Payload inválido', required: ['id', 'channelId', 'content'] });
+  }
+  console.log('[hook] emergency event', {
+    id,
+    channelId,
+    content: (String(content).length > 100 ? String(content).slice(0, 100) + '…' : content),
+    createdAt
+  });
+  res.json({ status: 'received', id, channelId, at: new Date().toISOString() });
+});
+
 // Error handling
 app.use((err, req, res, next) => {
   console.error(err.stack);
