@@ -6,12 +6,12 @@ import UserNotifications
 struct Channel: Identifiable, Codable, Equatable {
     let id: String
     let title: String
-    let description: String
+    let description: String?
     let icon: String
     let memberCount: Int
     let parentId: String?
     let isPublic: Bool
-    let isSubscribed: Bool
+    let isSubscribed: Bool?
     let isFavorite: Bool?
     let subchannels: [Subchannel]?
     
@@ -19,7 +19,7 @@ struct Channel: Identifiable, Codable, Equatable {
         let id: String
         let title: String
         let icon: String
-        let memberCount: Int
+        let memberCount: Int?
     }
 }
 
@@ -477,7 +477,7 @@ class ChannelsViewModel: ObservableObject {
             DispatchQueue.main.async {
                 guard let data = data else { return }
                 if let items = try? JSONDecoder().decode([Channel].self, from: data) {
-                    self?.favorites = items.filter { $0.isFavorite ?? false }
+                    self?.favorites = items.filter { ($0.isFavorite ?? false) && $0.parentId == nil }
                 }
             }
         }.resume()
@@ -511,6 +511,8 @@ class ChannelsViewModel: ObservableObject {
 
 class ChannelDetailViewModel: ObservableObject {
     @Published var channelDetail: ChannelDetail?
+    @Published var activeSubchannelDetail: ChannelDetail?
+    @Published var isPrimarySubchannel: Bool = false
     @Published var isLoading = false
     @Published var isRefreshing = false
     @Published var errorMessage: String?
@@ -565,8 +567,17 @@ class ChannelDetailViewModel: ObservableObject {
                     let newDetail = try decoder.decode(ChannelDetail.self, from: data)
                     self?.channelDetail = newDetail
                     PersistenceManager.shared.saveChannelDetail(newDetail)
-                    if newDetail.parentId == nil, let subs = newDetail.subchannels, !subs.isEmpty {
-                        let defaultSub = subs.sorted { $0.memberCount > $1.memberCount }.first
+
+                    self?.isPrimarySubchannel = false
+                    if let parentId = newDetail.parentId {
+                        if let channels = PersistenceManager.shared.loadChannels(),
+                           let parent = channels.first(where: { $0.id == parentId }),
+                           let subs = parent.subchannels,
+                           let defaultId = subs.sorted { ($0.memberCount ?? 0) > ($1.memberCount ?? 0) }.first?.id {
+                            self?.isPrimarySubchannel = (newDetail.id == defaultId)
+                        }
+                    } else if let subs = newDetail.subchannels, !subs.isEmpty {
+                        let defaultSub = subs.sorted { ($0.memberCount ?? 0) > ($1.memberCount ?? 0) }.first
                         if let sub = defaultSub { self?.loadSubchannelDetail(sub.id) }
                     }
                 } catch {
@@ -584,7 +595,7 @@ class ChannelDetailViewModel: ObservableObject {
         URLSession.shared.dataTask(with: url) { [weak self] data, _, _ in
             DispatchQueue.main.async {
                 guard let data = data, let detail = try? JSONDecoder().decode(ChannelDetail.self, from: data) else { return }
-                self?.channelDetail = detail
+                self?.activeSubchannelDetail = detail
                 PersistenceManager.shared.saveChannelDetail(detail)
             }
         }.resume()
@@ -763,6 +774,7 @@ struct ChannelsView: View {
     @State private var searchError: String?
     @State private var showSearchOverlay = false
     @State private var isSearchMode = false // NUEVO: para diferenciar vista normal vs búsqueda
+    @State private var showInlineSearch = false
     
     var body: some View {
         NavigationView {
@@ -783,7 +795,7 @@ struct ChannelsView: View {
                             .padding(.horizontal)
                         
                         Button(action: {
-                            viewModel.loadChannels(isRefresh: true, publicOnly: true)
+                            viewModel.loadSubscribedChannels(isRefresh: true)
                         }) {
                             Label("Reintentar", systemImage: "arrow.clockwise")
                                 .padding(.horizontal, 20)
@@ -896,31 +908,35 @@ struct ChannelsView: View {
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
                     HStack(spacing: 8) {
-                        TextField("Buscar", text: $searchText)
-                            .textFieldStyle(RoundedBorderTextFieldStyle())
-                            .frame(maxWidth: 160)
-                            .onSubmit {
-                                if !searchText.isEmpty || !referenceCode.isEmpty {
-                                    searchChannels()
-                                }
+                        if showInlineSearch {
+                            HStack(spacing: 6) {
+                                Image(systemName: "magnifyingglass").foregroundColor(.secondary)
+                                TextField("Buscar canales", text: $searchText)
+                                    .textFieldStyle(PlainTextFieldStyle())
+                                    .onChange(of: searchText) { newValue in
+                                        let q = newValue.trimmingCharacters(in: .whitespacesAndNewlines)
+                                        if q.isEmpty {
+                                            isSearchMode = false
+                                            viewModel.loadSubscribedChannels(isRefresh: true)
+                                        } else {
+                                            searchChannels()
+                                        }
+                                    }
                             }
-                        
-                        TextField("Código", text: $referenceCode)
-                            .textFieldStyle(RoundedBorderTextFieldStyle())
-                            .frame(maxWidth: 120)
-                            .onSubmit {
-                                if !referenceCode.isEmpty {
-                                    searchChannels()
-                                }
-                            }
-                        
-                        if searching {
-                            ProgressView().scaleEffect(0.8)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 8)
+                            .background(Capsule().fill(Color(.systemGray6)))
                         } else {
-                            Button(action: { searchChannels() }) {
-                                Image(systemName: "magnifyingglass")
+                            Button(action: { showInlineSearch = true }) {
+                                HStack(spacing: 6) {
+                                    Image(systemName: "magnifyingglass")
+                                    Text("Buscar canales").font(.footnote)
+                                }
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 8)
+                                .background(Capsule().fill(Color(.systemGray6)))
                             }
-                            .disabled(searchText.isEmpty && referenceCode.isEmpty)
+                            .buttonStyle(PlainButtonStyle())
                         }
                     }
                 }
@@ -942,7 +958,7 @@ struct ChannelsView: View {
                                     searchText = ""
                                     referenceCode = ""
                                 }
-                                viewModel.loadChannels(isRefresh: true, publicOnly: true)
+                                viewModel.loadSubscribedChannels(isRefresh: true)
                             }) {
                                 Image(systemName: isSearchMode ? "house" : "arrow.clockwise")
                             }
@@ -965,7 +981,7 @@ struct ChannelsView: View {
                         }
                     }
                 }
-                viewModel.loadChannels(publicOnly: true)
+                if false { }
             }
             .onChange(of: session.currentUserId) { newId in
                 if !newId.isEmpty {
@@ -1029,9 +1045,10 @@ struct ChannelsView: View {
         }
         
         let q = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !q.isEmpty else {
+        if q.isEmpty {
             searching = false
-            searchError = "Ingresa un término de búsqueda o código"
+            isSearchMode = false
+            viewModel.loadSubscribedChannels(isRefresh: true)
             return
         }
         
@@ -1072,7 +1089,11 @@ class SearchViewModel: ObservableObject {
             DispatchQueue.main.async {
                 guard let data = data else { return }
                 if let items = try? JSONDecoder().decode([Channel].self, from: data) {
-                    self?.suggestions = items.filter { $0.isPublic }.sorted { $0.memberCount > $1.memberCount }.prefix(10).map { $0 }
+                    self?.suggestions = items
+                        .filter { $0.isPublic && $0.parentId == nil }
+                        .sorted { $0.memberCount > $1.memberCount }
+                        .prefix(10)
+                        .map { $0 }
                 }
             }
         }.resume()
@@ -1089,7 +1110,7 @@ class SearchViewModel: ObservableObject {
                 self?.isLoading = false
                 guard let data = data else { return }
                 if let items = try? JSONDecoder().decode([Channel].self, from: data) {
-                    self?.results = items
+                    self?.results = items.filter { $0.parentId == nil }
                 }
             }
         }.resume()
@@ -1108,7 +1129,7 @@ class SearchViewModel: ObservableObject {
                 self?.isLoading = false
                 guard let data = data else { return }
                 if let items = try? JSONDecoder().decode([Channel].self, from: data) {
-                    self?.results = items
+                    self?.results = items.filter { $0.parentId == nil }
                 }
             }
         }.resume()
@@ -1243,14 +1264,14 @@ struct SearchChannelRow: View {
                                 .foregroundColor(.orange)
                         }
                         
-                        if channel.isSubscribed {
+                        if (channel.isSubscribed ?? false) {
                             Image(systemName: "checkmark.circle.fill")
                                 .font(.caption)
                                 .foregroundColor(.green)
                         }
                     }
                     
-                    Text(channel.description)
+                    Text(channel.description ?? "")
                         .font(.caption)
                         .foregroundColor(.secondary)
                         .lineLimit(2)
@@ -1303,14 +1324,14 @@ struct ChannelCard: View {
                                     .foregroundColor(.orange)
                             }
                             
-                            if channel.isSubscribed {
+                            if (channel.isSubscribed ?? false) {
                                 Image(systemName: "bell.fill")
                                     .font(.caption)
                                     .foregroundColor(.green)
                             }
                         }
                         
-                        Text(channel.description)
+                        Text(channel.description ?? "")
                             .font(.caption)
                             .foregroundColor(.secondary)
                             .lineLimit(2)
@@ -1351,34 +1372,8 @@ struct ChannelCard: View {
             }
             .buttonStyle(PlainButtonStyle())
             
-            if let subchannels = channel.subchannels, !subchannels.isEmpty, isExpanded {
-                Divider()
-                    .padding(.horizontal)
-                
-                VStack(spacing: 0) {
-                    HStack {
-                        Image(systemName: "arrow.turn.down.right")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                        Text("Subcanales de \(channel.title)")
-                            .font(.caption)
-                            .fontWeight(.semibold)
-                            .foregroundColor(.secondary)
-                        Spacer()
-                    }
-                    .padding(.horizontal)
-                    .padding(.top, 8)
-                    .padding(.bottom, 4)
-                    
-                    VStack(spacing: 8) {
-                        ForEach(subchannels) { subchannel in
-                            SubchannelRow(subchannel: subchannel, parentTitle: channel.title)
-                        }
-                    }
-                    .padding(.horizontal)
-                    .padding(.bottom, 8)
-                }
-                .background(Color(.systemGray6))
+            if false {
+                EmptyView()
             }
         }
         .background(Color(.systemBackground))
@@ -1386,7 +1381,7 @@ struct ChannelCard: View {
         .shadow(color: Color.black.opacity(0.05), radius: 5, x: 0, y: 2)
         .overlay(
             Group {
-                if isSearchMode && !channel.isSubscribed {
+                if isSearchMode && !(channel.isSubscribed ?? false) {
                     VStack {
                         HStack {
                             Spacer()
@@ -1552,7 +1547,9 @@ struct ChannelDetailView: View {
                         HStack(spacing: 8) {
                             Button(action: { viewModel.showPasswordPrompt = true }) { Label("Validar acceso", systemImage: "lock") }
                             if (detail.isSubscribed ?? false) {
-                                Button(action: { showingUnsubscribeAlert = true }) { Label("Desuscribirse", systemImage: "bell.slash") }
+                                if !(viewModel.isPrimarySubchannel && detail.parentId != nil) {
+                                    Button(action: { showingUnsubscribeAlert = true }) { Label("Desuscribirse", systemImage: "bell.slash") }
+                                }
                             } else {
                                 Button(action: { if UserSession.shared.isVerified { viewModel.subscribe(channelId: detail.id) { _ in } } else { showRegister = true } }) { Label("Suscribirse", systemImage: "bell.badge") }
                             }
@@ -1562,7 +1559,9 @@ struct ChannelDetailView: View {
                     if detail.isPublic {
                         HStack(spacing: 8) {
                             if (detail.isSubscribed ?? false) {
-                                Button(action: { showingUnsubscribeAlert = true }) { Label("Desuscribirse", systemImage: "bell.slash") }
+                                if !(viewModel.isPrimarySubchannel && detail.parentId != nil) {
+                                    Button(action: { showingUnsubscribeAlert = true }) { Label("Desuscribirse", systemImage: "bell.slash") }
+                                }
                             } else {
                                 Button(action: { if UserSession.shared.isVerified { viewModel.subscribe(channelId: detail.id) { _ in } } else { showRegister = true } }) { Label("Suscribirse", systemImage: "bell.badge") }
                             }
@@ -1609,7 +1608,7 @@ struct ChannelDetailView: View {
                     
                     Divider()
                     
-                    if detail.messages.isEmpty {
+                    if (viewModel.activeSubchannelDetail?.messages ?? detail.messages).isEmpty {
                         VStack(spacing: 16) {
                             Spacer()
                             Image(systemName: "message")
@@ -1624,7 +1623,7 @@ struct ChannelDetailView: View {
                         ScrollViewReader { proxy in
                             ScrollView {
                                 LazyVStack(spacing: 12) {
-                                    ForEach(detail.messages) { message in
+                                    ForEach(viewModel.activeSubchannelDetail?.messages ?? detail.messages) { message in
                                         MessageBubble(message: message)
                                             .id(message.id)
                                     }
@@ -2124,7 +2123,7 @@ class EmergencyMonitor: ObservableObject {
                     URLSession.shared.dataTask(with: purl) { pdata, _, _ in
                         var title = detail.title
                         if let pdata = pdata, let parent = try? JSONDecoder().decode(ChannelDetail.self, from: pdata), let subs = parent.subchannels, !subs.isEmpty {
-                            let principal = subs.sorted { $0.memberCount > $1.memberCount }.first
+                            let principal = subs.sorted { ($0.memberCount ?? 0) > ($1.memberCount ?? 0) }.first
                             title = parent.title + ((principal?.id == detail.id) ? "" : " • \(detail.title)")
                         }
                         content.title = title
@@ -2200,6 +2199,15 @@ class EmergencyEmitterClient: ObservableObject {
     }
 
     private func notifyEmergency(event: EmergencyEvent) {
+        let subs = PersistenceManager.shared.loadSubscriptions() ?? []
+        if let sub = subs.first(where: { $0.channel.id == event.channelId }) {
+            let fmt = ISO8601DateFormatter()
+            let evDate = fmt.date(from: event.createdAt) ?? fmt.date(from: event.createdAt.replacingOccurrences(of: " ", with: "T"))
+            let subDate = fmt.date(from: sub.subscribedAt) ?? fmt.date(from: sub.subscribedAt.replacingOccurrences(of: " ", with: "T"))
+            if let s = subDate, let e = evDate, s > e { return }
+        } else {
+            return
+        }
         let content = UNMutableNotificationContent()
         content.sound = .default
         content.userInfo = ["messageId": event.id, "channelId": event.channelId]
@@ -2218,7 +2226,7 @@ class EmergencyEmitterClient: ObservableObject {
                     URLSession.shared.dataTask(with: purl) { pdata, _, _ in
                         var title = detail.title
                         if let pdata = pdata, let parent = try? JSONDecoder().decode(ChannelDetail.self, from: pdata), let subs = parent.subchannels, !subs.isEmpty {
-                            let principal = subs.sorted { $0.memberCount > $1.memberCount }.first
+                            let principal = subs.sorted { ($0.memberCount ?? 0) > ($1.memberCount ?? 0) }.first
                             title = parent.title + ((principal?.id == detail.id) ? "" : " • \(detail.title)")
                         }
                         content.title = title
@@ -2694,7 +2702,7 @@ struct ComposeMessageView: View {
                                         var title: String = detail.title
                                         if let pd = pd, let parent = try? JSONDecoder().decode(ChannelDetail.self, from: pd) {
                                             if let subs = parent.subchannels, !subs.isEmpty {
-                                                let principal = subs.sorted { $0.memberCount > $1.memberCount }.first
+                                                let principal = subs.sorted { ($0.memberCount ?? 0) > ($1.memberCount ?? 0) }.first
                                                 title = (principal?.id == detail.id) ? parent.title : "\(parent.title) • \(detail.title)"
                                             } else {
                                                 title = "\(parent.title) • \(detail.title)"

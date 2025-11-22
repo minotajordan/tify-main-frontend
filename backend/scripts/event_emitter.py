@@ -160,8 +160,8 @@ def connect_db():
         raise RuntimeError('PyMySQL no instalado')
     return pymysql.connect(host=DB_HOST, user=DB_USER, password=DB_PASSWORD, database=DB_NAME, port=DB_PORT, autocommit=True, cursorclass=pymysql.cursors.DictCursor)
 
-def fetch_emergencies_since(conn, since_dt):
-    q = "SELECT id, channel_id, content, created_at, event_at FROM tify_messages WHERE is_emergency=1 AND created_at > %s ORDER BY created_at ASC"
+def fetch_messages_since(conn, since_dt):
+    q = "SELECT id, channel_id, content, created_at, event_at FROM tify_messages WHERE created_at > %s ORDER BY created_at ASC"
     with conn.cursor() as cur:
         cur.execute(q, (since_dt,))
         return cur.fetchall()
@@ -190,14 +190,17 @@ def notify_webhook(message):
     except Exception:
         return False
 
-def notify_apns(client, message):
-    if client is None or not DEVICE_TOKENS or not APNS_TOPIC:
+def notify_apns(client, content, tokens):
+    if client is None or not APNS_TOPIC:
+        return False
+    tokens = [t for t in (tokens or []) if t]
+    if not tokens:
         return False
     try:
-        alert = {'title': 'Emergencia', 'body': message['content']}
+        alert = {'title': 'Emergencia', 'body': content}
         payload = Payload(alert=alert, sound='default', badge=1)
         ok = True
-        for token in DEVICE_TOKENS:
+        for token in tokens:
             try:
                 client.send_notification(token, payload, APNS_TOPIC)
             except Exception:
@@ -210,6 +213,33 @@ def load_device_tokens(conn):
     try:
         with conn.cursor() as cur:
             cur.execute("SELECT handle FROM tify_user_messaging_settings WHERE platform='PUSH' AND handle IS NOT NULL")
+            rows = cur.fetchall()
+            return [r['handle'] for r in rows]
+    except Exception:
+        return []
+
+def get_recipient_tokens(conn, channel_id, created_at_iso):
+    try:
+        created_dt = datetime.fromisoformat(created_at_iso.replace('Z', '+00:00')) if isinstance(created_at_iso, str) else created_at_iso
+    except Exception:
+        created_dt = None
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT ums.handle
+                FROM tify_channel_subscriptions cs
+                JOIN tify_user_messaging_settings ums ON ums.user_id = cs.user_id
+                WHERE cs.channel_id = %s
+                  AND cs.is_active = 1
+                  AND cs.receive_messages = 1
+                  AND ums.platform = 'PUSH'
+                  AND ums.is_enabled = 1
+                  AND ums.handle IS NOT NULL
+                  AND (%s IS NULL OR cs.subscribed_at <= %s)
+                """,
+                (channel_id, created_dt, created_dt)
+            )
             rows = cur.fetchall()
             return [r['handle'] for r in rows]
     except Exception:
@@ -250,10 +280,10 @@ class Handler(BaseHTTPRequestHandler):
             data = {}
 
         if self.path == '/send':
-            content = (data.get('content') or 'Prueba de emergencia')
+            content = '👋 ' + (data.get('content') or 'Prueba de emergencia')
             ok = False
             try:
-                ok = notify_apns(GLOBAL_APNS_CLIENT, {'content': content})
+                ok = notify_apns(GLOBAL_APNS_CLIENT, content, DEVICE_TOKENS)
             except Exception:
                 ok = False
             self.send_response(200 if ok else 500)
@@ -269,14 +299,22 @@ class Handler(BaseHTTPRequestHandler):
                 ev = data.get('eventAt')
                 date_str = _format_event_date(ev) if ev else None
                 content = "👋 " + (base if not date_str else f"{base} · {date_str}")
+                created_iso = data.get('createdAt') or datetime.now(timezone.utc).isoformat()
+                channel_id = data.get('channelId') or 'unknown'
                 evt = {
                     'id': data.get('id') or f"local_{int(time.time()*1000)}",
-                    'channelId': data.get('channelId') or 'unknown',
+                    'channelId': channel_id,
                     'content': content,
-                    'createdAt': data.get('createdAt') or datetime.now(timezone.utc).isoformat(),
+                    'createdAt': created_iso,
                     'eventAt': ev
                 }
                 _upsert_event(evt)
+                try:
+                    tokens = get_recipient_tokens(GLOBAL_DB_CONN, channel_id, created_iso)
+                    if tokens:
+                        notify_apns(GLOBAL_APNS_CLIENT, content, tokens)
+                except Exception:
+                    pass
                 self.send_response(200)
                 self.send_header('Content-Type', 'application/json')
                 self.end_headers()
@@ -330,8 +368,9 @@ def main():
     start_http_server()
     conn = connect_db()
     apns_client = init_apns()
-    global GLOBAL_APNS_CLIENT
+    global GLOBAL_APNS_CLIENT, GLOBAL_DB_CONN
     GLOBAL_APNS_CLIENT = apns_client
+    GLOBAL_DB_CONN = conn
     try:
         tokens = load_device_tokens(conn)
         if tokens:
@@ -342,7 +381,7 @@ def main():
     last_checked = datetime.now(timezone.utc) - timedelta(seconds=LOOKBACK_SECONDS)
     while True:
         try:
-            rows = fetch_emergencies_since(conn, last_checked)
+            rows = fetch_messages_since(conn, last_checked)
             if rows:
                 latest = last_checked
                 for row in rows:
@@ -365,9 +404,12 @@ def main():
                     sent = False
                     if WEBHOOK_URL:
                         sent = notify_webhook(row)
-                    if not sent:
-                        sent = notify_apns(apns_client, row)
-                    if not sent:
+                    try:
+                        tokens = get_recipient_tokens(conn, row['channel_id'], row['created_at'].isoformat() if hasattr(row['created_at'], 'isoformat') else str(row['created_at']))
+                        if tokens:
+                            notify_apns(apns_client, content, tokens)
+                            sent = True
+                    except Exception:
                         pass
                     cdt = row['created_at']
                     if isinstance(cdt, datetime) and cdt.tzinfo is None:

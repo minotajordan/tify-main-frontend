@@ -1506,7 +1506,7 @@ const ChannelManager: React.FC = () => {
                     <div className="flex items-center gap-3">
                       <h2 className="text-2xl font-bold text-gray-900">{selectedChannel.title}</h2>
                       <div className="flex items-center gap-1 text-xs text-gray-400">
-                        <IconView name={selectedChannel.icon} size={16} />
+                        
                       </div>
                       <StatusBadge status={selectedChannel.verificationStatus} />
                     </div>
