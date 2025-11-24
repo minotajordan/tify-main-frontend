@@ -12,8 +12,8 @@ router.get('/', async (req, res) => {
     const where = {};
     if (search) {
       where.OR = [
-        { title: { contains: search, mode: 'insensitive' } },
-        { description: { contains: search, mode: 'insensitive' } }
+        { title: { contains: search } },
+        { description: { contains: search } }
       ];
     }
     if (isPublic !== undefined) {
@@ -50,6 +50,64 @@ router.get('/', async (req, res) => {
   } catch (error) {
     console.error('Error obteniendo canales:', error);
     res.status(500).json({ error: 'Error interno del servidor' });
+  }
+});
+
+// PRIORIDAD: Ruta de búsqueda antes de rutas parametrizadas
+router.get('/search', async (req, res) => {
+  try {
+    const { q = '', exact = 'false', referenceCode, page = '1', limit = '12' } = req.query;
+    const pageNum = Math.max(1, parseInt(page));
+    const pageSize = Math.min(50, Math.max(1, parseInt(limit)));
+    const skip = (pageNum - 1) * pageSize;
+
+    if (referenceCode) {
+      const refCodeParam = String(referenceCode).startsWith('REF-') ? String(referenceCode) : `REF-${referenceCode}`;
+      const byCode = await prisma.channel.findUnique({
+        where: { referenceCode: refCodeParam },
+        include: { owner: { select: { id: true, username: true, fullName: true } } }
+      });
+      return res.json(byCode ? [byCode] : []);
+    }
+
+    const query = String(q).trim();
+    if (!query) return res.json([]);
+
+    const refPattern = /^[A-Za-z0-9]{3}-[A-Za-z0-9]{3}$/;
+    if (refPattern.test(query)) {
+      const refCode = `REF-${query}`;
+      const byCode = await prisma.channel.findUnique({
+        where: { referenceCode: refCode },
+        include: { owner: { select: { id: true, username: true, fullName: true } } }
+      });
+      return res.json(byCode ? [byCode] : []);
+    }
+
+    if (exact === 'true') {
+      const channels = await prisma.channel.findMany({
+        where: { title: query },
+        include: { owner: { select: { id: true, username: true, fullName: true } } },
+        orderBy: { memberCount: 'desc' },
+        skip,
+        take: pageSize
+      });
+      return res.json(channels);
+    }
+
+    const channels = await prisma.channel.findMany({
+      where: {
+        isHidden: false,
+        title: { contains: query },
+        NOT: { searchExactOnly: true }
+      },
+      include: { owner: { select: { id: true, username: true, fullName: true } } },
+      orderBy: { memberCount: 'desc' },
+      skip,
+      take: pageSize
+    });
+    res.json(channels);
+  } catch (error) {
+    res.status(500).json({ error: 'Error buscando canales' });
   }
 });
 
@@ -296,7 +354,6 @@ router.post('/:id/validate-password', async (req, res) => {
   }
 });
 
-module.exports = router;
 router.post('/', async (req, res) => {
   try {
     const {
@@ -447,44 +504,7 @@ router.post('/:id/subchannels', async (req, res) => {
   }
 });
 
-router.get('/search', async (req, res) => {
-  try {
-    const { q, exact = 'false', referenceCode } = req.query;
 
-    if (referenceCode) {
-      const byCode = await prisma.channel.findUnique({
-        where: { referenceCode },
-        include: { owner: { select: { id: true, username: true, fullName: true } } }
-      });
-      return res.json(byCode ? [byCode] : []);
-    }
-
-    if (!q) return res.json([]);
-
-    if (exact === 'true') {
-      const channels = await prisma.channel.findMany({
-        where: { title: q },
-        include: { owner: { select: { id: true, username: true, fullName: true } } }
-      });
-      return res.json(channels);
-    }
-
-    const channels = await prisma.channel.findMany({
-      where: {
-        isHidden: false,
-        OR: [
-          { title: { contains: q, mode: 'insensitive' } },
-          { description: { contains: q, mode: 'insensitive' } }
-        ],
-        NOT: { searchExactOnly: true }
-      },
-      include: { owner: { select: { id: true, username: true, fullName: true } } }
-    });
-    res.json(channels);
-  } catch (error) {
-    res.status(500).json({ error: 'Error buscando canales' });
-  }
-});
 
 router.post('/:id/approvers', async (req, res) => {
   try {
@@ -617,3 +637,5 @@ router.post('/:id/categories', async (req, res) => {
     res.status(500).json({ error: 'Error asignando categoría' });
   }
 });
+
+module.exports = router;

@@ -507,6 +507,25 @@ class ChannelsViewModel: ObservableObject {
             }
         }.resume()
     }
+
+    func unsubscribe(channelId: String, completion: @escaping (Bool)->Void) {
+        guard let url = URL(string: "\(APIConfig.baseURL)/subscriptions") else { completion(false); return }
+        var req = URLRequest(url: url)
+        req.httpMethod = "DELETE"
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        let body: [String: Any] = [
+            "userId": UserSession.shared.currentUserId,
+            "channelId": channelId
+        ]
+        req.httpBody = try? JSONSerialization.data(withJSONObject: body)
+        URLSession.shared.dataTask(with: req) { [weak self] _, response, error in
+            DispatchQueue.main.async {
+                let ok = (error == nil) && (response as? HTTPURLResponse).map { (200..<300).contains($0.statusCode) } ?? false
+                if ok { self?.loadSubscribedChannels(isRefresh: true) }
+                completion(ok)
+            }
+        }.resume()
+    }
 }
 
 class ChannelDetailViewModel: ObservableObject {
@@ -769,12 +788,14 @@ struct ChannelsView: View {
     @StateObject private var viewModel = ChannelsViewModel()
     @ObservedObject private var session = UserSession.shared
     @State private var searchText = ""
-    @State private var referenceCode = ""
+
     @State private var searching = false
     @State private var searchError: String?
-    @State private var showSearchOverlay = false
+
     @State private var isSearchMode = false // NUEVO: para diferenciar vista normal vs búsqueda
-    @State private var showInlineSearch = false
+    @FocusState private var searchFocused: Bool
+    @State private var searchDebounce: DispatchWorkItem?
+    @State private var searchTask: URLSessionDataTask?
     
     var body: some View {
         NavigationView {
@@ -819,7 +840,7 @@ struct ChannelsView: View {
                             .foregroundColor(.secondary)
                         
                         Button(action: {
-                            showSearchOverlay = true
+                            searchFocused = true
                         }) {
                             Label("Buscar canales", systemImage: "magnifyingglass")
                                 .padding(.horizontal, 20)
@@ -830,38 +851,28 @@ struct ChannelsView: View {
                         }
                     }
                 } else {
-                    ScrollView {
-                        // NUEVO: Indicador de modo búsqueda
+                    List {
                         if isSearchMode {
-                            HStack {
-                                Image(systemName: "magnifyingglass")
-                                    .foregroundColor(.blue)
-                                Text("Resultados de búsqueda")
+                            Section {
+                                HStack {
+                                    Image(systemName: "magnifyingglass").foregroundColor(.blue)
+                                    Text("Resultados de búsqueda").font(.caption).foregroundColor(.secondary)
+                                    Spacer()
+                                    Button("Ver mis canales") {
+                                        isSearchMode = false
+                                        searchText = ""
+                                        viewModel.loadSubscribedChannels(isRefresh: true)
+                                    }
                                     .font(.caption)
-                                    .foregroundColor(.secondary)
-                                Spacer()
-                                Button("Ver mis canales") {
-                                    isSearchMode = false
-                                    searchText = ""
-                                    referenceCode = ""
-                                    viewModel.loadSubscribedChannels(isRefresh: true)
                                 }
-                                .font(.caption)
                             }
-                            .padding(.horizontal)
-                            .padding(.top, 8)
                         }
-                        
                         if !viewModel.favorites.isEmpty && !isSearchMode {
-                            VStack(alignment: .leading, spacing: 8) {
+                            Section {
                                 HStack {
                                     Image(systemName: "star.fill").foregroundColor(.yellow)
-                                    Text("Favoritos")
-                                        .font(.caption)
-                                        .fontWeight(.semibold)
-                                        .foregroundColor(.secondary)
+                                    Text("Favoritos").font(.caption).fontWeight(.semibold).foregroundColor(.secondary)
                                 }
-                                .padding(.horizontal)
                                 ScrollView(.horizontal, showsIndicators: false) {
                                     HStack(spacing: 8) {
                                         ForEach(viewModel.favorites) { fav in
@@ -879,17 +890,26 @@ struct ChannelsView: View {
                                     }
                                     .padding(.horizontal)
                                 }
-                            }
-                            .padding(.top, 8)
-                        }
-                        LazyVStack(spacing: 12) {
-                            ForEach(viewModel.channels.filter { $0.parentId == nil }) { channel in
-                                ChannelCard(channel: channel, isSearchMode: isSearchMode)
-                                    .environmentObject(viewModel)
+                                .padding(.vertical, 4)
                             }
                         }
-                        .padding()
+                        ForEach(viewModel.channels.filter { $0.parentId == nil }) { channel in
+                            ChannelCard(channel: channel, isSearchMode: isSearchMode)
+                                .environmentObject(viewModel)
+                                .swipeActions(edge: .leading, allowsFullSwipe: true) {
+                                    Button(role: .destructive) {
+                                        viewModel.unsubscribe(channelId: channel.id) { _ in }
+                                    } label: {
+                                        Label("Desuscribirme", systemImage: "bell.slash")
+                                    }
+                                    .tint(.red)
+                                }
+                        }
                     }
+                    .listStyle(.plain)
+                    .listRowSeparator(.visible)
+                    .listRowSeparatorTint(Color(.systemGray3))
+                    .listSectionSeparatorTint(Color(.systemGray3))
                     .refreshable {
                         await withCheckedContinuation { continuation in
                             if isSearchMode {
@@ -906,47 +926,10 @@ struct ChannelsView: View {
             }
             .navigationTitle(isSearchMode ? "Búsqueda" : "Canales")
             .toolbar {
-                ToolbarItem(placement: .navigationBarLeading) {
-                    HStack(spacing: 8) {
-                        if showInlineSearch {
-                            HStack(spacing: 6) {
-                                Image(systemName: "magnifyingglass").foregroundColor(.secondary)
-                                TextField("Buscar canales", text: $searchText)
-                                    .textFieldStyle(PlainTextFieldStyle())
-                                    .onChange(of: searchText) { newValue in
-                                        let q = newValue.trimmingCharacters(in: .whitespacesAndNewlines)
-                                        if q.isEmpty {
-                                            isSearchMode = false
-                                            viewModel.loadSubscribedChannels(isRefresh: true)
-                                        } else {
-                                            searchChannels()
-                                        }
-                                    }
-                            }
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 8)
-                            .background(Capsule().fill(Color(.systemGray6)))
-                        } else {
-                            Button(action: { showInlineSearch = true }) {
-                                HStack(spacing: 6) {
-                                    Image(systemName: "magnifyingglass")
-                                    Text("Buscar canales").font(.footnote)
-                                }
-                                .padding(.horizontal, 12)
-                                .padding(.vertical, 8)
-                                .background(Capsule().fill(Color(.systemGray6)))
-                            }
-                            .buttonStyle(PlainButtonStyle())
-                        }
-                    }
-                }
+                ToolbarItem(placement: .navigationBarLeading) { EmptyView() }
                 ToolbarItem(placement: .navigationBarTrailing) {
                     HStack(spacing: 12) {
-                        Button(action: {
-                            showSearchOverlay = true
-                        }) {
-                            Image(systemName: "line.3.horizontal.decrease.circle")
-                        }
+
                         
                         if viewModel.isRefreshing {
                             ProgressView()
@@ -956,7 +939,7 @@ struct ChannelsView: View {
                                 if isSearchMode {
                                     isSearchMode = false
                                     searchText = ""
-                                    referenceCode = ""
+
                                 }
                                 viewModel.loadSubscribedChannels(isRefresh: true)
                             }) {
@@ -990,60 +973,11 @@ struct ChannelsView: View {
                     UserSession.shared.syncAPNSTokenIfAvailable()
                 }
             }
-            .sheet(isPresented: $showSearchOverlay) {
-                SearchOverlay(
-                    onDismiss: { showSearchOverlay = false },
-                    onSearchResults: { results in
-                        viewModel.channels = results
-                        isSearchMode = true
-                    }
-                )
-            }
+
         }
     }
 
     func searchChannels() {
-        searching = true
-        searchError = nil
-        isSearchMode = true
-        
-        let code = referenceCode.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !code.isEmpty {
-            guard let url = URL(string: "\(APIConfig.baseURL)/channels/search?referenceCode=\(code)") else {
-                searching = false
-                return
-            }
-            
-            URLSession.shared.dataTask(with: url) { data, response, error in
-                DispatchQueue.main.async {
-                    self.searching = false
-                    
-                    if let error = error {
-                        self.searchError = "Error de búsqueda: \(error.localizedDescription)"
-                        return
-                    }
-                    
-                    guard let data = data else {
-                        self.searchError = "No se recibieron datos"
-                        return
-                    }
-                    
-                    do {
-                        let items = try JSONDecoder().decode([Channel].self, from: data)
-                        self.viewModel.channels = items
-                        
-                        if items.isEmpty {
-                            self.searchError = "No se encontró ningún canal con ese código"
-                        }
-                    } catch {
-                        self.searchError = "Error al procesar resultados"
-                        print("Error detallado: \(error)")
-                    }
-                }
-            }.resume()
-            return
-        }
-        
         let q = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
         if q.isEmpty {
             searching = false
@@ -1051,26 +985,42 @@ struct ChannelsView: View {
             viewModel.loadSubscribedChannels(isRefresh: true)
             return
         }
-        
+        searching = true
+        isSearchMode = true
+        searchTask?.cancel()
         guard let encoded = q.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed),
               let url = URL(string: "\(APIConfig.baseURL)/channels/search?q=\(encoded)") else {
             searching = false
             return
         }
-        
-        URLSession.shared.dataTask(with: url) { data, _, _ in
+        let task = URLSession.shared.dataTask(with: url) { data, _, _ in
             DispatchQueue.main.async {
                 self.searching = false
                 guard let data = data else { return }
                 if let items = try? JSONDecoder().decode([Channel].self, from: data) {
-                    self.viewModel.channels = items
-                    
+                    self.viewModel.channels = items.filter { $0.parentId == nil }
                     if items.isEmpty {
                         self.searchError = "No se encontraron canales con '\(q)'"
                     }
                 }
             }
-        }.resume()
+        }
+        searchTask = task
+        task.resume()
+    }
+    
+    func scheduleSearch() {
+        let q = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+        searchDebounce?.cancel()
+        if q.isEmpty {
+            searching = false
+            isSearchMode = false
+            viewModel.loadSubscribedChannels(isRefresh: true)
+            return
+        }
+        let work = DispatchWorkItem { self.searchChannels() }
+        searchDebounce = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3, execute: work)
     }
 }
 
@@ -1297,88 +1247,134 @@ struct ChannelCard: View {
     let channel: Channel
     let isSearchMode: Bool
     @State private var isExpanded = false
+    @State private var last24hCount: Int? = nil
+    @State private var subchannelsCount: Int? = nil
+    @State private var totalMembers: Int? = nil
     @EnvironmentObject var channelsVM: ChannelsViewModel
+    
+    private func loadStats() {
+        guard let url = URL(string: "\(APIConfig.baseURL)/channels/\(channel.id)?userId=\(UserSession.shared.currentUserId)") else { return }
+        URLSession.shared.dataTask(with: url) { data, _, _ in
+            DispatchQueue.main.async {
+                guard let data = data, let detail = try? JSONDecoder().decode(ChannelDetail.self, from: data) else { return }
+                totalMembers = detail.memberCount
+                subchannelsCount = detail.subchannels?.count ?? (channel.subchannels?.count ?? 0)
+                let iso = ISO8601DateFormatter()
+                let now = Date()
+                let dayAgo = now.addingTimeInterval(-86400)
+                let count = detail.messages.filter { msg in
+                    let s = msg.createdAt.contains(" ") ? msg.createdAt.replacingOccurrences(of: " ", with: "T") : msg.createdAt
+                    return iso.date(from: s).map { $0 >= dayAgo } ?? false
+                }.count
+                last24hCount = count
+            }
+        }.resume()
+    }
     
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            NavigationLink(destination: ChannelDetailView(channelId: channel.id, channelTitle: channel.title)) {
-                HStack(spacing: 12) {
-                    Image(systemName: channel.icon)
-                        .font(.title2)
-                        .foregroundColor(channel.isPublic ? .blue : .orange)
-                        .frame(width: 40, height: 40)
-                        .background(
-                            Circle()
-                                .fill(channel.isPublic ? Color.blue.opacity(0.1) : Color.orange.opacity(0.1))
-                        )
-                    
-                    VStack(alignment: .leading, spacing: 4) {
-                        HStack {
-                            Text(channel.title)
-                                .font(.headline)
-                                .foregroundColor(.primary)
-                            
-                            if !channel.isPublic {
-                                Image(systemName: "lock.fill")
-                                    .font(.caption)
-                                    .foregroundColor(.orange)
-                            }
-                            
-                            if (channel.isSubscribed ?? false) {
-                                Image(systemName: "bell.fill")
-                                    .font(.caption)
-                                    .foregroundColor(.green)
-                            }
-                        }
-                        
-                        Text(channel.description ?? "")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                            .lineLimit(2)
-                    }
-                    
-                    Spacer()
-                    
-                    VStack(alignment: .trailing, spacing: 4) {
-                        HStack(spacing: 4) {
-                            Image(systemName: "person.2.fill")
-                                .font(.caption2)
-                            Text("\(channel.memberCount)")
-                                .font(.caption)
-                        }
-                        .foregroundColor(.secondary)
-                        
-                        if let subchannels = channel.subchannels, !subchannels.isEmpty {
-                            Button(action: {
-                                withAnimation(.spring(response: 0.3)) {
-                                    isExpanded.toggle()
+            HStack(spacing: 12) {
+                NavigationLink(destination: ChannelDetailView(channelId: channel.id, channelTitle: channel.title)) {
+                    HStack(spacing: 12) {
+                        Image(systemName: channel.icon)
+                            .font(.title2)
+                            .foregroundColor(channel.isPublic ? .blue : .orange)
+                            .frame(width: 40, height: 40)
+                            .background(
+                                Circle()
+                                    .fill(channel.isPublic ? Color.blue.opacity(0.1) : Color.orange.opacity(0.1))
+                            )
+                        VStack(alignment: .leading, spacing: 4) {
+                            HStack {
+                                Text(channel.title)
+                                    .font(.headline)
+                                    .foregroundColor(.primary)
+                                if !channel.isPublic {
+                                    Image(systemName: "lock.fill")
+                                        .font(.caption)
+                                        .foregroundColor(.orange)
                                 }
-                            }) {
-                                Image(systemName: isExpanded ? "chevron.up.circle.fill" : "chevron.down.circle.fill")
-                                    .foregroundColor(.blue)
+                                if (channel.isSubscribed ?? false) {
+                                    Image(systemName: "bell.fill")
+                                        .font(.caption)
+                                        .foregroundColor(.green)
+                                }
                             }
-                            .buttonStyle(PlainButtonStyle())
+                            Text(channel.description ?? "")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                                .lineLimit(2)
                         }
-                        Button(action: {
-                            channelsVM.toggleFavorite(channelId: channel.id, makeFavorite: !(channel.isFavorite ?? false))
-                        }) {
-                            Image(systemName: (channel.isFavorite ?? false) ? "star.fill" : "star")
-                                .foregroundColor(.yellow)
-                        }
-                        .buttonStyle(PlainButtonStyle())
                     }
                 }
-                .padding()
+                .buttonStyle(PlainButtonStyle())
+                Spacer()
+                VStack(alignment: .trailing, spacing: 4) {
+                    HStack(spacing: 4) {
+                        Image(systemName: "person.2.fill").font(.caption2)
+                        Text("\(channel.memberCount)").font(.caption)
+                    }
+                    .foregroundColor(.secondary)
+                    Button(action: {
+                        withAnimation(.spring(response: 0.3)) {
+                            isExpanded.toggle()
+                            if isExpanded { loadStats() }
+                        }
+                    }) {
+                        Image(systemName: isExpanded ? "chevron.up.circle.fill" : "chevron.down.circle.fill")
+                            .foregroundColor(.blue)
+                    }
+                    .buttonStyle(PlainButtonStyle())
+                    Button(action: {
+                        channelsVM.toggleFavorite(channelId: channel.id, makeFavorite: !(channel.isFavorite ?? false))
+                    }) {
+                        Image(systemName: (channel.isFavorite ?? false) ? "star.fill" : "star")
+                            .foregroundColor(.yellow)
+                    }
+                    .buttonStyle(PlainButtonStyle())
+                }
             }
-            .buttonStyle(PlainButtonStyle())
-            
-            if false {
-                EmptyView()
+            .padding()
+            if isExpanded {
+                HStack(spacing: 12) {
+                    Label("\(last24hCount ?? 0) /24h", systemImage: "clock")
+                        .font(.caption)
+                        .foregroundColor(.blue)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 6)
+                        .background(Color.blue.opacity(0.1))
+                        .cornerRadius(8)
+                    Label("\(subchannelsCount ?? (channel.subchannels?.count ?? 0))", systemImage: "arrow.branch")
+                        .font(.caption)
+                        .foregroundColor(.purple)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 6)
+                        .background(Color.purple.opacity(0.1))
+                        .cornerRadius(8)
+                    Label("\(totalMembers ?? channel.memberCount)", systemImage: "person.2.fill")
+                        .font(.caption)
+                        .foregroundColor(.orange)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 6)
+                        .background(Color.orange.opacity(0.1))
+                        .cornerRadius(8)
+                    Spacer()
+                }
+                .padding(.horizontal)
+                .padding(.bottom, 10)
             }
         }
         .background(Color(.systemBackground))
         .cornerRadius(12)
         .shadow(color: Color.black.opacity(0.05), radius: 5, x: 0, y: 2)
+        .gesture(DragGesture(minimumDistance: 10).onChanged { value in
+            if value.translation.height > 12 && !isExpanded {
+                withAnimation(.spring(response: 0.3)) {
+                    isExpanded = true
+                    loadStats()
+                }
+            }
+        })
         .overlay(
             Group {
                 if isSearchMode && !(channel.isSubscribed ?? false) {
@@ -1446,9 +1442,6 @@ struct SubchannelRow: View {
                         .foregroundColor(.yellow)
                 }
                 .buttonStyle(PlainButtonStyle())
-                Image(systemName: "chevron.right")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
             }
             .padding(.vertical, 8)
             .padding(.horizontal, 12)
@@ -1988,6 +1981,70 @@ struct MessagesView: View {
     }
 }
 
+struct SearchView: View {
+    @StateObject private var vm = SearchViewModel()
+    @State private var query: String = ""
+    @FocusState private var focused: Bool
+    @State private var debounce: DispatchWorkItem?
+    var body: some View {
+        NavigationView {
+            VStack(spacing: 0) {
+                HStack(spacing: 8) {
+                    Image(systemName: "magnifyingglass").foregroundColor(.secondary)
+                    TextField("Buscar canales", text: $query)
+                        .disableAutocorrection(true)
+                        .textInputAutocapitalization(.never)
+                        .submitLabel(.search)
+                        .focused($focused)
+                        .onSubmit { performSearch() }
+                        .onChange(of: query) { q in scheduleSearch(q) }
+                    Spacer()
+                    if vm.isLoading { ProgressView().scaleEffect(0.8) }
+                    if !query.isEmpty {
+                        Button(action: { query = ""; vm.results = []; focused = false }) {
+                            Image(systemName: "xmark.circle.fill").foregroundColor(.secondary)
+                        }
+                    }
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 8)
+                .background(RoundedRectangle(cornerRadius: 12).fill(Color(.systemGray6)))
+                .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color(.systemGray4)))
+                .shadow(color: Color.black.opacity(0.05), radius: 2, x: 0, y: 1)
+                .padding(.horizontal)
+                .padding(.top, 8)
+                if vm.results.isEmpty && !vm.isLoading && !query.isEmpty {
+                    Text("No se encontraron canales").foregroundColor(.secondary).padding()
+                }
+                List {
+                    ForEach(vm.results) { ch in
+                        NavigationLink(destination: ChannelDetailView(channelId: ch.id, channelTitle: ch.title)) {
+                            HStack(spacing: 6) {
+                                Image(systemName: ch.icon).foregroundColor(.blue)
+                                VStack(alignment: .leading) {
+                                    Text(ch.title).font(.subheadline)
+                                    Text(ch.description ?? "").font(.caption).foregroundColor(.secondary)
+                                }
+                                Spacer()
+                            }
+                        }
+                    }
+                }
+                .listStyle(.plain)
+            }
+            .navigationTitle("Buscar")
+        }
+    }
+    private func performSearch() { vm.query = query; vm.search() }
+    private func scheduleSearch(_ q: String) {
+        debounce?.cancel()
+        if q.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { vm.results = []; return }
+        let work = DispatchWorkItem { performSearch() }
+        debounce = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3, execute: work)
+    }
+}
+
 struct MessageDetailView: View {
     let messageId: String
     var onDismiss: (() -> Void)? = nil
@@ -2067,17 +2124,20 @@ class EmergencyMonitor: ObservableObject {
         timer = nil
     }
 
+
+
+
     private func loadSubscriptions(completion: @escaping ([String])->Void) {
-        guard let url = URL(string: "\(APIConfig.baseURL)/subscriptions/user/\(UserSession.shared.currentUserId)") else {
+        guard let url = URL(string: "\(APIConfig.baseURL)/channels/user/\(UserSession.shared.currentUserId)/subscribed") else {
             completion([])
             return
         }
         URLSession.shared.dataTask(with: url) { data, _, _ in
-            guard let data = data, let subs = try? JSONDecoder().decode([Subscription].self, from: data) else {
+            guard let data = data, let channels = try? JSONDecoder().decode([Channel].self, from: data) else {
                 completion([])
                 return
             }
-            let ids = subs.map { $0.channelId }
+            let ids = channels.filter { $0.parentId != nil }.map { $0.id }
             completion(ids)
         }.resume()
     }
@@ -2111,6 +2171,10 @@ class EmergencyMonitor: ObservableObject {
         let formatted = formatEventShort(message.eventAt)
         let bodyBase = message.content
         content.body = formatted != nil ? "\(bodyBase) • \(formatted!)" : bodyBase
+        if UIApplication.shared.applicationState == .active {
+            NotificationRouter.shared.targetMessageId = message.id
+            return
+        }
         if let url = URL(string: "\(APIConfig.baseURL)/channels/\(message.channelId)") {
             URLSession.shared.dataTask(with: url) { data, _, _ in
                 guard let data = data, let detail = try? JSONDecoder().decode(ChannelDetail.self, from: data) else {
@@ -2160,6 +2224,7 @@ class EmergencyEmitterClient: ObservableObject {
     @Published var isRunning = false
     private var timer: Timer?
     private var knownIds: Set<String> = []
+    private var subscribedSubchannelIds: Set<String> = []
     private let baseURL: String
 
     init(baseURL: String) {
@@ -2169,6 +2234,7 @@ class EmergencyEmitterClient: ObservableObject {
     func start() {
         if isRunning { return }
         isRunning = true
+        loadSubscribedSubchannels()
         pollOnce()
         DispatchQueue.main.async {
             self.timer = Timer.scheduledTimer(withTimeInterval: 5, repeats: true) { [weak self] _ in
@@ -2181,6 +2247,15 @@ class EmergencyEmitterClient: ObservableObject {
         isRunning = false
         timer?.invalidate()
         timer = nil
+    }
+
+    private func loadSubscribedSubchannels() {
+        guard let url = URL(string: "\(APIConfig.baseURL)/channels/user/\(UserSession.shared.currentUserId)/subscribed") else { return }
+        URLSession.shared.dataTask(with: url) { data, _, _ in
+            guard let data = data, let chans = try? JSONDecoder().decode([Channel].self, from: data) else { return }
+            let ids = chans.filter { $0.parentId != nil }.map { $0.id }
+            DispatchQueue.main.async { self.subscribedSubchannelIds = Set(ids) }
+        }.resume()
     }
 
     private func pollOnce() {
@@ -2199,6 +2274,7 @@ class EmergencyEmitterClient: ObservableObject {
     }
 
     private func notifyEmergency(event: EmergencyEvent) {
+        if !subscribedSubchannelIds.contains(event.channelId) { return }
         let subs = PersistenceManager.shared.loadSubscriptions() ?? []
         if let sub = subs.first(where: { $0.channel.id == event.channelId }) {
             let fmt = ISO8601DateFormatter()
@@ -2214,6 +2290,10 @@ class EmergencyEmitterClient: ObservableObject {
         let formatted = formatEventShort(event.eventAt)
         let bodyBase = event.content
         content.body = formatted != nil ? "\(bodyBase) • \(formatted!)" : bodyBase
+        if UIApplication.shared.applicationState == .active {
+            NotificationRouter.shared.targetMessageId = event.id
+            return
+        }
         if let url = URL(string: "\(APIConfig.baseURL)/channels/\(event.channelId)") {
             URLSession.shared.dataTask(with: url) { data, _, _ in
                 guard let data = data, let detail = try? JSONDecoder().decode(ChannelDetail.self, from: data) else {
@@ -2508,13 +2588,6 @@ struct SubscriptionCard: View {
                     
                     HStack(spacing: 12) {
                         HStack(spacing: 4) {
-                            Image(systemName: "person.2.fill")
-                                .font(.caption2)
-                            Text("\(subscription.channel.memberCount)")
-                                .font(.caption2)
-                        }
-                        
-                        HStack(spacing: 4) {
                             Image(systemName: "bell.fill")
                                 .font(.caption2)
                             Text("Activo")
@@ -2574,6 +2647,12 @@ struct ContentView: View {
                     Text("Perfil")
                 }
                 .tag(2)
+            SearchView()
+                .tabItem {
+                    Image(systemName: "magnifyingglass")
+                    Text("Buscar")
+                }
+                .tag(3)
         }
         .accentColor(.blue)
         .preferredColorScheme(appAppearance == "dark" ? .dark : (appAppearance == "light" ? .light : nil))
