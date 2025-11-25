@@ -873,9 +873,14 @@ class ProfileViewModel: ObservableObject {
 
 // MARK: - Views
 struct ChannelsView: View {
+    let onInitialDataReady: (() -> Void)?
     @StateObject private var viewModel = ChannelsViewModel()
+    init(onInitialDataReady: (() -> Void)? = nil) {
+        self.onInitialDataReady = onInitialDataReady
+    }
     @ObservedObject private var session = UserSession.shared
     @State private var searchText = ""
+    @State private var didNotifyInitialReady = false
 
     @State private var searching = false
     @State private var searchError: String?
@@ -926,6 +931,24 @@ struct ChannelsView: View {
         }
         .padding(.horizontal)
         .padding(.bottom, 12)
+    }
+    
+    @ViewBuilder private func skeletonChannels() -> some View {
+        List {
+            ForEach(0..<6, id: \.self) { _ in
+                HStack(spacing: 12) {
+                    Circle()
+                        .fill(Color(.systemGray5))
+                        .frame(width: 40, height: 40)
+                    VStack(alignment: .leading, spacing: 8) {
+                        RoundedRectangle(cornerRadius: 6).fill(Color(.systemGray5)).frame(height: 12)
+                        RoundedRectangle(cornerRadius: 6).fill(Color(.systemGray5)).frame(width: 180, height: 10)
+                    }
+                    Spacer()
+                }
+                .padding(.vertical, 6)
+            }
+        }
     }
     
     @ViewBuilder private func historyOverlay() -> some View {
@@ -1092,7 +1115,7 @@ struct ChannelsView: View {
         NavigationView {
             ZStack(alignment: .top) {
                 if viewModel.isLoading {
-                    ProgressView("Cargando canales...")
+                    skeletonChannels()
                 } else if let errorMessage = viewModel.errorMessage {
                     VStack(spacing: 16) {
                         Image(systemName: "exclamationmark.triangle")
@@ -1205,6 +1228,10 @@ struct ChannelsView: View {
                         viewModel.loadChannels(isRefresh: true, publicOnly: true)
                         DispatchQueue.main.async { viewModel.channels.sort { $0.memberCount > $1.memberCount } }
                     }
+                    if !viewModel.isLoading && !didNotifyInitialReady {
+                        didNotifyInitialReady = true
+                        onInitialDataReady?()
+                    }
                 }
             }
             .onChange(of: session.currentUserId) { newId in
@@ -1218,6 +1245,12 @@ struct ChannelsView: View {
                         DispatchQueue.main.async { viewModel.channels.sort { $0.memberCount > $1.memberCount } }
                     }
                     UserSession.shared.syncAPNSTokenIfAvailable()
+                }
+            }
+            .onChange(of: viewModel.isLoading) { loading in
+                if !loading && !didNotifyInitialReady {
+                    didNotifyInitialReady = true
+                    onInitialDataReady?()
                 }
             }
             .onChange(of: selectedTopTab) { tab in
@@ -2886,6 +2919,9 @@ struct SubscriptionCard: View {
 
 struct ContentView: View {
     @State private var selectedTab = 0
+    @State private var showSplash = true
+    @State private var minSplashElapsed = false
+    @State private var initialDataReady = false
     @Environment(\.colorScheme) var colorScheme
     @AppStorage("app_appearance") private var appAppearance: String = "system"
     @StateObject private var emergencyMonitor = EmergencyMonitor()
@@ -2894,10 +2930,19 @@ struct ContentView: View {
     @State private var showDeepLink = false
     
     var body: some View {
-        ChannelsView()
+        ZStack {
+            ChannelsView(onInitialDataReady: {
+                initialDataReady = true
+                if minSplashElapsed {
+                    withAnimation(.easeOut(duration: 0.3)) { showSplash = false }
+                }
+            })
+            if showSplash { SplashView().transition(.opacity).zIndex(1) }
+        }
         .accentColor(.blue)
         .preferredColorScheme(appAppearance == "dark" ? .dark : (appAppearance == "light" ? .light : nil))
         .onAppear {
+            showSplash = true
             UserSession.shared.restoreSession()
             UserSession.shared.ensureGuestSync {
                 UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .badge, .sound]) { granted, _ in
@@ -2907,6 +2952,17 @@ struct ContentView: View {
                     } else {
                         print("Notificaciones locales no autorizadas")
                     }
+                }
+            }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                minSplashElapsed = true
+                if initialDataReady {
+                    withAnimation(.easeOut(duration: 0.3)) { showSplash = false }
+                }
+            }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) {
+                if showSplash {
+                    withAnimation(.easeOut(duration: 0.3)) { showSplash = false }
                 }
             }
         }
@@ -2922,6 +2978,126 @@ struct ContentView: View {
 
         .onChange(of: router.targetMessageId) { _ in
             showDeepLink = router.targetMessageId != nil
+        }
+    }
+}
+struct SplashView: View {
+    @State private var dotOffset: CGFloat = -8
+    @State private var dotScale: CGFloat = 1.0
+    @State private var lettersOpacity = 0.0
+    @State private var lettersScale = 0.8
+    @State private var showDot = false
+    @State private var glowIntensity = 0.0
+    @State private var rotationAngle = 0.0
+    
+    private let letters = ["T","i","f","y"]
+    
+    var body: some View {
+        ZStack {
+            Color(.systemBackground).ignoresSafeArea()
+            
+            VStack(spacing: 12) {
+                HStack(spacing: 6) {
+                    ForEach(0..<letters.count, id: \.self) { i in
+                        if letters[i] == "i" {
+                            ZStack(alignment: .top) {
+                                // Letra "i" sin punto
+                                Text("ı")
+                                    .font(.system(size: 64, weight: .bold, design: .rounded))
+                                    .foregroundStyle(
+                                        LinearGradient(
+                                            colors: [Color.orange, Color.red],
+                                            startPoint: .topLeading,
+                                            endPoint: .bottomTrailing
+                                        )
+                                    )
+                                    .shadow(color: Color.orange.opacity(glowIntensity), radius: 12, x: 0, y: 0)
+                                    .scaleEffect(lettersScale)
+                                    .opacity(lettersOpacity)
+                                
+                                // Punto animado de la "i"
+                                if showDot {
+                                    Circle()
+                                        .fill(
+                                            LinearGradient(
+                                                colors: [Color.orange, Color.red],
+                                                startPoint: .top,
+                                                endPoint: .bottom
+                                            )
+                                        )
+                                        .frame(width: 10, height: 10)
+                                        .shadow(color: Color.orange.opacity(0.8), radius: 8, x: 0, y: 0)
+                                        .scaleEffect(dotScale)
+                                        .offset(y: dotOffset)
+                                        .rotationEffect(.degrees(rotationAngle))
+                                }
+                            }
+                        } else {
+                            Text(letters[i])
+                                .font(.system(size: 64, weight: .bold, design: .rounded))
+                                .foregroundStyle(
+                                    LinearGradient(
+                                        colors: [Color.orange, Color.red],
+                                        startPoint: .topLeading,
+                                        endPoint: .bottomTrailing
+                                    )
+                                )
+                                .shadow(color: Color.orange.opacity(glowIntensity), radius: 12, x: 0, y: 0)
+                                .scaleEffect(lettersScale)
+                                .opacity(lettersOpacity)
+                        }
+                    }
+                }
+            }
+        }
+        .onAppear {
+            startAnimation()
+        }
+    }
+    
+    private func startAnimation() {
+        // Fase 1: Aparición de letras (0.0 - 0.5s)
+        withAnimation(.spring(response: 0.5, dampingFraction: 0.7)) {
+            lettersOpacity = 1.0
+            lettersScale = 1.0
+        }
+        
+        // Fase 2: Mostrar el punto y empezar a saltar (0.3s)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+            showDot = true
+            startBouncingAnimation()
+        }
+        
+        // Activar el brillo pulsante
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+            withAnimation(.easeInOut(duration: 0.8).repeatForever(autoreverses: true)) {
+                glowIntensity = 0.4
+            }
+        }
+    }
+    
+    private func startBouncingAnimation() {
+        // Animación de rebote del punto (1.7s de duración total)
+        let bounceSequence = [
+            (offset: -60.0, scale: 1.2, duration: 0.35, rotation: 0.0),
+            (offset: -8.0, scale: 0.8, duration: 0.25, rotation: 180.0),
+            (offset: -45.0, scale: 1.15, duration: 0.3, rotation: 360.0),
+            (offset: -8.0, scale: 0.85, duration: 0.2, rotation: 540.0),
+            (offset: -30.0, scale: 1.1, duration: 0.25, rotation: 720.0),
+            (offset: -8.0, scale: 1.0, duration: 0.35, rotation: 720.0)
+        ]
+        
+        var currentDelay = 0.0
+        
+        for bounce in bounceSequence {
+            DispatchQueue.main.asyncAfter(deadline: .now() + currentDelay) {
+                withAnimation(.interpolatingSpring(stiffness: 300, damping: 15)) {
+                    dotOffset = bounce.offset
+                    dotScale = bounce.scale
+                    rotationAngle = bounce.rotation
+                }
+            }
+            currentDelay += bounce.duration
         }
     }
 }
@@ -2991,7 +3167,7 @@ struct LoginView: View {
                 sending = false
                 stage = 2
                 info = "Te enviamos un código de verificación."
-                resendCooldown = 30
+                resendCooldown = 300
                 Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { t in
                     resendCooldown = max(0, resendCooldown - 1)
                     if resendCooldown == 0 { t.invalidate() }
@@ -3077,6 +3253,15 @@ struct LoginView: View {
                                         .textContentType(.telephoneNumber)
                                         .focused($phoneFocused)
                                         .onChange(of: phone) { v in phone = v.filter { $0.isNumber } }
+                                    Button(action: {
+                                        let text = UIPasteboard.general.string ?? ""
+                                        let digits = text.filter { $0.isNumber }
+                                        if !digits.isEmpty { phone = digits; phoneFocused = true }
+                                    }) {
+                                        Image(systemName: "doc.on.clipboard")
+                                            .imageScale(.small)
+                                            .foregroundColor(.secondary)
+                                    }
                                     if !phone.isEmpty {
                                         Button(action: { phone = "" }) {
                                             Image(systemName: "xmark.circle.fill").foregroundColor(.secondary)
@@ -3085,6 +3270,15 @@ struct LoginView: View {
                                 }
                                 .padding(.horizontal, 10)
                                 .padding(.vertical, 8)
+                                .contextMenu {
+                                    Button {
+                                        let text = UIPasteboard.general.string ?? ""
+                                        let digits = text.filter { $0.isNumber }
+                                        if !digits.isEmpty { phone = digits; phoneFocused = true }
+                                    } label: {
+                                        Label("Pegar", systemImage: "doc.on.clipboard")
+                                    }
+                                }
                             }
                         }
                         .contentShape(Rectangle())
@@ -3118,6 +3312,19 @@ struct LoginView: View {
                                 .frame(maxWidth: .infinity, alignment: .center)
                                 .contentShape(Rectangle())
                                 .onTapGesture { codeFocused = true }
+                                .simultaneousGesture(LongPressGesture(minimumDuration: 0.5).onEnded { _ in codeFocused = true })
+                                .contextMenu {
+                                    Button {
+                                        let text = UIPasteboard.general.string ?? ""
+                                        let clean = String(text.filter { $0.isNumber }.prefix(6))
+                                        if !clean.isEmpty {
+                                            code = clean
+                                            withAnimation(.spring(response: 0.22, dampingFraction: 0.8)) { activeCodeIndex = min(clean.count, 5) }
+                                        }
+                                    } label: {
+                                        Label("Pegar", systemImage: "doc.on.clipboard")
+                                    }
+                                }
                                 TextField("", text: $code)
                                     .keyboardType(.numberPad)
                                     .textContentType(.oneTimeCode)
@@ -3140,10 +3347,26 @@ struct LoginView: View {
                             .tint(.green)
                             .frame(maxWidth: .infinity)
                             .disabled(code.count < 6 || sending)
-                            Button(action: { if resendCooldown == 0 { requestCode() } }) {
-                                Label(resendCooldown == 0 ? "Reenviar código" : "Reenviar en \(resendCooldown)s", systemImage: "clock")
+                            HStack {
+                                Button(action: { if resendCooldown == 0 { requestCode() } }) {
+                                    Label(resendCooldown == 0 ? "Reenviar código" : "Reenviar en \(resendCooldown)s", systemImage: "clock")
+                                }
+                                .disabled(resendCooldown > 0)
+                                Spacer()
+                                Button(action: {
+                                    let text = UIPasteboard.general.string ?? ""
+                                    let clean = String(text.filter { $0.isNumber }.prefix(6))
+                                    if !clean.isEmpty {
+                                        code = clean
+                                        withAnimation(.spring(response: 0.22, dampingFraction: 0.8)) { activeCodeIndex = min(clean.count, 5) }
+                                    }
+                                }) {
+                                    HStack(spacing: 4) {
+                                        Image(systemName: "doc.on.clipboard").imageScale(.small).foregroundColor(.secondary)
+                                        Text("Pegar código").foregroundColor(.secondary)
+                                    }
+                                }
                             }
-                            .disabled(resendCooldown > 0)
                         }
                     }
                 }
