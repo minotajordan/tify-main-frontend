@@ -3,7 +3,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../services/api';
 import { User, Message } from '../types';
 import { DEFAULT_AVATAR } from '../constants';
-import { Search, Loader2, RefreshCw, User as UserIcon, ShieldCheck, Mail, Phone, MessageSquare, CheckCircle, ChevronRight, ChevronDown, Bell, Copy, Key } from 'lucide-react';
+import { Search, Loader2, RefreshCw, User as UserIcon, ShieldCheck, Mail, Phone, MessageSquare, CheckCircle, ChevronRight, ChevronLeft, ChevronDown, Bell, Copy, Key, UserCheck, SlidersHorizontal, Ban, Trash2 } from 'lucide-react';
 import { useI18n } from '../i18n';
 
 type SubscriptionItem = { id: string; channel: { id: string; title: string; icon?: string; logoUrl?: string } };
@@ -11,6 +11,22 @@ type ApproverItem = { id: string; channel: { id: string; title: string; icon?: s
 
 const UsersModule: React.FC = () => {
   const { t } = useI18n();
+  const formatAgo = (iso?: string) => {
+    if (!iso) return '';
+    const d = new Date(iso as any);
+    const diff = Date.now() - d.getTime();
+    const m = Math.floor(diff/60000);
+    const h = Math.floor(m/60);
+    const days = Math.floor(h/24);
+    const months = Math.floor(days/30);
+    const years = Math.floor(days/365);
+    if (years > 0) return `hace ${years} año${years>1?'s':''}`;
+    if (months > 0) return `hace ${months} mes${months>1?'es':''}`;
+    if (days > 0) return `hace ${days} día${days>1?'s':''}`;
+    if (h > 0) return `hace ${h} hora${h>1?'s':''}`;
+    if (m > 0) return `hace ${m} minuto${m>1?'s':''}`;
+    return 'hace segundos';
+  };
   const [users, setUsers] = useState<User[]>([]);
   const [query, setQuery] = useState('');
   const [loadingUsers, setLoadingUsers] = useState(true);
@@ -27,6 +43,31 @@ const UsersModule: React.FC = () => {
   const [pending, setPending] = useState<Message[]>([]);
   const [loadingDetail, setLoadingDetail] = useState(false);
   const [windowHours, setWindowHours] = useState<number>(24);
+  const [me, setMe] = useState<User | null>(null);
+  const [subsModalOpen, setSubsModalOpen] = useState(false);
+  const [confirmSubId, setConfirmSubId] = useState<string|null>(null);
+  const [detailTab, setDetailTab] = useState<'overview'|'subscriptions'|'assignments'|'pending'|'audit'>('subscriptions');
+  const [auditLogs, setAuditLogs] = useState<any[]>([]);
+  const [auditLoading, setAuditLoading] = useState(false);
+  const [confirmDisable, setConfirmDisable] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [windowRange, setWindowRange] = useState<'1h'|'24h'|'7d'|'1m'|'all'>('24h');
+  const [activity, setActivity] = useState<{ sentInRange: number; deliveriesInRange: number; read: number; unread: number } | null>(null);
+  const [topChannels, setTopChannels] = useState<Array<{ channel: { id: string; title: string; icon?: string; logoUrl?: string }, count: number }>>([]);
+  const [leftCollapsed, setLeftCollapsed] = useState(false);
+  const [rangeIndex, setRangeIndex] = useState(1);
+  useEffect(() => {
+    const hours = windowRange === '1h' ? 1 : windowRange === '24h' ? 24 : windowRange === '7d' ? 7*24 : windowRange === '1m' ? 30*24 : 24*365;
+    setWindowHours(hours);
+  }, [windowRange]);
+  useEffect(() => {
+    const map: Array<'1h'|'24h'|'7d'|'1m'|'all'> = ['1h','24h','7d','1m','all'];
+    setWindowRange(map[rangeIndex]);
+  }, [rangeIndex]);
+
+  useEffect(() => {
+    api.authMe().then(setMe).catch(() => setMe(null));
+  }, []);
 
   useEffect(() => {
     if (selected) {
@@ -93,25 +134,46 @@ const UsersModule: React.FC = () => {
     try {
       const fresh = await api.getUserProfile(user.id);
       setSelected(fresh);
-      const [s, a, p] = await Promise.all([
+      const [s, a, p, act, tops] = await Promise.all([
         api.getUserSubscriptions(user.id),
         api.getUserApproverAssignments(user.id),
-        api.getUserPendingApprovals(user.id, hours ?? windowHours)
+        api.getUserPendingApprovals(user.id, hours ?? windowHours),
+        api.getUserActivity(user.id, windowRange),
+        api.getUserTopChannels(user.id, windowRange)
       ]);
       setSubs(s);
       setApprovers(a);
       setPending(p);
+      setActivity(act);
+      setTopChannels((tops as any).items || tops);
     } finally {
       setLoadingDetail(false);
     }
   };
 
   useEffect(() => {
-    if (selected?.id) loadDetail(selected);
+    if (selected?.id) {
+      setDetailTab('subscriptions');
+      loadDetail(selected);
+    }
   }, [selected?.id]);
+  useEffect(() => {
+    if (selected?.id) loadDetail(selected);
+  }, [windowRange]);
 
   const onRefresh = async () => {
     await loadDetail(selected, windowHours);
+    if (detailTab === 'audit' && selected?.id) await loadAuditLogs(selected.id);
+  };
+
+  const loadAuditLogs = async (id: string) => {
+    setAuditLoading(true);
+    try {
+      const res:any = await api.getUserAuditLogs(id, 1, 50);
+      setAuditLogs(res.items||[]);
+    } finally {
+      setAuditLoading(false);
+    }
   };
 
   const generateCode = async () => {
@@ -128,25 +190,35 @@ const UsersModule: React.FC = () => {
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-12 gap-6 h-screen">
-      <aside className="md:col-span-4 bg-white border border-gray-200 rounded-xl p-4 flex flex-col h-screen">
-        <div className="flex items-center gap-2 mb-3">
-          <Search size={16} className="text-gray-400" />
-          <input
-            value={query}
-            onChange={e => setQuery(e.target.value)}
-            placeholder={t('users.searchPlaceholder')}
-            className="flex-1 px-3 py-2 border rounded-md text-sm"
-          />
-          <button onClick={() => setQuery('')} className="text-xs text-gray-500">{t('users.clear')}</button>
-        </div>
-
-        <div className="mb-4 p-3 border rounded-lg">
-          <div className="flex items-center justify-between">
-            <div className="text-sm font-semibold">{t('users.createUser')}</div>
-            <button onClick={()=>setShowCreateModal(true)} className="px-3 py-2 bg-indigo-600 text-white rounded text-xs">{t('users.create')}</button>
+      <aside className={`${leftCollapsed ? 'md:col-span-1' : 'md:col-span-4'} bg-white border border-gray-200 rounded-xl p-4 flex flex-col h-screen transition-all duration-300`}>
+        {leftCollapsed ? (
+          <div className="flex items-center justify-center mb-3">
+            <button onClick={()=>setLeftCollapsed(false)} className="px-2 py-1 border rounded flex items-center gap-1 text-xs" title="Mostrar usuarios" aria-label="Mostrar usuarios"><ChevronRight size={14} /></button>
           </div>
-        </div>
+        ) : (
+          <>
+            <div className="flex items-center justify-between mb-3">
+              <div className="text-sm font-semibold">Usuarios</div>
+          <button onClick={()=>setLeftCollapsed(true)} className="px-2 py-1 border rounded flex items-center gap-1 text-xs" title="Ocultar usuarios" aria-label="Ocultar usuarios"><ChevronLeft size={14} /></button>
+            </div>
+            <div className="flex items-center gap-2 mb-3">
+              <Search size={16} className="text-gray-400" />
+              <input
+                value={query}
+                onChange={e => setQuery(e.target.value)}
+                placeholder={t('users.searchPlaceholder')}
+                className="flex-1 px-3 py-2 border rounded-md text-sm"
+              />
+              <button onClick={() => setQuery('')} className="text-xs text-gray-500">{t('users.clear')}</button>
+            </div>
 
+            <div className="mb-4 p-3 border rounded-lg">
+              <div className="flex items-center justify-between">
+                <div className="text-sm font-semibold">{t('users.createUser')}</div>
+                <button onClick={()=>setShowCreateModal(true)} className="px-3 py-2 bg-indigo-600 text-white rounded text-xs">{t('users.create')}</button>
+              </div>
+            </div>
+        
         {loadingUsers ? (
           <div className="animate-pulse space-y-2">
             {Array.from({length:8}).map((_,i)=> (
@@ -188,9 +260,10 @@ const UsersModule: React.FC = () => {
             )}
           </div>
         )}
+        </>)}
       </aside>
 
-      <section className="md:col-span-8 bg-white border border-gray-200 rounded-xl p-4">
+      <section className={`${leftCollapsed ? 'md:col-span-11' : 'md:col-span-8'} bg-white border border-gray-200 rounded-xl p-4 transition-all duration-300`}>
         {!selected ? (
           <div className="flex items-center justify-center h-48 text-gray-500">
             <UserIcon size={18} className="mr-2" />
@@ -201,29 +274,85 @@ const UsersModule: React.FC = () => {
             <div className="flex items-center justify-between border-b pb-4 mb-4">
               <div className="flex items-center gap-4">
                 <img src={selected.avatarUrl || DEFAULT_AVATAR} alt={selected.fullName} className="w-12 h-12 rounded-full border border-gray-200" />
-                <div>
+                <div className="min-w-0">
                   <div className="flex items-center gap-2">
-                    <h2 className="text-xl font-semibold">{selected.fullName || selected.username}</h2>
-                    {selected.isAdmin && <span className="text-xs px-2 py-0.5 bg-indigo-100 text-indigo-700 rounded">Admin</span>}
+                    <h2 className="text-xl font-semibold truncate max-w-[32rem]">{selected.fullName || selected.username}</h2>
+                    {selected.isAdmin && <span className="text-xs px-2 py-0.5 bg-indigo-100 text-indigo-700 rounded whitespace-nowrap">Admin</span>}
+                    <span className="text-xs text-gray-400 whitespace-nowrap">· {formatAgo(selected.createdAt)}</span>
                   </div>
-                  <div className="flex items-center gap-3 text-xs text-gray-500">
-                    <div className="flex items-center gap-1"><Mail size={12} /> <span>{selected.email}</span></div>
-                    {selected.phoneNumber && <div className="flex items-center gap-1"><Phone size={12} /> <span>{selected.phoneNumber}</span></div>}
+                  <div className="flex items-center gap-1 text-xs text-gray-500 mt-1">
+                    <Mail size={12} />
+                    <span className="truncate max-w-[32rem]">{selected.email}</span>
                   </div>
                 </div>
               </div>
-              <div className="flex items-center gap-3">
-                <label className="text-xs text-gray-600">{t('users.window')}</label>
-                <input
-                  type="number"
-                  min={1}
-                  value={windowHours}
-                  onChange={e => setWindowHours(Number(e.target.value))}
-                  className="w-16 px-2 py-1 border rounded text-xs"
-                />
-                <button onClick={onRefresh} title={t('users.refresh')} aria-label={t('users.refresh')} className="px-2 py-2 bg-gray-100 border border-gray-200 rounded hover:bg-gray-200 text-sm flex items-center gap-2">
-                  <RefreshCw size={16} />
-                </button>
+              <div className="ml-auto flex items-center gap-2 text-xs">
+                <span className="px-2 py-0.5 border rounded">{windowRange==='all' ? 'Hist' : (windowRange==='7d' ? '7d' : windowRange)}</span>
+                <SlidersHorizontal size={14} className="text-gray-500" />
+                <input type="range" min={0} max={4} value={rangeIndex} onChange={e=>setRangeIndex(Number(e.target.value))} className="w-32" />
+                
+                <button onClick={onRefresh} className="px-2 py-1 border rounded flex items-center gap-1" title="Actualizar" aria-label="Actualizar"><RefreshCw size={14} /><span>Actualizar</span></button>
+              </div>
+            </div>
+
+            <div className="px-4 py-2 border-b bg-white sticky top-0 z-10 flex items-center gap-3 overflow-x-auto whitespace-nowrap">
+              <div className="flex items-center gap-2 text-xs">
+                <button onClick={()=>setDetailTab('subscriptions')} className={`px-2 py-1 rounded flex items-center gap-1 ${detailTab==='subscriptions'?'bg-indigo-600 text-white':'hover:bg-gray-100'}`} title="Suscripciones" aria-label="Suscripciones"><MessageSquare size={14} /><span>Suscripciones</span></button>
+                <button onClick={()=>setDetailTab('assignments')} className={`px-2 py-1 rounded flex items-center gap-1 ${detailTab==='assignments'?'bg-indigo-600 text-white':'hover:bg-gray-100'}`} title="Asignaciones" aria-label="Asignaciones"><ShieldCheck size={14} /><span>Asignaciones</span></button>
+                <button onClick={()=>setDetailTab('pending')} className={`px-2 py-1 rounded flex items-center gap-1 ${detailTab==='pending'?'bg-indigo-600 text-white':'hover:bg-gray-100'}`} title="Pendientes" aria-label="Pendientes"><Bell size={14} /><span>Pendientes</span></button>
+                {me?.isAdmin && (
+                  <button onClick={()=>{ setDetailTab('audit'); if (selected?.id) loadAuditLogs(selected.id); }} className={`px-2 py-1 rounded flex items-center gap-1 ${detailTab==='audit'?'bg-indigo-600 text-white':'hover:bg-gray-100'}`} title="Auditoría" aria-label="Auditoría"><ShieldCheck size={14} /><span>Auditoría</span></button>
+                )}
+              </div>
+              <div className="flex items-center gap-2 text-xs">
+                {me?.isAdmin && (
+                  <>
+                    <div className="relative group">
+                      <button onClick={()=>setConfirmDisable(true)} className="p-2 border rounded hover:bg-gray-50" aria-label={selected?.isDisabled ? 'Habilitar usuario' : 'Deshabilitar usuario'}>
+                        {selected?.isDisabled ? <UserCheck size={14} /> : <Ban size={14} />}
+                      </button>
+                      {!confirmDisable && (
+                        <div className="absolute -top-12 right-0 z-40 hidden group-hover:block transition">
+                          <div className="rounded-2xl bg-white border border-gray-200 shadow-lg px-3 py-2 text-xs text-gray-700">
+                            {selected?.isDisabled ? 'Habilitar usuario' : 'Deshabilitar usuario'}
+                          </div>
+                        </div>
+                      )}
+                      {confirmDisable && (
+                        <div className="absolute -top-2 right-0 z-50">
+                          <div className="rounded-2xl bg-white border border-yellow-200 shadow-lg px-3 py-2">
+                            <div className="flex items-center gap-2">
+                              <button onClick={async ()=>{ if (!selected) return; if (selected.isDisabled) { await api.enableUser(selected.id); } else { await api.disableUser(selected.id); } setConfirmDisable(false); const fresh = await api.getUserProfile(selected.id); setSelected(fresh); }} className="px-2 py-1 bg-red-600 text-white rounded text-xs">Confirmar</button>
+                              <button onClick={()=>setConfirmDisable(false)} className="px-2 py-1 border rounded text-xs">Cancelar</button>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                    <div className="relative group">
+                      <button onClick={()=>setConfirmDelete(true)} className="p-2 border rounded hover:bg-gray-50" aria-label="Eliminar usuario">
+                        <Trash2 size={14} />
+                      </button>
+                      {!confirmDelete && (
+                        <div className="absolute -top-12 right-0 z-40 hidden group-hover:block transition">
+                          <div className="rounded-2xl bg-white border border-gray-200 shadow-lg px-3 py-2 text-xs text-gray-700">
+                            Eliminar usuario
+                          </div>
+                        </div>
+                      )}
+                      {confirmDelete && (
+                        <div className="absolute -top-2 right-0 z-50">
+                          <div className="rounded-2xl bg-white border border-yellow-200 shadow-lg px-3 py-2">
+                            <div className="flex items-center gap-2">
+                              <button onClick={async ()=>{ if (!selected) return; await api.deleteUser(selected.id); const res:any = await api.getUsersPaged(1, usersLimit, query); setUsers(res.items||[]); setUsersPage(1); setUsersPages(res.pagination?.pages||1); setSelected((res.items||[])[0]||null); setConfirmDelete(false); }} className="px-2 py-1 bg-red-600 text-white rounded text-xs">Confirmar</button>
+                              <button onClick={()=>setConfirmDelete(false)} className="px-2 py-1 border rounded text-xs">Cancelar</button>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </>
+                )}
               </div>
             </div>
 
@@ -237,27 +366,28 @@ const UsersModule: React.FC = () => {
                   <span className="text-xs px-2 py-0.5 bg-yellow-100 text-yellow-700 rounded">{t('users.notVerified')}</span>
                 )}
               </div>
-              {!selected.isPhoneVerified && (
-                <div className="flex items-center gap-3">
-                  <Key size={14} className="text-gray-500" />
-                  <div className="text-sm font-mono">{selected.verificationCode || '—'}</div>
-                  {selected.verificationCodeExpiresAt && (
-                    <div className="text-xs text-gray-400">{t('users.expires')} {new Date(selected.verificationCodeExpiresAt as any).toLocaleTimeString()}</div>
-                  )}
-                  <button onClick={copyCode} disabled={!selected.verificationCode} title={t('users.copy')} aria-label={t('users.copy')} className={`px-2 py-1 border rounded text-xs flex items-center gap-1 ${!selected.verificationCode ? 'opacity-50 cursor-not-allowed' : ''}`}>
-                    <Copy size={14} />
-                  </button>
-                  <button onClick={generateCode} title={t('users.generateCode')} aria-label={t('users.generateCode')} className="px-2 py-1 bg-indigo-600 text-white rounded text-xs">
-                    <Key size={14} />
-                  </button>
-                </div>
-              )}
+              <div className="flex items-center gap-3">
+                <Key size={14} className="text-gray-500" />
+                <div className="text-sm font-mono">{selected.verificationCode || '—'}</div>
+                {selected.verificationCodeExpiresAt && (
+                  <div className="text-xs text-gray-400">{t('users.expires')} {new Date(selected.verificationCodeExpiresAt as any).toLocaleTimeString()}</div>
+                )}
+                <button onClick={copyCode} disabled={!selected?.verificationCode} className={`px-2 py-1 border rounded flex items-center gap-1 text-xs ${!selected?.verificationCode?'opacity-50 cursor-not-allowed':''}`} title="Copiar código" aria-label="Copiar código"><Copy size={14} /><span>Copiar</span></button>
+                <button onClick={generateCode} className="px-2 py-1 bg-indigo-600 text-white rounded flex items-center gap-1 text-xs" title="Generar código" aria-label="Generar código"><Key size={14} /><span>Generar</span></button>
+              </div>
             </div>
 
+          {loadingDetail ? (
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-4 animate-pulse">
+              <div className="p-3 border rounded-lg"><div className="h-3 w-24 bg-gray-200 rounded" /><div className="h-7 w-16 bg-gray-200 rounded mt-2" /></div>
+              <div className="p-3 border rounded-lg"><div className="h-3 w-24 bg-gray-200 rounded" /><div className="h-7 w-16 bg-gray-200 rounded mt-2" /></div>
+              <div className="p-3 border rounded-lg"><div className="h-3 w-24 bg-gray-200 rounded" /><div className="h-7 w-16 bg-gray-200 rounded mt-2" /></div>
+            </div>
+          ) : (
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-4">
               <div className="p-3 border rounded-lg">
                 <div className="text-xs text-gray-500">{t('users.subscriptions')}</div>
-                <div className="text-2xl font-bold">{(selected as any).subscribedChannelsCount ?? 0}</div>
+                <button onClick={async ()=>{ if (!selected) return; const s = await api.getUserSubscriptions(selected.id); setSubs(s); setSubsModalOpen(true); }} className="text-2xl font-bold underline decoration-dotted hover:text-indigo-600" title="Ver y gestionar suscripciones" aria-label="Ver y gestionar suscripciones">{(selected as any).subscribedChannelsCount ?? 0}</button>
               </div>
               <div className="p-3 border rounded-lg">
                 <div className="text-xs text-gray-500">{t('users.messages')}</div>
@@ -268,6 +398,74 @@ const UsersModule: React.FC = () => {
                 <div className="text-2xl font-bold">{(selected as any).ownedChannelsCount ?? 0}</div>
               </div>
             </div>
+          )}
+
+          {loadingDetail ? (
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-4 animate-pulse">
+              <div className="p-3 border rounded-lg">
+                <div className="h-3 w-32 bg-gray-200 rounded" />
+                <div className="mt-2 grid grid-cols-2 gap-3">
+                  {Array.from({length:4}).map((_,i)=> (<div key={i} className="h-6 bg-gray-200 rounded" />))}
+                </div>
+              </div>
+              <div className="p-3 border rounded-lg">
+                <div className="h-3 w-40 bg-gray-200 rounded" />
+                <div className="mt-2 space-y-2">
+                  {Array.from({length:3}).map((_,i)=> (
+                    <div key={i} className="flex items-center gap-3">
+                      <div className="w-6 h-6 bg-gray-200 rounded" />
+                      <div className="flex-1">
+                        <div className="h-4 w-32 bg-gray-200 rounded" />
+                        <div className="h-3 w-20 bg-gray-200 rounded mt-1" />
+                      </div>
+                      <div className="h-4 w-10 bg-gray-200 rounded" />
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-4">
+              <div className="p-3 border rounded-lg">
+                <div className="text-xs text-gray-500">Actividad ({windowRange})</div>
+                <div className="mt-2 grid grid-cols-2 gap-3">
+                  <div>
+                    <div className="text-[11px] text-gray-500">Enviados</div>
+                    <div className="text-xl font-semibold">{activity?.sentInRange ?? '—'}</div>
+                  </div>
+                  <div>
+                    <div className="text-[11px] text-gray-500">Entregas</div>
+                    <div className="text-xl font-semibold">{activity?.deliveriesInRange ?? '—'}</div>
+                  </div>
+                  <div>
+                    <div className="text-[11px] text-gray-500">Leídos</div>
+                    <div className="text-xl font-semibold">{activity?.read ?? '—'}</div>
+                  </div>
+                  <div>
+                    <div className="text-[11px] text-gray-500">No leídos</div>
+                    <div className="text-xl font-semibold">{activity?.unread ?? '—'}</div>
+                  </div>
+                </div>
+              </div>
+              <div className="p-3 border rounded-lg">
+                <div className="text-xs text-gray-500">Top canales ({windowRange})</div>
+                <div className="mt-2 space-y-2">
+                  {(topChannels||[]).length === 0 ? (
+                    <div className="text-xs text-gray-500">Sin actividad</div>
+                  ) : (topChannels||[]).map(it => (
+                    <div key={it.channel.id} className="flex items-center gap-3">
+                      <img src={it.channel.logoUrl || DEFAULT_AVATAR} alt={it.channel.title} className="w-6 h-6 rounded border border-gray-200" />
+                      <div className="flex-1">
+                        <div className="text-sm">{it.channel.title}</div>
+                        <div className="text-[11px] text-gray-500">{it.channel.icon || 'icon'}</div>
+                      </div>
+                      <div className="text-sm font-semibold">{it.count}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
 
             {loadingDetail ? (
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 animate-pulse">
@@ -297,79 +495,117 @@ const UsersModule: React.FC = () => {
                 </div>
               </div>
             ) : (
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                <div className="border rounded-lg">
-                  <div className="flex items-center justify-between px-4 py-3 border-b">
-                    <div className="flex items-center gap-2">
-                      <MessageSquare size={16} className="text-indigo-600" />
-                      <span className="text-sm font-semibold">Suscripciones</span>
-                    </div>
-                    <div className="text-xs text-gray-500">{subs.length}</div>
-                  </div>
-                  <div className="max-h-64 overflow-y-auto">
-                    {subs.length === 0 ? (
-                      <div className="px-4 py-10 text-center text-xs text-gray-500">{t('users.noSubscriptions')}</div>
-                    ) : subs.map(s => (
-                      <div key={s.id} className="px-4 py-3 border-b last:border-b-0 flex items-center gap-3">
-                        <img src={s.channel.logoUrl || DEFAULT_AVATAR} alt={s.channel.title} className="w-8 h-8 rounded border border-gray-200" />
-                        <div className="flex-1">
-                          <div className="text-sm font-medium">{s.channel.title}</div>
-                          <div className="text-xs text-gray-500">{s.channel.icon || 'icon'}</div>
-                        </div>
+              <div className="flex-1 overflow-y-auto p-4">
+                {detailTab === 'subscriptions' && (
+                  <div className="border rounded-lg">
+                    <div className="flex items-center justify-between px-4 py-3 border-b">
+                      <div className="flex items-center gap-2">
+                        <MessageSquare size={16} className="text-indigo-600" />
+                        <span className="text-sm font-semibold">Suscripciones</span>
                       </div>
-                    ))}
-                  </div>
-                </div>
-
-                <div className="border rounded-lg">
-                  <div className="flex items-center justify-between px-4 py-3 border-b">
-                    <div className="flex items-center gap-2">
-                      <CheckCircle size={16} className="text-green-600" />
-                      <span className="text-sm font-semibold">{t('users.assignments')}</span>
+                      <div className="text-xs text-gray-500">Activas: {subs.length} · Contador: {(selected as any).subscribedChannelsCount ?? 0}</div>
                     </div>
-                    <div className="text-xs text-gray-500">{approvers.length}</div>
-                  </div>
-                  <div className="max-h-64 overflow-y-auto">
-                    {approvers.length === 0 ? (
-                      <div className="px-4 py-10 text-center text-xs text-gray-500">{t('users.noAssignments')}</div>
-                    ) : approvers.map(a => (
-                      <div key={a.id} className="px-4 py-3 border-b last:border-b-0 flex items-center gap-3">
-                        <ShieldCheck size={18} className="text-indigo-600" />
-                        <div className="flex-1">
-                          <div className="text-sm font-medium">{a.channel.title}</div>
-                          <div className="text-xs text-gray-500">{a.channel.icon || 'icon'}{a.channel.parentId ? ' · Subcanal' : ' · Canal'}</div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                <div className="lg:col-span-2 border rounded-lg">
-                  <div className="flex items-center justify-between px-4 py-3 border-b">
-                    <div className="flex items-center gap-2">
-                      <Bell size={16} className="text-orange-600" />
-                      <span className="text-sm font-semibold">{t('users.pendingApprovals')}</span>
-                    </div>
-                    <div className="text-xs text-gray-500">{pending.length}</div>
-                  </div>
-                  <div className="max-h-64 overflow-y-auto">
-                    {pending.length === 0 ? (
-                      <div className="px-4 py-10 text-center text-xs text-gray-500">{t('users.noPending')}</div>
-                    ) : pending.map(m => (
-                      <div key={m.id} className="px-4 py-3 border-b last:border-b-0">
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-2">
-                            <ChevronRight size={14} className="text-gray-400" />
-                            <div className="text-sm font-semibold">{m.channel?.title}</div>
+                    <div className="max-h-[60vh] overflow-y-auto">
+                      {subs.length === 0 ? (
+                        <div className="px-4 py-10 text-center text-xs text-gray-500">{t('users.noSubscriptions')}</div>
+                      ) : subs.map(s => (
+                        <div key={s.id} className="px-4 py-3 border-b last:border-b-0 flex items-center gap-3">
+                          <img src={s.channel.logoUrl || DEFAULT_AVATAR} alt={s.channel.title} className="w-8 h-8 rounded border border-gray-200" />
+                          <div className="flex-1">
+                            <div className="text-sm font-medium">{s.channel.title}</div>
+                            <div className="text-xs text-gray-500">{s.channel.icon || 'icon'}</div>
+                          <div className="text-[11px] text-gray-500">Sub ID: {s.id} · Channel ID: {s.channel.id} · Suscrito: {new Date((s as any).subscribedAt).toLocaleString()}</div>
                           </div>
-                          <div className="text-xs text-gray-500">{new Date(m.createdAt as any).toLocaleString()}</div>
                         </div>
-                        <div className="text-sm text-gray-700 mt-1">{m.content}</div>
-                        <div className="text-xs text-gray-500 mt-1">{t('approval.by')}: {m.sender?.fullName || m.sender?.username}</div>
-                      </div>
-                    ))}
+                      ))}
+                    </div>
                   </div>
-                </div>
+                )}
+
+                {detailTab === 'assignments' && (
+                  <div className="border rounded-lg">
+                    <div className="flex items-center justify-between px-4 py-3 border-b">
+                      <div className="flex items-center gap-2">
+                        <CheckCircle size={16} className="text-green-600" />
+                        <span className="text-sm font-semibold">{t('users.assignments')}</span>
+                      </div>
+                      <div className="text-xs text-gray-500">{approvers.length}</div>
+                    </div>
+                    <div className="max-h-[60vh] overflow-y-auto">
+                      {approvers.length === 0 ? (
+                        <div className="px-4 py-10 text-center text-xs text-gray-500">{t('users.noAssignments')}</div>
+                      ) : approvers.map(a => (
+                        <div key={a.id} className="px-4 py-3 border-b last:border-b-0 flex items-center gap-3">
+                          <ShieldCheck size={18} className="text-indigo-600" />
+                          <div className="flex-1">
+                            <div className="text-sm font-medium">{a.channel.title}</div>
+                            <div className="text-xs text-gray-500">{a.channel.icon || 'icon'}{a.channel.parentId ? ' · Subcanal' : ' · Canal'}</div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {detailTab === 'pending' && (
+                  <div className="border rounded-lg">
+                    <div className="flex items-center justify-between px-4 py-3 border-b">
+                      <div className="flex items-center gap-2">
+                        <Bell size={16} className="text-orange-600" />
+                        <span className="text-sm font-semibold">{t('users.pendingApprovals')}</span>
+                      </div>
+                      <div className="text-xs text-gray-500">{pending.length}</div>
+                    </div>
+                    <div className="max-h-[60vh] overflow-y-auto">
+                      {pending.length === 0 ? (
+                        <div className="px-4 py-10 text-center text-xs text-gray-500">{t('users.noPending')}</div>
+                      ) : pending.map(m => (
+                        <div key={m.id} className="px-4 py-3 border-b last:border-b-0">
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                              <ChevronRight size={14} className="text-gray-400" />
+                              <div className="text-sm font-semibold">{m.channel?.title}</div>
+                            </div>
+                            <div className="text-xs text-gray-500">{new Date(m.createdAt as any).toLocaleString()}</div>
+                          </div>
+                          <div className="text-sm text-gray-700 mt-1">{m.content}</div>
+                          <div className="text-xs text-gray-500 mt-1">{t('approval.by')}: {m.sender?.fullName || m.sender?.username}</div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {detailTab === 'audit' && me?.isAdmin && (
+                  <div className="border rounded-lg">
+                    <div className="flex items-center justify-between px-4 py-3 border-b">
+                      <div className="flex items-center gap-2">
+                        <ShieldCheck size={16} className="text-indigo-600" />
+                        <span className="text-sm font-semibold">Auditoría</span>
+                      </div>
+                      <div className="text-xs text-gray-500">{auditLogs.length}</div>
+                    </div>
+                    <div className="max-h-[60vh] overflow-y-auto">
+                      {auditLoading ? (
+                        <div className="p-4 space-y-2">
+                          {Array.from({length:6}).map((_,i)=> (
+                            <div key={i} className="h-10 bg-gray-100 rounded" />
+                          ))}
+                        </div>
+                      ) : auditLogs.length === 0 ? (
+                        <div className="px-4 py-10 text-center text-xs text-gray-500">Sin registros</div>
+                      ) : auditLogs.map((l:any) => (
+                        <div key={l.id} className="px-4 py-3 border-b last:border-b-0">
+                          <div className="flex items-center justify-between">
+                            <div className="text-sm font-medium">{l.action}</div>
+                            <div className="text-xs text-gray-500" title={new Date(l.createdAt as any).toLocaleString()}>{formatAgo(l.createdAt)}</div>
+                          </div>
+                          <div className="text-[11px] text-gray-500">Actor: {l.actorId} · Target: {l.targetUserId || l.targetChannelId || '—'}</div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
             )}
           </>
@@ -397,6 +633,57 @@ const UsersModule: React.FC = () => {
               <button onClick={()=>setShowCreateModal(false)} className="px-4 py-2 border border-gray-300 text-gray-700 rounded">Cancelar</button>
               <button onClick={async ()=>{ await api.createUser(createForm as any); const res:any = await api.getUsersPaged(1, usersLimit, query); setUsers(res.items||[]); setUsersPage(1); setUsersPages(res.pagination?.pages||1); setSelected((res.items||[])[0]||null); setShowCreateModal(false); setCreateForm({ email: '', username: '', fullName: '', phoneNumber: '', avatarUrl: '', isAdmin: false, password: '' }); }} className="px-4 py-2 bg-indigo-600 text-white rounded">Crear usuario</button>
             </div>
+          </div>
+        </div>
+      </div>
+    )}
+
+    {subsModalOpen && (
+      <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center">
+        <div className="bg-white w-full max-w-2xl rounded-xl shadow-lg border border-gray-200">
+          <div className="p-4 border-b border-gray-100 flex items-center justify-between">
+            <h3 className="text-lg font-semibold text-gray-900">Gestionar suscripciones</h3>
+            <button onClick={()=>setSubsModalOpen(false)} className="text-gray-400 hover:text-gray-600 p-2 hover:bg-gray-50 rounded-full">×</button>
+          </div>
+          <div className="max-h-[60vh] overflow-y-auto">
+            {subs.length === 0 ? (
+              <div className="px-4 py-10 text-center text-xs text-gray-500">Sin suscripciones activas</div>
+            ) : subs.map(s => (
+              <div key={s.id} className="px-4 py-3 border-b last:border-b-0 flex items-center gap-3">
+                <img src={s.channel.logoUrl || DEFAULT_AVATAR} alt={s.channel.title} className="w-8 h-8 rounded border border-gray-200" />
+                <div className="flex-1">
+                  <div className="text-sm font-medium">{s.channel.title}</div>
+                  <div className="text-xs text-gray-500">{s.channel.icon || 'icon'}</div>
+                  <div className="text-[11px] text-gray-500">Suscrito {formatAgo((s as any).subscribedAt)}</div>
+                </div>
+                {me?.isAdmin && (
+                  <div className="relative group">
+                    <button onClick={()=>setConfirmSubId(s.id)} className="p-2 border border-gray-300 rounded hover:bg-gray-50" aria-label="Eliminar suscripción">
+                      <Trash2 size={14} />
+                    </button>
+                    {confirmSubId === s.id ? (
+                      <div className="absolute -top-2 right-0 z-50">
+                        <div className="rounded-2xl bg-white border border-yellow-200 shadow-lg px-3 py-2">
+                          <div className="flex items-center gap-2">
+                            <button onClick={async ()=>{ if (!selected) return; await api.removeSubscription(selected.id, s.channel.id); setConfirmSubId(null); await loadDetail(selected); }} className="px-2 py-1 bg-red-600 text-white rounded text-xs">Confirmar</button>
+                            <button onClick={()=>setConfirmSubId(null)} className="px-2 py-1 border border-gray-300 rounded text-xs">Cancelar</button>
+                          </div>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="absolute -top-12 right-0 z-40 hidden group-hover:block transition">
+                        <div className="rounded-2xl bg-white border border-gray-200 shadow-lg px-3 py-2 text-xs text-gray-700">
+                          Eliminar suscripción
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+          <div className="p-3 flex items-center justify-end gap-2">
+            <button onClick={()=>setSubsModalOpen(false)} className="px-3 py-2 border border-gray-300 rounded text-xs">Cerrar</button>
           </div>
         </div>
       </div>

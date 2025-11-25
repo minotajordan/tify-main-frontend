@@ -182,8 +182,38 @@ export const api = {
     return request<UserStats>(`${API_BASE}/users/${id}/stats`);
   },
 
+  getUserActivity: async (id: string, range: '1h'|'24h'|'7d'|'1m'|'all' = '24h'): Promise<{ sentInRange: number; deliveriesInRange: number; read: number; unread: number }> => {
+    return request(`${API_BASE}/users/${id}/activity?range=${range}`);
+  },
+
+  getUserTopChannels: async (id: string, range: '1h'|'24h'|'7d'|'1m'|'all' = '24h'): Promise<{ items: Array<{ channel: { id: string; title: string; icon?: string; logoUrl?: string }, count: number }> }> => {
+    return request(`${API_BASE}/users/${id}/top-channels?range=${range}`);
+  },
+
+  getUserAuditLogs: async (id: string, page = 1, limit = 20): Promise<{ items: any[]; pagination: any }> => {
+    return request(`${API_BASE}/users/${id}/audit-logs?page=${page}&limit=${limit}`);
+  },
+
   getUserSubscriptions: async (id: string): Promise<any[]> => {
     return request<any[]>(`${API_BASE}/users/${id}/subscriptions`);
+  },
+
+  removeSubscription: async (userId: string, channelId: string): Promise<{ message: string }> => {
+    return request(`${API_BASE}/subscriptions`, {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ userId, channelId })
+    });
+  },
+
+  disableUser: async (id: string): Promise<{ id: string; isDisabled: boolean }> => {
+    return request(`${API_BASE}/users/${id}/disable`, { method: 'PATCH' });
+  },
+  enableUser: async (id: string): Promise<{ id: string; isDisabled: boolean }> => {
+    return request(`${API_BASE}/users/${id}/enable`, { method: 'PATCH' });
+  },
+  deleteUser: async (id: string): Promise<{ deleted: { id: string } }> => {
+    return request(`${API_BASE}/users/${id}`, { method: 'DELETE' });
   },
 
   getUserApproverAssignments: async (id: string): Promise<any[]> => {

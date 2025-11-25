@@ -101,7 +101,8 @@ router.delete('/', async (req, res) => {
       }
     });
 
-    res.json({ message: 'Desuscripción exitosa' });
+    await prisma.auditLog.create({ data: { actorId: req.body.userId, action: 'USER_UNSUBSCRIBE', targetUserId: req.body.userId, targetChannelId: channelId, details: {} } });
+            res.json({ message: 'Desuscripción exitosa' });
   } catch (error) {
     console.error('Error eliminando suscripción:', error);
     res.status(500).json({ error: 'Error interno del servidor' });

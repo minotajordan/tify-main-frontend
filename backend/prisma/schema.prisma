@@ -23,6 +23,7 @@ model User {
   verificationCodeExpiresAt DateTime? @map("verification_code_expires_at")
   isAdmin                   Boolean   @default(false) @map("is_admin")
   isCoordinator             Boolean   @default(false) @map("is_coordinator")
+  isDisabled                Boolean   @default(false) @map("is_disabled")
   createdAt                 DateTime  @default(now()) @map("created_at")
   updatedAt                 DateTime  @updatedAt @map("updated_at")
 
@@ -128,6 +129,18 @@ model ChannelSubscription {
 
   @@unique([userId, channelId])
   @@map("tify_channel_subscriptions")
+}
+
+model AuditLog {
+  id              String   @id @default(uuid())
+  actorId         String   @map("actor_id")
+  action          String
+  targetUserId    String?  @map("target_user_id")
+  targetChannelId String?  @map("target_channel_id")
+  details         Json?
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  @@map("tify_audit_logs")
 }
 
 model MessageDelivery {

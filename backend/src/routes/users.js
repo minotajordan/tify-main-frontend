@@ -21,6 +21,7 @@ router.get('/', async (req, res) => {
         fullName: true,
         phoneNumber: true,
         isAdmin: true,
+        isDisabled: true,
         createdAt: true,
         _count: {
           select: {
@@ -65,9 +66,9 @@ router.get('/paged', async (req, res) => {
 
     const where = q ? {
       OR: [
-        { email: { contains: q, mode: 'insensitive' } },
-        { username: { contains: q, mode: 'insensitive' } },
-        { fullName: { contains: q, mode: 'insensitive' } }
+        { email: { contains: q } },
+        { username: { contains: q } },
+        { fullName: { contains: q } }
       ]
     } : {};
 
@@ -81,6 +82,7 @@ router.get('/paged', async (req, res) => {
           fullName: true,
           phoneNumber: true,
           isAdmin: true,
+          isDisabled: true,
           createdAt: true,
           avatarUrl: true,
           _count: { select: { subscriptions: true, messagesSent: true, ownedChannels: true } }
@@ -92,12 +94,15 @@ router.get('/paged', async (req, res) => {
       prisma.user.count({ where })
     ]);
 
-    const items = users.map(u => ({
-      ...u,
-      subscribedChannelsCount: u._count.subscriptions,
-      messagesCount: u._count.messagesSent,
-      ownedChannelsCount: u._count.ownedChannels,
-      _count: undefined
+    const items = await Promise.all(users.map(async (u) => {
+      const activeSubs = await prisma.channelSubscription.count({ where: { userId: u.id, isActive: true } });
+      return {
+        ...u,
+        subscribedChannelsCount: activeSubs,
+        messagesCount: u._count.messagesSent,
+        ownedChannelsCount: u._count.ownedChannels,
+        _count: undefined
+      };
     }));
 
     res.json({ items, pagination: { page, limit, total, pages: Math.ceil(total / limit) } });
@@ -123,6 +128,7 @@ router.get('/:id', async (req, res) => {
         isGuest: true,
         isPhoneVerified: true,
         isAdmin: true,
+        isDisabled: true,
         createdAt: true,
         verificationCode: true,
         _count: {
@@ -139,8 +145,9 @@ router.get('/:id', async (req, res) => {
       return res.status(404).json({ error: 'Usuario no encontrado' });
     }
 
+    const activeSubs = await prisma.channelSubscription.count({ where: { userId: id, isActive: true } });
     const stats = {
-      subscribedChannelsCount: user._count.subscriptions,
+      subscribedChannelsCount: activeSubs,
       messagesCount: user._count.messagesSent,
       ownedChannelsCount: user._count.ownedChannels,
       pendingApprovalsCount: user.isAdmin ? 3 : 0
@@ -355,6 +362,95 @@ router.get('/:id/stats', async (req, res) => {
   }
 });
 
+// GET /api/users/:id/activity - Actividad por rango
+router.get('/:id/activity', async (req, res) => {
+  try {
+    const auth = req.headers.authorization || '';
+    const [, token] = auth.split(' ');
+    if (!token) return res.status(401).json({ error: 'Token no proporcionado', code: 'TOKEN_MISSING' });
+    let payload; try { payload = jwt.verify(token, process.env.JWT_SECRET || 'dev_secret'); } catch (e) { return res.status(401).json({ error: 'Token inválido', code: 'TOKEN_INVALID', details: e.message }); }
+    const requester = await prisma.user.findUnique({ where: { id: payload.sub }, select: { isAdmin: true } });
+    if (!requester?.isAdmin) return res.status(403).json({ error: 'Acceso denegado', code: 'ACCESS_DENIED' });
+
+    const { id } = req.params;
+    const range = String(req.query.range || '24h');
+    const ranges = { '1h': 1, '24h': 24, '7d': 7 * 24, '1m': 30 * 24 };
+    const hours = ranges[range] || 24;
+    const since = range === 'all' ? null : new Date(Date.now() - hours * 60 * 60 * 1000);
+
+    const whereMsg = since ? { senderId: id, createdAt: { gte: since } } : { senderId: id };
+    const whereDel = since ? { userId: id, createdAt: { gte: since } } : { userId: id };
+
+    const [sentInRange, deliveriesInRange, read, unread] = await Promise.all([
+      prisma.message.count({ where: whereMsg }),
+      prisma.messageDelivery.count({ where: whereDel }),
+      prisma.messageDelivery.count({ where: { ...whereDel, readAt: { not: null } } }),
+      prisma.messageDelivery.count({ where: { ...whereDel, deliveredAt: { not: null }, readAt: null } })
+    ]);
+
+    res.json({ sentInRange, deliveriesInRange, read, unread });
+  } catch (error) {
+    res.status(500).json({ error: 'Error obteniendo actividad', code: 'USER_ACTIVITY_FAILED', details: error.message });
+  }
+});
+
+// GET /api/users/:id/top-channels - Top canales por mensajes enviados
+router.get('/:id/top-channels', async (req, res) => {
+  try {
+    const auth = req.headers.authorization || '';
+    const [, token] = auth.split(' ');
+    if (!token) return res.status(401).json({ error: 'Token no proporcionado', code: 'TOKEN_MISSING' });
+    let payload; try { payload = jwt.verify(token, process.env.JWT_SECRET || 'dev_secret'); } catch (e) { return res.status(401).json({ error: 'Token inválido', code: 'TOKEN_INVALID', details: e.message }); }
+    const requester = await prisma.user.findUnique({ where: { id: payload.sub }, select: { isAdmin: true } });
+    if (!requester?.isAdmin) return res.status(403).json({ error: 'Acceso denegado', code: 'ACCESS_DENIED' });
+
+    const { id } = req.params;
+    const range = String(req.query.range || '24h');
+    const ranges = { '1h': 1, '24h': 24, '7d': 7 * 24, '1m': 30 * 24 };
+    const hours = ranges[range] || 24;
+    const since = range === 'all' ? null : new Date(Date.now() - hours * 60 * 60 * 1000);
+    const where = since ? { senderId: id, createdAt: { gte: since } } : { senderId: id };
+
+    const msgs = await prisma.message.findMany({ where, select: { channelId: true } });
+    const counts = new Map();
+    for (const m of msgs) counts.set(m.channelId, (counts.get(m.channelId) || 0) + 1);
+    const sorted = Array.from(counts.entries()).sort((a, b) => b[1] - a[1]).slice(0, 5);
+    const channelIds = sorted.map(([cid]) => cid);
+    const channels = await prisma.channel.findMany({ where: { id: { in: channelIds } }, select: { id: true, title: true, icon: true, logoUrl: true } });
+    const items = sorted.map(([cid, count]) => ({ channel: channels.find(c => c.id === cid), count }));
+    res.json({ items });
+  } catch (error) {
+    res.status(500).json({ error: 'Error obteniendo top canales', code: 'USER_TOP_CHANNELS_FAILED', details: error.message });
+  }
+});
+
+// GET /api/users/:id/audit-logs - Auditoría de acciones (solo admin)
+router.get('/:id/audit-logs', async (req, res) => {
+  try {
+    const auth = req.headers.authorization || '';
+    const [, token] = auth.split(' ');
+    if (!token) return res.status(401).json({ error: 'Token no proporcionado', code: 'TOKEN_MISSING' });
+    let payload; try { payload = jwt.verify(token, process.env.JWT_SECRET || 'dev_secret'); } catch (e) { return res.status(401).json({ error: 'Token inválido', code: 'TOKEN_INVALID', details: e.message }); }
+    const requester = await prisma.user.findUnique({ where: { id: payload.sub }, select: { isAdmin: true } });
+    if (!requester?.isAdmin) return res.status(403).json({ error: 'Acceso denegado', code: 'ACCESS_DENIED' });
+
+    const { id } = req.params;
+    const page = parseInt(req.query.page || '1');
+    const limit = parseInt(req.query.limit || '20');
+    const skip = (page - 1) * limit;
+
+    const where = { OR: [{ targetUserId: id }, { actorId: id }] };
+    const [items, total] = await Promise.all([
+      prisma.auditLog.findMany({ where, orderBy: { createdAt: 'desc' }, skip, take: limit }),
+      prisma.auditLog.count({ where })
+    ]);
+
+    res.json({ items, pagination: { page, limit, total, pages: Math.ceil(total / limit) } });
+  } catch (error) {
+    res.status(500).json({ error: 'Error obteniendo auditoría', code: 'USER_AUDIT_FAILED', details: error.message });
+  }
+});
+
 // POST /api/users - Crear usuario (admin)
 router.post('/', async (req, res) => {
   try {
@@ -419,6 +515,65 @@ router.put('/:id/messaging-settings/:platform', async (req, res) => {
     res.json(setting);
   } catch (error) {
     res.status(500).json({ error: 'Error actualizando plataforma' });
+  }
+});
+
+// PATCH /api/users/:id/disable
+router.patch('/:id/disable', async (req, res) => {
+  try {
+    const auth = req.headers.authorization || '';
+    const [, token] = auth.split(' ');
+    if (!token) return res.status(401).json({ error: 'Token no proporcionado', code: 'TOKEN_MISSING' });
+    let payload; try { payload = jwt.verify(token, process.env.JWT_SECRET || 'dev_secret'); } catch (e) { return res.status(401).json({ error: 'Token inválido', code: 'TOKEN_INVALID', details: e.message }); }
+    const requester = await prisma.user.findUnique({ where: { id: payload.sub }, select: { isAdmin: true } });
+    if (!requester?.isAdmin) return res.status(403).json({ error: 'Acceso denegado', code: 'ACCESS_DENIED' });
+
+    const { id } = req.params;
+    const updated = await prisma.user.update({ where: { id }, data: { isDisabled: true }, select: { id: true, isDisabled: true } });
+    await prisma.auditLog.create({ data: { actorId: payload.sub, action: 'USER_DISABLE', targetUserId: id, details: {} } });
+    res.json(updated);
+  } catch (error) {
+    res.status(500).json({ error: 'Error deshabilitando usuario', code: 'USER_DISABLE_FAILED', details: error.message });
+  }
+});
+
+// PATCH /api/users/:id/enable
+router.patch('/:id/enable', async (req, res) => {
+  try {
+    const auth = req.headers.authorization || '';
+    const [, token] = auth.split(' ');
+    if (!token) return res.status(401).json({ error: 'Token no proporcionado', code: 'TOKEN_MISSING' });
+    let payload; try { payload = jwt.verify(token, process.env.JWT_SECRET || 'dev_secret'); } catch (e) { return res.status(401).json({ error: 'Token inválido', code: 'TOKEN_INVALID', details: e.message }); }
+    const requester = await prisma.user.findUnique({ where: { id: payload.sub }, select: { isAdmin: true } });
+    if (!requester?.isAdmin) return res.status(403).json({ error: 'Acceso denegado', code: 'ACCESS_DENIED' });
+
+    const { id } = req.params;
+    const updated = await prisma.user.update({ where: { id }, data: { isDisabled: false }, select: { id: true, isDisabled: true } });
+    await prisma.auditLog.create({ data: { actorId: payload.sub, action: 'USER_ENABLE', targetUserId: id, details: {} } });
+    res.json(updated);
+  } catch (error) {
+    res.status(500).json({ error: 'Error habilitando usuario', code: 'USER_ENABLE_FAILED', details: error.message });
+  }
+});
+
+// DELETE /api/users/:id - Eliminar usuario y sus relaciones
+router.delete('/:id', async (req, res) => {
+  try {
+    const auth = req.headers.authorization || '';
+    const [, token] = auth.split(' ');
+    if (!token) return res.status(401).json({ error: 'Token no proporcionado', code: 'TOKEN_MISSING' });
+    let payload; try { payload = jwt.verify(token, process.env.JWT_SECRET || 'dev_secret'); } catch (e) { return res.status(401).json({ error: 'Token inválido', code: 'TOKEN_INVALID', details: e.message }); }
+    const requester = await prisma.user.findUnique({ where: { id: payload.sub }, select: { isAdmin: true } });
+    if (!requester?.isAdmin) return res.status(403).json({ error: 'Acceso denegado', code: 'ACCESS_DENIED' });
+
+    const { id } = req.params;
+    await prisma.messageApproval.deleteMany({ where: { approverId: id } });
+    await prisma.messageRevision.deleteMany({ where: { editorId: id } });
+    const deleted = await prisma.user.delete({ where: { id } });
+    await prisma.auditLog.create({ data: { actorId: payload.sub, action: 'USER_DELETE', targetUserId: id, details: {} } });
+    res.json({ deleted: { id: deleted.id } });
+  } catch (error) {
+    res.status(500).json({ error: 'Error eliminando usuario', code: 'USER_DELETE_FAILED', details: error.message });
   }
 });
 

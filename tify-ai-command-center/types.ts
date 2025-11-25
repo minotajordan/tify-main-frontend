@@ -50,6 +50,7 @@ export interface User {
   fullName: string;
   phoneNumber?: string;
   isAdmin: boolean;
+  isDisabled?: boolean;
   createdAt: string;
   isGuest?: boolean;
   isPhoneVerified?: boolean;

@@ -13,6 +13,7 @@ struct Channel: Identifiable, Codable, Equatable {
     let isPublic: Bool
     let isSubscribed: Bool?
     let isFavorite: Bool?
+    let last24hCount: Int?
     let subchannels: [Subchannel]?
     
     struct Subchannel: Identifiable, Codable, Equatable {
@@ -149,7 +150,7 @@ struct ChannelDetail: Codable {
     let owner: Owner
     let subchannels: [Channel.Subchannel]?
     let approvalPolicy: String?
-    let isSubscribed: Bool?
+    var isSubscribed: Bool?
     
     struct Owner: Codable {
         let id: String
@@ -246,8 +247,16 @@ struct PasswordValidation: Codable { let valid: Bool }
 class UserSession: ObservableObject {
     static let shared = UserSession()
     @Published var currentUserId: String = UserDefaults.standard.string(forKey: "current_user_id") ?? ""
-    @Published var isVerified: Bool = false
-    @Published var token: String? = nil
+    @Published var isVerified: Bool = UserDefaults.standard.bool(forKey: "user_is_verified")
+    @Published var token: String? = UserDefaults.standard.string(forKey: "auth_token")
+    func restoreSession() {
+        let uid = UserDefaults.standard.string(forKey: "current_user_id")
+        let tok = UserDefaults.standard.string(forKey: "auth_token")
+        let ver = UserDefaults.standard.bool(forKey: "user_is_verified")
+        if let uid = uid, !uid.isEmpty { currentUserId = uid }
+        token = tok
+        isVerified = ver || (tok != nil)
+    }
 
     func ensureGuest() {
       guard currentUserId.isEmpty else { return }
@@ -266,6 +275,28 @@ class UserSession: ObservableObject {
             self.currentUserId = id
             UserDefaults.standard.set(id, forKey: "current_user_id")
           }
+        }
+      }.resume()
+    }
+
+    func ensureGuestSync(completion: @escaping () -> Void) {
+      if !currentUserId.isEmpty { completion(); return }
+      let deviceId = UIDevice.current.identifierForVendor?.uuidString ?? UUID().uuidString
+      guard let url = URL(string: "\(APIConfig.baseURL)/users/guest") else { completion(); return }
+      var req = URLRequest(url: url)
+      req.httpMethod = "POST"
+      req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+      let body = ["deviceId": deviceId]
+      req.httpBody = try? JSONSerialization.data(withJSONObject: body)
+      URLSession.shared.dataTask(with: req) { data, _, _ in
+        DispatchQueue.main.async {
+          if let data = data,
+             let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+             let id = obj["id"] as? String {
+            self.currentUserId = id
+            UserDefaults.standard.set(id, forKey: "current_user_id")
+          }
+          completion()
         }
       }.resume()
     }
@@ -295,6 +326,7 @@ class PersistenceManager {
     private let channelDetailsPrefix = "cached_channel_"
     private let userProfileKey = "cached_user_profile"
     private let subscriptionsKey = "cached_subscriptions"
+    private let searchHistoryKey = "cached_search_history"
     
     func saveChannels(_ channels: [Channel]) {
         if let encoded = try? JSONEncoder().encode(channels) {
@@ -353,6 +385,24 @@ class PersistenceManager {
         }
         return subscriptions
     }
+    
+    func loadSearchHistory() -> [String] {
+        let arr = UserDefaults.standard.array(forKey: searchHistoryKey) as? [String] ?? []
+        return Array(arr.reversed())
+    }
+    
+    func saveSearchHistory(_ items: [String]) {
+        let uniq = Array(NSOrderedSet(array: items).compactMap { $0 as? String })
+        UserDefaults.standard.set(uniq, forKey: searchHistoryKey)
+    }
+    
+    func appendSearchHistory(_ query: String) {
+        let q = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !q.isEmpty else { return }
+        var items = UserDefaults.standard.array(forKey: searchHistoryKey) as? [String] ?? []
+        items.append(q)
+        saveSearchHistory(items)
+    }
 }
 
 // MARK: - ViewModels
@@ -362,6 +412,7 @@ class ChannelsViewModel: ObservableObject {
     @Published var isLoading = false
     @Published var isRefreshing = false
     @Published var errorMessage: String?
+
     
     init() {
         if let cachedChannels = PersistenceManager.shared.loadChannels() {
@@ -413,7 +464,7 @@ class ChannelsViewModel: ObservableObject {
                     PersistenceManager.shared.saveChannels(newChannels)
                 } catch {
                     if self?.channels.isEmpty ?? true {
-                        self?.errorMessage = "Error al parsear datos: \(error.localizedDescription)"
+                        self?.errorMessage = "Lo sentimos, te invitamos a cerrar la app y volver a abrirla. Lamentamos de todo corazón las molestias."
                     }
                     print("Error detallado: \(error)")
                 }
@@ -463,7 +514,7 @@ class ChannelsViewModel: ObservableObject {
                     PersistenceManager.shared.saveChannels(newChannels)
                 } catch {
                     if self?.channels.isEmpty ?? true {
-                        self?.errorMessage = "Error al parsear datos: \(error.localizedDescription)"
+                        self?.errorMessage = "Lo sentimos, te invitamos a cerrar la app y volver a abrirla. Lamentamos de todo corazón las molestias."
                     }
                     print("Error detallado: \(error)")
                 }
@@ -499,7 +550,7 @@ class ChannelsViewModel: ObservableObject {
                 if let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) {
                     if let idx = self?.channels.firstIndex(where: { $0.id == channelId }) {
                         var c = self!.channels[idx]
-                        c = Channel(id: c.id, title: c.title, description: c.description, icon: c.icon, memberCount: c.memberCount, parentId: c.parentId, isPublic: c.isPublic, isSubscribed: c.isSubscribed, isFavorite: makeFavorite, subchannels: c.subchannels)
+                        c = Channel(id: c.id, title: c.title, description: c.description, icon: c.icon, memberCount: c.memberCount, parentId: c.parentId, isPublic: c.isPublic, isSubscribed: c.isSubscribed, isFavorite: makeFavorite, last24hCount: c.last24hCount, subchannels: c.subchannels)
                         self?.channels[idx] = c
                     }
                     self?.loadFavorites()
@@ -526,6 +577,43 @@ class ChannelsViewModel: ObservableObject {
             }
         }.resume()
     }
+
+    func subscribe(channelId: String, completion: @escaping (Bool)->Void) {
+        guard let url = URL(string: "\(APIConfig.baseURL)/subscriptions") else { completion(false); return }
+        var req = URLRequest(url: url)
+        req.httpMethod = "POST"
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        let body: [String: Any] = ["userId": UserSession.shared.currentUserId, "channelId": channelId]
+        req.httpBody = try? JSONSerialization.data(withJSONObject: body)
+        URLSession.shared.dataTask(with: req) { [weak self] data, response, error in
+            DispatchQueue.main.async {
+                if let http = response as? HTTPURLResponse, http.statusCode == 403,
+                   let data = data,
+                   let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                   (obj["code"] as? String) == "USER_DISABLED" {
+                    self?.errorMessage = "Tu cuenta está deshabilitada. Contacta al administrador."
+                    completion(false)
+                    return
+                }
+                let ok = (error == nil) && (response as? HTTPURLResponse).map { (200..<300).contains($0.statusCode) } ?? false
+                if ok { self?.loadSubscribedChannels(isRefresh: true) }
+                completion(ok)
+            }
+        }.resume()
+    }
+
+    func canGuestSubscribe(completion: @escaping (Bool)->Void) {
+        if UserSession.shared.isVerified { completion(true); return }
+        guard let url = URL(string: "\(APIConfig.baseURL)/subscriptions/user/\(UserSession.shared.currentUserId)") else { completion(false); return }
+        URLSession.shared.dataTask(with: url) { data, _, _ in
+            DispatchQueue.main.async {
+                let count = (try? JSONDecoder().decode([Subscription].self, from: data ?? Data()))?.count ?? 0
+                completion(count < 1)
+            }
+        }.resume()
+    }
+
+
 }
 
 class ChannelDetailViewModel: ObservableObject {
@@ -592,16 +680,16 @@ class ChannelDetailViewModel: ObservableObject {
                         if let channels = PersistenceManager.shared.loadChannels(),
                            let parent = channels.first(where: { $0.id == parentId }),
                            let subs = parent.subchannels,
-                           let defaultId = subs.sorted { ($0.memberCount ?? 0) > ($1.memberCount ?? 0) }.first?.id {
+                           let defaultId = subs.sorted(by: { ($0.memberCount ?? 0) > ($1.memberCount ?? 0) }).first?.id {
                             self?.isPrimarySubchannel = (newDetail.id == defaultId)
                         }
                     } else if let subs = newDetail.subchannels, !subs.isEmpty {
-                        let defaultSub = subs.sorted { ($0.memberCount ?? 0) > ($1.memberCount ?? 0) }.first
+                        let defaultSub = subs.sorted(by: { ($0.memberCount ?? 0) > ($1.memberCount ?? 0) }).first
                         if let sub = defaultSub { self?.loadSubchannelDetail(sub.id) }
                     }
                 } catch {
                     if self?.channelDetail == nil {
-                        self?.errorMessage = "Error al parsear datos: \(error.localizedDescription)"
+                        self?.errorMessage = "Lo sentimos, te invitamos a cerrar la app y volver a abrirla. Lamentamos de todo corazón las molestias."
                     }
                     print("Error detallado: \(error)")
                 }
@@ -796,6 +884,209 @@ struct ChannelsView: View {
     @FocusState private var searchFocused: Bool
     @State private var searchDebounce: DispatchWorkItem?
     @State private var searchTask: URLSessionDataTask?
+    @State private var showSettingsSheet = false
+    @State private var showComposeSelector = false
+    @State private var composeChannelId: String? = nil
+    @State private var showComposeSheet = false
+    @State private var showMessagesSheet = false
+    @State private var showHistoryDrawer = false
+    @State private var searchHistory: [String] = []
+    @State private var selectedTopTab = 0
+    @AppStorage("app_appearance") private var appAppearance: String = "system"
+    @State private var pendingSubscribeChannelId: String? = nil
+    @State private var showLoginFromList = false
+    @State private var showSubscribeErrorAlert = false
+    
+    @ViewBuilder private func bottomFloatingBar() -> some View {
+        HStack(spacing: 10) {
+            HStack(spacing: 8) {
+                Image(systemName: "magnifyingglass").foregroundColor(.secondary)
+                TextField("Buscar canales", text: $searchText)
+                    .focused($searchFocused)
+                    .onTapGesture { isSearchMode = true }
+                    .onChange(of: searchText) { _ in scheduleSearch() }
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 10)
+            .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 18))
+            HStack(spacing: 8) {
+                Button { showSettingsSheet = true } label: {
+                    Image(systemName: "gearshape")
+                        .foregroundColor(.primary)
+                        .frame(width: 36, height: 36)
+                        .background(Circle().fill(.ultraThinMaterial))
+                }
+                Button { showComposeSelector = true } label: {
+                    Image(systemName: "square.and.pencil")
+                        .foregroundColor(.primary)
+                        .frame(width: 36, height: 36)
+                        .background(Circle().fill(.ultraThinMaterial))
+                }
+            }
+        }
+        .padding(.horizontal)
+        .padding(.bottom, 12)
+    }
+    
+    @ViewBuilder private func historyOverlay() -> some View {
+        if showHistoryDrawer {
+            ZStack(alignment: .leading) {
+                Color.black.opacity(0.2)
+                    .ignoresSafeArea()
+                    .onTapGesture { withAnimation { showHistoryDrawer = false } }
+                VStack(alignment: .leading) {
+                    HStack {
+                        Text("Historial de búsqueda").font(.headline)
+                        Spacer()
+                        Button("Cerrar") { withAnimation { showHistoryDrawer = false } }
+                    }
+                    .padding(.bottom, 4)
+                    ScrollView {
+                        LazyVStack(alignment: .leading, spacing: 0) {
+                            ForEach(searchHistory, id: \.self) { q in
+                                Button {
+                                    searchText = q
+                                    isSearchMode = true
+                                    withAnimation { showHistoryDrawer = false }
+                                    scheduleSearch()
+                                } label: {
+                                    HStack { Image(systemName: "magnifyingglass"); Text(q); Spacer() }
+                                        .padding(.vertical, 8)
+                                }
+                            }
+                        }
+                    }
+                }
+                .frame(width: 280)
+                .padding()
+                .background(.ultraThinMaterial)
+                .transition(.move(edge: .leading))
+            }
+        }
+    }
+    
+    @ViewBuilder private func channelsList() -> some View {
+        List {
+            if isSearchMode {
+                Section {
+                    HStack {
+                        Image(systemName: "magnifyingglass").foregroundColor(.blue)
+                        Text("Resultados de búsqueda").font(.caption).foregroundColor(.secondary)
+                        Spacer()
+                        Button("Ver mis canales") {
+                            isSearchMode = false
+                            searchText = ""
+                            viewModel.loadSubscribedChannels(isRefresh: true)
+                        }
+                        .font(.caption)
+                    }
+                }
+            }
+            if !viewModel.favorites.isEmpty && !isSearchMode {
+                Section {
+                    HStack {
+                        Image(systemName: "star.fill").foregroundColor(.yellow)
+                        Text("Favoritos").font(.caption).fontWeight(.semibold).foregroundColor(.secondary)
+                    }
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 8) {
+                            ForEach(viewModel.favorites) { fav in
+                                NavigationLink(destination: ChannelDetailView(channelId: fav.id, channelTitle: fav.title)) {
+                                    HStack(spacing: 6) {
+                                        Image(systemName: fav.icon).foregroundColor(.blue)
+                                        Text(fav.title).font(.caption)
+                                    }
+                                    .padding(.horizontal, 10)
+                                    .padding(.vertical, 6)
+                                    .background(Color(.systemGray6))
+                                    .cornerRadius(8)
+                                }
+                                .buttonStyle(PlainButtonStyle())
+                            }
+                        }
+                        .padding(.horizontal)
+                    }
+                    .padding(.vertical, 4)
+                }
+            }
+            ForEach(viewModel.channels.filter { $0.parentId == nil }) { channel in
+                ChannelCard(channel: channel, isSearchMode: isSearchMode)
+                    .environmentObject(viewModel)
+                    .swipeActions(edge: .leading, allowsFullSwipe: true) {
+                        if (channel.isSubscribed ?? false) {
+                            Button(role: .destructive) {
+                                viewModel.unsubscribe(channelId: channel.id) { _ in }
+                            } label: {
+                                Label("Desuscribirme", systemImage: "bell.slash")
+                            }
+                            .tint(.red)
+                        } else {
+                            Button {
+                                func optimisticSet(_ subscribed: Bool) {
+                                    if let idx = viewModel.channels.firstIndex(where: { $0.id == channel.id }) {
+                                        let c = viewModel.channels[idx]
+                                        viewModel.channels[idx] = Channel(id: c.id, title: c.title, description: c.description, icon: c.icon, memberCount: c.memberCount, parentId: c.parentId, isPublic: c.isPublic, isSubscribed: subscribed, isFavorite: c.isFavorite, last24hCount: c.last24hCount, subchannels: c.subchannels)
+                                    }
+                                }
+                                if UserSession.shared.isVerified {
+                                    optimisticSet(true)
+                                    viewModel.subscribe(channelId: channel.id) { ok in
+                                        if !ok { optimisticSet(false); showSubscribeErrorAlert = true }
+                                    }
+                                } else {
+                                    viewModel.canGuestSubscribe { allowed in
+                                        if allowed {
+                                            optimisticSet(true)
+                                            viewModel.subscribe(channelId: channel.id) { ok in
+                                                if !ok { optimisticSet(false); showSubscribeErrorAlert = true }
+                                            }
+                                        } else {
+                                            pendingSubscribeChannelId = channel.id
+                                            showLoginFromList = true
+                                        }
+                                    }
+                                }
+                            } label: {
+                                Label("Suscribirme", systemImage: "bell.badge")
+                            }
+                            .tint(.blue)
+                        }
+                    }
+            }
+        }
+        .listStyle(.plain)
+        .listRowSeparator(.visible)
+        .listRowSeparatorTint(Color(.systemGray3))
+        .listSectionSeparatorTint(Color(.systemGray3))
+        .padding(.bottom, 90)
+        .overlay(bottomFloatingBar(), alignment: .bottom)
+        .overlay(historyOverlay(), alignment: .leading)
+        .sheet(isPresented: $showLoginFromList) {
+            if let cid = pendingSubscribeChannelId {
+                LoginView {
+                    showLoginFromList = false
+                    viewModel.subscribe(channelId: cid) { ok in if !ok { showSubscribeErrorAlert = true } }
+                }
+            }
+        }
+        .alert("Lo sentimos", isPresented: $showSubscribeErrorAlert) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text("Intenta más tarde.")
+        }
+        .refreshable {
+            await withCheckedContinuation { continuation in
+                if isSearchMode {
+                    searchChannels()
+                } else {
+                    viewModel.loadSubscribedChannels(isRefresh: true)
+                }
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                    continuation.resume()
+                }
+            }
+        }
+    }
     
     var body: some View {
         NavigationView {
@@ -851,129 +1142,133 @@ struct ChannelsView: View {
                         }
                     }
                 } else {
-                    List {
-                        if isSearchMode {
-                            Section {
-                                HStack {
-                                    Image(systemName: "magnifyingglass").foregroundColor(.blue)
-                                    Text("Resultados de búsqueda").font(.caption).foregroundColor(.secondary)
-                                    Spacer()
-                                    Button("Ver mis canales") {
-                                        isSearchMode = false
-                                        searchText = ""
-                                        viewModel.loadSubscribedChannels(isRefresh: true)
-                                    }
-                                    .font(.caption)
-                                }
-                            }
-                        }
-                        if !viewModel.favorites.isEmpty && !isSearchMode {
-                            Section {
-                                HStack {
-                                    Image(systemName: "star.fill").foregroundColor(.yellow)
-                                    Text("Favoritos").font(.caption).fontWeight(.semibold).foregroundColor(.secondary)
-                                }
-                                ScrollView(.horizontal, showsIndicators: false) {
-                                    HStack(spacing: 8) {
-                                        ForEach(viewModel.favorites) { fav in
-                                            NavigationLink(destination: ChannelDetailView(channelId: fav.id, channelTitle: fav.title)) {
-                                                HStack(spacing: 6) {
-                                                    Image(systemName: fav.icon).foregroundColor(.blue)
-                                                    Text(fav.title).font(.caption)
-                                                }
-                                                .padding(.horizontal, 10)
-                                                .padding(.vertical, 6)
-                                                .background(Color(.systemGray6))
-                                                .cornerRadius(8)
-                                            }
-                                        }
-                                    }
-                                    .padding(.horizontal)
-                                }
-                                .padding(.vertical, 4)
-                            }
-                        }
-                        ForEach(viewModel.channels.filter { $0.parentId == nil }) { channel in
-                            ChannelCard(channel: channel, isSearchMode: isSearchMode)
-                                .environmentObject(viewModel)
-                                .swipeActions(edge: .leading, allowsFullSwipe: true) {
-                                    Button(role: .destructive) {
-                                        viewModel.unsubscribe(channelId: channel.id) { _ in }
-                                    } label: {
-                                        Label("Desuscribirme", systemImage: "bell.slash")
-                                    }
-                                    .tint(.red)
-                                }
-                        }
-                    }
-                    .listStyle(.plain)
-                    .listRowSeparator(.visible)
-                    .listRowSeparatorTint(Color(.systemGray3))
-                    .listSectionSeparatorTint(Color(.systemGray3))
-                    .refreshable {
-                        await withCheckedContinuation { continuation in
-                            if isSearchMode {
-                                searchChannels()
-                            } else {
-                                viewModel.loadSubscribedChannels(isRefresh: true)
-                            }
-                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                                continuation.resume()
-                            }
-                        }
-                    }
+                    channelsList()
                 }
             }
-            .navigationTitle(isSearchMode ? "Búsqueda" : "Canales")
+            .navigationTitle(isSearchMode ? "Búsqueda" : "")
+            .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .navigationBarLeading) { EmptyView() }
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    HStack(spacing: 12) {
-
-                        
-                        if viewModel.isRefreshing {
-                            ProgressView()
-                                .scaleEffect(0.8)
-                        } else {
-                            Button(action: {
-                                if isSearchMode {
-                                    isSearchMode = false
-                                    searchText = ""
-
-                                }
-                                viewModel.loadSubscribedChannels(isRefresh: true)
-                            }) {
-                                Image(systemName: isSearchMode ? "house" : "arrow.clockwise")
-                            }
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Button(action: { withAnimation { showHistoryDrawer = true; searchHistory = PersistenceManager.shared.loadSearchHistory() } }) {
+                        Image(systemName: "line.3.horizontal")
+                    }
+                }
+                ToolbarItem(placement: .principal) {
+                    if selectedTopTab == 0 {
+                        Button(action: { selectedTopTab = 0 }) {
+                            Text("Mis canales")
+                                .font(.subheadline)
+                                .fontWeight(.semibold)
+                                .foregroundColor(.primary)
                         }
+                        .padding(.horizontal, 20)
+                        .padding(.vertical, 6)
+                        .background(.ultraThinMaterial, in: Capsule())
+                    } else if selectedTopTab == 1 {
+                        Button(action: { selectedTopTab = 1 }) {
+                            Text("Ciudad")
+                                .font(.subheadline)
+                                .fontWeight(.semibold)
+                                .foregroundColor(.primary)
+                        }
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 6)
+                        .background(.ultraThinMaterial, in: Capsule())
+                    } else {
+                        Button(action: { selectedTopTab = 2 }) {
+                            Text("Tendencias")
+                                .font(.subheadline)
+                                .fontWeight(.semibold)
+                                .foregroundColor(.primary)
+                        }
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 6)
+                        .background(.ultraThinMaterial, in: Capsule())
+                    }
+                }
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button(action: { showMessagesSheet = true }) {
+                        Image(systemName: "paperplane")
                     }
                 }
             }
             .onAppear {
-                UserSession.shared.ensureGuest()
-                UserSession.shared.syncAPNSTokenIfAvailable()
-                if !session.currentUserId.isEmpty {
-                    viewModel.loadSubscribedChannels(isRefresh: true)
-                    viewModel.loadFavorites()
-                } else {
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
-                        if !session.currentUserId.isEmpty {
-                            viewModel.loadSubscribedChannels(isRefresh: true)
-                            viewModel.loadFavorites()
-                            UserSession.shared.syncAPNSTokenIfAvailable()
-                        }
+                UserSession.shared.ensureGuestSync {
+                    UserSession.shared.syncAPNSTokenIfAvailable()
+                    searchHistory = PersistenceManager.shared.loadSearchHistory()
+                    if UserSession.shared.isVerified {
+                        viewModel.loadSubscribedChannels(isRefresh: true)
+                        viewModel.loadFavorites()
+                        selectedTopTab = 0
+                    } else {
+                        selectedTopTab = 2
+                        viewModel.loadChannels(isRefresh: true, publicOnly: true)
+                        DispatchQueue.main.async { viewModel.channels.sort { $0.memberCount > $1.memberCount } }
                     }
                 }
-                if false { }
             }
             .onChange(of: session.currentUserId) { newId in
                 if !newId.isEmpty {
-                    viewModel.loadSubscribedChannels(isRefresh: true)
-                    viewModel.loadFavorites()
+                    if UserSession.shared.isVerified {
+                        viewModel.loadSubscribedChannels(isRefresh: true)
+                        viewModel.loadFavorites()
+                    } else {
+                        selectedTopTab = 2
+                        viewModel.loadChannels(isRefresh: true, publicOnly: true)
+                        DispatchQueue.main.async { viewModel.channels.sort { $0.memberCount > $1.memberCount } }
+                    }
                     UserSession.shared.syncAPNSTokenIfAvailable()
                 }
             }
-
+            .onChange(of: selectedTopTab) { tab in
+                switch tab {
+                case 0:
+                    viewModel.loadSubscribedChannels(isRefresh: true)
+                case 1:
+                    viewModel.loadChannels(isRefresh: true, publicOnly: true)
+                default:
+                    viewModel.loadChannels(isRefresh: true, publicOnly: true)
+                    DispatchQueue.main.async {
+                        viewModel.channels.sort { $0.memberCount > $1.memberCount }
+                    }
+                }
+            }
+            .sheet(isPresented: $showSettingsSheet) {
+                ProfileView()
+            }
+            .sheet(isPresented: $showComposeSelector) {
+                NavigationView {
+                    List {
+                        Section("Selecciona un canal") {
+                            ForEach(viewModel.channels.filter { $0.parentId == nil }) { ch in
+                                Button {
+                                    composeChannelId = ch.id
+                                    showComposeSelector = false
+                                    showComposeSheet = true
+                                } label: {
+                                    HStack(spacing: 8) {
+                                        Image(systemName: ch.icon).foregroundColor(.blue)
+                                        Text(ch.title)
+                                        Spacer()
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    .navigationTitle("Nuevo mensaje")
+                    .toolbar { ToolbarItem(placement: .navigationBarLeading) { Button("Cerrar") { showComposeSelector = false } } }
+                }
+            }
+            .sheet(isPresented: $showComposeSheet) {
+                if let cid = composeChannelId {
+                    ComposeMessageView(channelId: cid) {
+                        viewModel.loadSubscribedChannels(isRefresh: true)
+                    }
+                }
+            }
+            .sheet(isPresented: $showMessagesSheet) {
+                MessagesView()
+            }
         }
     }
 
@@ -987,6 +1282,7 @@ struct ChannelsView: View {
         }
         searching = true
         isSearchMode = true
+        PersistenceManager.shared.appendSearchHistory(q)
         searchTask?.cancel()
         guard let encoded = q.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed),
               let url = URL(string: "\(APIConfig.baseURL)/channels/search?q=\(encoded)") else {
@@ -1041,7 +1337,7 @@ class SearchViewModel: ObservableObject {
                 if let items = try? JSONDecoder().decode([Channel].self, from: data) {
                     self?.suggestions = items
                         .filter { $0.isPublic && $0.parentId == nil }
-                        .sorted { $0.memberCount > $1.memberCount }
+                        .sorted(by: { $0.memberCount > $1.memberCount })
                         .prefix(10)
                         .map { $0 }
                 }
@@ -1233,7 +1529,7 @@ struct SearchChannelRow: View {
                     HStack(spacing: 4) {
                         Image(systemName: "person.2.fill")
                             .font(.caption2)
-                        Text("\(channel.memberCount)")
+                        Text(String(channel.memberCount))
                             .font(.caption2)
                     }
                     .foregroundColor(.secondary)
@@ -1259,14 +1555,44 @@ struct ChannelCard: View {
                 guard let data = data, let detail = try? JSONDecoder().decode(ChannelDetail.self, from: data) else { return }
                 totalMembers = detail.memberCount
                 subchannelsCount = detail.subchannels?.count ?? (channel.subchannels?.count ?? 0)
-                let iso = ISO8601DateFormatter()
                 let now = Date()
                 let dayAgo = now.addingTimeInterval(-86400)
-                let count = detail.messages.filter { msg in
-                    let s = msg.createdAt.contains(" ") ? msg.createdAt.replacingOccurrences(of: " ", with: "T") : msg.createdAt
-                    return iso.date(from: s).map { $0 >= dayAgo } ?? false
-                }.count
-                last24hCount = count
+                let iso = ISO8601DateFormatter()
+                iso.formatOptions = [.withInternetDateTime, .withDashSeparatorInDate, .withColonSeparatorInTime, .withTimeZone, .withFractionalSeconds]
+                let fmt = DateFormatter()
+                fmt.locale = Locale(identifier: "en_US_POSIX")
+                fmt.timeZone = TimeZone(secondsFromGMT: 0)
+                let formats = ["yyyy-MM-dd'T'HH:mm:ss.SSSSSS", "yyyy-MM-dd'T'HH:mm:ss"]
+                func parse(_ raw: String) -> Date? {
+                    var s = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+                    if s.contains(" ") { s = s.replacingOccurrences(of: " ", with: "T") }
+                    if let d = iso.date(from: s) { return d }
+                    for f in formats { fmt.dateFormat = f; if let d = fmt.date(from: s) { return d } }
+                    return nil
+                }
+                var agg = detail.messages.reduce(0) { acc, msg in
+                    let d = parse(msg.publishedAt ?? msg.createdAt)
+                    return acc + ((d.map { $0 >= dayAgo } ?? false) ? 1 : 0)
+                }
+                if agg == 0, let subs = detail.subchannels, !subs.isEmpty {
+                    let ids = subs.map { $0.id }.prefix(8)
+                    for sid in ids {
+                        guard let u = URL(string: "\(APIConfig.baseURL)/channels/\(sid)?userId=\(UserSession.shared.currentUserId)") else { continue }
+                        URLSession.shared.dataTask(with: u) { d, _, _ in
+                            DispatchQueue.main.async {
+                                if let d = d, let det = try? JSONDecoder().decode(ChannelDetail.self, from: d) {
+                                    let add = det.messages.reduce(0) { a, m in
+                                        let dd = parse(m.publishedAt ?? m.createdAt)
+                                        return a + ((dd.map { $0 >= dayAgo } ?? false) ? 1 : 0)
+                                    }
+                                    agg += add
+                                    last24hCount = agg
+                                }
+                            }
+                        }.resume()
+                    }
+                }
+                last24hCount = agg
             }
         }.resume()
     }
@@ -1294,7 +1620,7 @@ struct ChannelCard: View {
                                         .font(.caption)
                                         .foregroundColor(.orange)
                                 }
-                                if (channel.isSubscribed ?? false) {
+                                if (channel.last24hCount ?? (last24hCount ?? 0)) > 0 {
                                     Image(systemName: "bell.fill")
                                         .font(.caption)
                                         .foregroundColor(.green)
@@ -1309,12 +1635,14 @@ struct ChannelCard: View {
                 }
                 .buttonStyle(PlainButtonStyle())
                 Spacer()
-                VStack(alignment: .trailing, spacing: 4) {
-                    HStack(spacing: 4) {
-                        Image(systemName: "person.2.fill").font(.caption2)
-                        Text("\(channel.memberCount)").font(.caption)
+                VStack(alignment: .trailing, spacing: 6) {
+                    Button(action: {
+                        channelsVM.toggleFavorite(channelId: channel.id, makeFavorite: !(channel.isFavorite ?? false))
+                    }) {
+                        Image(systemName: (channel.isFavorite ?? false) ? "star.fill" : "star")
+                            .foregroundColor(.yellow)
                     }
-                    .foregroundColor(.secondary)
+                    .buttonStyle(PlainButtonStyle())
                     Button(action: {
                         withAnimation(.spring(response: 0.3)) {
                             isExpanded.toggle()
@@ -1325,19 +1653,12 @@ struct ChannelCard: View {
                             .foregroundColor(.blue)
                     }
                     .buttonStyle(PlainButtonStyle())
-                    Button(action: {
-                        channelsVM.toggleFavorite(channelId: channel.id, makeFavorite: !(channel.isFavorite ?? false))
-                    }) {
-                        Image(systemName: (channel.isFavorite ?? false) ? "star.fill" : "star")
-                            .foregroundColor(.yellow)
-                    }
-                    .buttonStyle(PlainButtonStyle())
                 }
             }
             .padding()
             if isExpanded {
                 HStack(spacing: 12) {
-                    Label("\(last24hCount ?? 0) /24h", systemImage: "clock")
+                    Label("\(channel.last24hCount ?? (last24hCount ?? 0)) /24h", systemImage: "clock")
                         .font(.caption)
                         .foregroundColor(.blue)
                         .padding(.horizontal, 10)
@@ -1351,7 +1672,7 @@ struct ChannelCard: View {
                         .padding(.vertical, 6)
                         .background(Color.purple.opacity(0.1))
                         .cornerRadius(8)
-                    Label("\(totalMembers ?? channel.memberCount)", systemImage: "person.2.fill")
+                    Label(String(totalMembers ?? channel.memberCount), systemImage: "person.2.fill")
                         .font(.caption)
                         .foregroundColor(.orange)
                         .padding(.horizontal, 10)
@@ -1367,14 +1688,6 @@ struct ChannelCard: View {
         .background(Color(.systemBackground))
         .cornerRadius(12)
         .shadow(color: Color.black.opacity(0.05), radius: 5, x: 0, y: 2)
-        .gesture(DragGesture(minimumDistance: 10).onChanged { value in
-            if value.translation.height > 12 && !isExpanded {
-                withAnimation(.spring(response: 0.3)) {
-                    isExpanded = true
-                    loadStats()
-                }
-            }
-        })
         .overlay(
             Group {
                 if isSearchMode && !(channel.isSubscribed ?? false) {
@@ -1430,7 +1743,7 @@ struct SubchannelRow: View {
                 HStack(spacing: 4) {
                     Image(systemName: "person.2.fill")
                         .font(.caption2)
-                    Text("\(subchannel.memberCount)")
+                    Text(String(subchannel.memberCount ?? 0))
                         .font(.caption)
                 }
                 .foregroundColor(.secondary)
@@ -1469,6 +1782,7 @@ struct ChannelDetailView: View {
     @State private var regError: String? = nil
     @State private var regSending = false
     @State private var regInfo: String? = nil
+    @State private var subscribeErrorAlert = false
 
     init(channelId: String, channelTitle: String, highlightMessageId: String? = nil) {
         self.channelId = channelId
@@ -1521,7 +1835,7 @@ struct ChannelDetailView: View {
                             HStack(spacing: 4) {
                                 Image(systemName: "person.2.fill")
                                     .font(.caption2)
-                                Text("\(detail.memberCount) miembros")
+                                Text(String(detail.memberCount) + " miembros")
                                     .font(.caption)
                             }
                             .foregroundColor(.secondary)
@@ -1544,7 +1858,29 @@ struct ChannelDetailView: View {
                                     Button(action: { showingUnsubscribeAlert = true }) { Label("Desuscribirse", systemImage: "bell.slash") }
                                 }
                             } else {
-                                Button(action: { if UserSession.shared.isVerified { viewModel.subscribe(channelId: detail.id) { _ in } } else { showRegister = true } }) { Label("Suscribirse", systemImage: "bell.badge") }
+                                Button(action: {
+                                    func optimisticSet(_ subscribed: Bool) { viewModel.channelDetail?.isSubscribed = subscribed }
+                                    if UserSession.shared.isVerified {
+                                        optimisticSet(true)
+                                        viewModel.subscribe(channelId: detail.id) { ok in if !ok { optimisticSet(false); subscribeErrorAlert = true } }
+                                    } else {
+                                        if let url = URL(string: "\(APIConfig.baseURL)/subscriptions/user/\(UserSession.shared.currentUserId)") {
+                                            URLSession.shared.dataTask(with: url) { data, _, _ in
+                                                let count = (try? JSONDecoder().decode([Subscription].self, from: data ?? Data()))?.count ?? 0
+                                                DispatchQueue.main.async {
+                                                    if count < 1 {
+                                                        optimisticSet(true)
+                                                        viewModel.subscribe(channelId: detail.id) { ok in if !ok { optimisticSet(false); subscribeErrorAlert = true } }
+                                                    } else {
+                                                        showRegister = true
+                                                    }
+                                                }
+                                            }.resume()
+                                        } else {
+                                            showRegister = true
+                                        }
+                                    }
+                                }) { Label("Suscribirse", systemImage: "bell.badge") }
                             }
                         }
                         .padding(.horizontal)
@@ -1556,7 +1892,29 @@ struct ChannelDetailView: View {
                                     Button(action: { showingUnsubscribeAlert = true }) { Label("Desuscribirse", systemImage: "bell.slash") }
                                 }
                             } else {
-                                Button(action: { if UserSession.shared.isVerified { viewModel.subscribe(channelId: detail.id) { _ in } } else { showRegister = true } }) { Label("Suscribirse", systemImage: "bell.badge") }
+                                Button(action: {
+                                    func optimisticSet(_ subscribed: Bool) { viewModel.channelDetail?.isSubscribed = subscribed }
+                                    if UserSession.shared.isVerified {
+                                        optimisticSet(true)
+                                        viewModel.subscribe(channelId: detail.id) { ok in if !ok { optimisticSet(false); subscribeErrorAlert = true } }
+                                    } else {
+                                        if let url = URL(string: "\(APIConfig.baseURL)/subscriptions/user/\(UserSession.shared.currentUserId)") {
+                                            URLSession.shared.dataTask(with: url) { data, _, _ in
+                                                let count = (try? JSONDecoder().decode([Subscription].self, from: data ?? Data()))?.count ?? 0
+                                                DispatchQueue.main.async {
+                                                    if count < 1 {
+                                                        optimisticSet(true)
+                                                        viewModel.subscribe(channelId: detail.id) { ok in if !ok { optimisticSet(false); subscribeErrorAlert = true } }
+                                                    } else {
+                                                        showRegister = true
+                                                    }
+                                                }
+                                            }.resume()
+                                        } else {
+                                            showRegister = true
+                                        }
+                                    }
+                                }) { Label("Suscribirse", systemImage: "bell.badge") }
                             }
                         }
                         .padding(.horizontal)
@@ -1663,130 +2021,7 @@ struct ChannelDetailView: View {
             }
         }
         .sheet(isPresented: $showRegister) {
-            NavigationView {
-                VStack(spacing: 16) {
-                    VStack(spacing: 8) {
-                        Image(systemName: "person.crop.circle.badge.plus")
-                            .font(.system(size: 48))
-                            .foregroundColor(.blue)
-                        Text("Crear tu cuenta")
-                            .font(.title3)
-                            .fontWeight(.semibold)
-                        Text("Ingresa tus datos básicos para registrarte y recibir un código de verificación.")
-                            .font(.footnote)
-                            .foregroundColor(.secondary)
-                            .multilineTextAlignment(.center)
-                            .padding(.horizontal)
-                    }
-                    Form {
-                        Section(header: Text("Tu información")) {
-                            TextField("Teléfono", text: $regPhone).keyboardType(.phonePad)
-                            TextField("Usuario", text: $regUsername).autocapitalization(.none)
-                            TextField("Nombre", text: $regFullName)
-                            TextField("Avatar URL (opcional)", text: $regAvatar).autocapitalization(.none)
-                        }
-                        if regStage == 1 {
-                            Button(action: {
-                                regError = nil
-                                regSending = true
-                                let uid = UserSession.shared.currentUserId
-                                guard !uid.isEmpty, let url = URL(string: "\(APIConfig.baseURL)/users/\(uid)/request-verification-code") else { regSending = false; return }
-                                var req = URLRequest(url: url)
-                                req.httpMethod = "POST"
-                                req.setValue("application/json", forHTTPHeaderField: "Content-Type")
-                                let body: [String: Any] = [
-                                    "phoneNumber": regPhone,
-                                    "username": regUsername,
-                                    "fullName": regFullName,
-                                    "avatarUrl": regAvatar.isEmpty ? NSNull() : regAvatar
-                                ]
-                                req.httpBody = try? JSONSerialization.data(withJSONObject: body)
-                                URLSession.shared.dataTask(with: req) { _, _, _ in
-                                    DispatchQueue.main.async {
-                                        regSending = false
-                                        regStage = 2
-                                        regInfo = "Te enviamos un código de verificación. Ingresa el código para completar tu registro."
-                                    }
-                                }.resume()
-                            }) {
-                                HStack(spacing: 8) {
-                                    if regSending { ProgressView() }
-                                    Image(systemName: "person.badge.plus")
-                                    Text("Crear")
-                                        .fontWeight(.semibold)
-                                }
-                            }
-                            .buttonStyle(.borderedProminent)
-                            .tint(.blue)
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 6)
-                            .disabled(regPhone.isEmpty || regUsername.isEmpty || regFullName.isEmpty || regSending)
-                        } else {
-                            Section(header: Text("Verificación")) {
-                                if let info = regInfo { Text(info).font(.footnote).foregroundColor(.secondary) }
-                                TextField("Código recibido", text: $regCode).keyboardType(.numberPad)
-                                if let e = regError { Text(e).foregroundColor(.red) }
-                                Button(action: {
-                                    regError = nil
-                                    regSending = true
-                                    let uid = UserSession.shared.currentUserId
-                                    guard !uid.isEmpty, let url = URL(string: "\(APIConfig.baseURL)/users/\(uid)/register") else { regSending = false; return }
-                                    var req = URLRequest(url: url)
-                                    req.httpMethod = "POST"
-                                    req.setValue("application/json", forHTTPHeaderField: "Content-Type")
-                                    let body: [String: Any] = [
-                                        "phoneNumber": regPhone,
-                                        "username": regUsername,
-                                        "fullName": regFullName,
-                                        "avatarUrl": regAvatar.isEmpty ? NSNull() : regAvatar,
-                                        "code": regCode
-                                    ]
-                                    req.httpBody = try? JSONSerialization.data(withJSONObject: body)
-                                    URLSession.shared.dataTask(with: req) { data, response, _ in
-                                        DispatchQueue.main.async {
-                                            regSending = false
-                                            if let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode),
-                                               let data = data,
-                                               let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-                                               let token = obj["token"] as? String {
-                                                UserSession.shared.token = token
-                                                UserSession.shared.isVerified = true
-                                                showRegister = false
-                                                viewModel.subscribe(channelId: channelId) { _ in }
-                                            } else {
-                                                regError = "No se pudo verificar. Revisa el código."
-                                            }
-                                        }
-                                    }.resume()
-                                }) {
-                                    HStack(spacing: 8) {
-                                        if regSending { ProgressView() }
-                                        Image(systemName: "checkmark.seal")
-                                        Text("Verificar y suscribirme")
-                                            .fontWeight(.semibold)
-                                    }
-                                }
-                                .buttonStyle(.borderedProminent)
-                                .tint(.green)
-                                .frame(maxWidth: .infinity)
-                                .padding(.vertical, 6)
-                                .disabled(regCode.isEmpty || regSending)
-                                Button("Reenviar código") {
-                                    let uid = UserSession.shared.currentUserId
-                                    guard !uid.isEmpty, let url = URL(string: "\(APIConfig.baseURL)/users/\(uid)/request-verification-code") else { return }
-                                    var req = URLRequest(url: url)
-                                    req.httpMethod = "POST"
-                                    URLSession.shared.dataTask(with: req) { _, _, _ in
-                                        DispatchQueue.main.async { regInfo = "Te enviamos un nuevo código." }
-                                    }.resume()
-                                }
-                            }
-                        }
-                    }
-                }
-                .navigationTitle("Crear cuenta")
-                .toolbar { ToolbarItem(placement: .navigationBarLeading) { Button("Cerrar") { showRegister = false } } }
-        }
+            LoginView { showRegister = false; viewModel.subscribe(channelId: channelId) { _ in } }
         }
         .alert("Contraseña", isPresented: $viewModel.showPasswordPrompt) {
             Button("Validar") { viewModel.validatePassword(channelId: channelId) }
@@ -1801,6 +2036,11 @@ struct ChannelDetailView: View {
             }
         } message: {
             Text("¿Estás seguro de que quieres desuscribirte de este canal?")
+        }
+        .alert("Lo sentimos", isPresented: $subscribeErrorAlert) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text("Intenta más tarde.")
         }
     }
 }
@@ -2028,6 +2268,7 @@ struct SearchView: View {
                                 Spacer()
                             }
                         }
+                        .buttonStyle(PlainButtonStyle())
                     }
                 }
                 .listStyle(.plain)
@@ -2187,7 +2428,7 @@ class EmergencyMonitor: ObservableObject {
                     URLSession.shared.dataTask(with: purl) { pdata, _, _ in
                         var title = detail.title
                         if let pdata = pdata, let parent = try? JSONDecoder().decode(ChannelDetail.self, from: pdata), let subs = parent.subchannels, !subs.isEmpty {
-                            let principal = subs.sorted { ($0.memberCount ?? 0) > ($1.memberCount ?? 0) }.first
+                            let principal = subs.sorted(by: { ($0.memberCount ?? 0) > ($1.memberCount ?? 0) }).first
                             title = parent.title + ((principal?.id == detail.id) ? "" : " • \(detail.title)")
                         }
                         content.title = title
@@ -2306,7 +2547,7 @@ class EmergencyEmitterClient: ObservableObject {
                     URLSession.shared.dataTask(with: purl) { pdata, _, _ in
                         var title = detail.title
                         if let pdata = pdata, let parent = try? JSONDecoder().decode(ChannelDetail.self, from: pdata), let subs = parent.subchannels, !subs.isEmpty {
-                            let principal = subs.sorted { ($0.memberCount ?? 0) > ($1.memberCount ?? 0) }.first
+                            let principal = subs.sorted(by: { ($0.memberCount ?? 0) > ($1.memberCount ?? 0) }).first
                             title = parent.title + ((principal?.id == detail.id) ? "" : " • \(detail.title)")
                         }
                         content.title = title
@@ -2328,6 +2569,7 @@ struct ProfileView: View {
     @AppStorage("app_appearance") private var appAppearance: String = "system"
     @State private var showingUnsubscribeAlert = false
     @State private var channelToUnsubscribe: String?
+    @State private var showLogin = false
     
     var body: some View {
         NavigationView {
@@ -2375,6 +2617,20 @@ struct ProfileView: View {
                                     .padding(.horizontal, 12)
                                     .padding(.vertical, 4)
                                     .background(Color.orange)
+                                    .cornerRadius(12)
+                                }
+                                if !UserSession.shared.isVerified {
+                                    HStack(spacing: 4) {
+                                        Image(systemName: "person.fill.questionmark")
+                                            .font(.caption)
+                                        Text("Modo invitado")
+                                            .font(.caption)
+                                            .fontWeight(.semibold)
+                                    }
+                                    .foregroundColor(.white)
+                                    .padding(.horizontal, 12)
+                                    .padding(.vertical, 4)
+                                    .background(Color.gray)
                                     .cornerRadius(12)
                                 }
                             }
@@ -2501,6 +2757,11 @@ struct ProfileView: View {
             }
             .navigationTitle("Perfil")
             .toolbar {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    if !UserSession.shared.isVerified {
+                        Button("Iniciar sesión") { showLogin = true }
+                    }
+                }
                 ToolbarItem(placement: .navigationBarTrailing) {
                     if viewModel.isRefreshing {
                         ProgressView().scaleEffect(0.8)
@@ -2545,6 +2806,13 @@ struct ProfileView: View {
                 }
             } message: {
                 Text("¿Estás seguro de que quieres desuscribirte de este canal? Dejarás de recibir notificaciones.")
+            }
+            .sheet(isPresented: $showLogin) {
+                LoginView {
+                    showLogin = false
+                    viewModel.loadProfile(isRefresh: true)
+                    viewModel.loadSubscriptions(isRefresh: true)
+                }
             }
         }
     }
@@ -2626,44 +2894,19 @@ struct ContentView: View {
     @State private var showDeepLink = false
     
     var body: some View {
-        TabView(selection: $selectedTab) {
-            ChannelsView()
-                .tabItem {
-                    Image(systemName: "bubble.left.and.bubble.right")
-                    Text("Canales")
-                }
-                .tag(0)
-            
-            MessagesView()
-                .tabItem {
-                    Image(systemName: "paperplane")
-                    Text("Mensajes")
-                }
-                .tag(1)
-            
-            ProfileView()
-                .tabItem {
-                    Image(systemName: "person.circle")
-                    Text("Perfil")
-                }
-                .tag(2)
-            SearchView()
-                .tabItem {
-                    Image(systemName: "magnifyingglass")
-                    Text("Buscar")
-                }
-                .tag(3)
-        }
+        ChannelsView()
         .accentColor(.blue)
         .preferredColorScheme(appAppearance == "dark" ? .dark : (appAppearance == "light" ? .light : nil))
         .onAppear {
-            UserSession.shared.ensureGuest()
-            UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .badge, .sound]) { granted, _ in
-                if granted {
-                    emergencyMonitor.start()
-                    emitterClient.start()
-                } else {
-                    print("Notificaciones locales no autorizadas")
+            UserSession.shared.restoreSession()
+            UserSession.shared.ensureGuestSync {
+                UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .badge, .sound]) { granted, _ in
+                    if granted {
+                        emergencyMonitor.start()
+                        emitterClient.start()
+                    } else {
+                        print("Notificaciones locales no autorizadas")
+                    }
                 }
             }
         }
@@ -2676,6 +2919,7 @@ struct ContentView: View {
                 MessageDetailView(messageId: mid) { router.reset(); showDeepLink = false }
             }
         }
+
         .onChange(of: router.targetMessageId) { _ in
             showDeepLink = router.targetMessageId != nil
         }
@@ -2685,6 +2929,229 @@ struct ContentView: View {
 struct ChannelsView_Previews: PreviewProvider {
     static var previews: some View {
         ContentView()
+    }
+}
+
+struct LoginView: View {
+    var onSuccess: (() -> Void)? = nil
+    @Environment(\.dismiss) var dismiss
+    @State private var phone = ""
+    @State private var code = ""
+    @State private var stage = 1
+    @State private var sending = false
+    @State private var info: String? = nil
+    @State private var error: String? = nil
+    @State private var resendCooldown = 0
+    @FocusState private var phoneFocused: Bool
+    @FocusState private var codeFocused: Bool
+    @State private var activeCodeIndex = 0
+    struct Country: Identifiable, Equatable, Hashable {
+        let id = UUID()
+        let name: String
+        let iso: String
+        let dialCode: String
+        var flag: String {
+            let base = 127397
+            return iso.uppercased().unicodeScalars.reduce("") { $0 + String(UnicodeScalar(base + Int($1.value))!) }
+        }
+    }
+    let countries: [Country] = [
+        Country(name: "Colombia", iso: "CO", dialCode: "+57"),
+        Country(name: "Venezuela", iso: "VE", dialCode: "+58"),
+        Country(name: "Ecuador", iso: "EC", dialCode: "+593"),
+        Country(name: "Perú", iso: "PE", dialCode: "+51"),
+        Country(name: "México", iso: "MX", dialCode: "+52"),
+        Country(name: "Bolivia", iso: "BO", dialCode: "+591")
+    ]
+    @State private var selectedCountry: Country = {
+        let rc = Locale.current.regionCode ?? "MX"
+        let list = [
+            Country(name: "Colombia", iso: "CO", dialCode: "+57"),
+            Country(name: "Venezuela", iso: "VE", dialCode: "+58"),
+            Country(name: "Ecuador", iso: "EC", dialCode: "+593"),
+            Country(name: "Perú", iso: "PE", dialCode: "+51"),
+            Country(name: "México", iso: "MX", dialCode: "+52"),
+            Country(name: "Bolivia", iso: "BO", dialCode: "+591")
+        ]
+        return list.first(where: { $0.iso == rc }) ?? list.first!
+    }()
+    private func requestCode() {
+        guard !phone.isEmpty else { return }
+        let uid = UserSession.shared.currentUserId
+        guard !uid.isEmpty, let url = URL(string: "\(APIConfig.baseURL)/users/\(uid)/request-verification-code") else { return }
+        var req = URLRequest(url: url)
+        req.httpMethod = "POST"
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        let digits = phone.filter { $0.isNumber }
+        let body: [String: Any] = ["phoneNumber": selectedCountry.dialCode + digits]
+        req.httpBody = try? JSONSerialization.data(withJSONObject: body)
+        sending = true
+        URLSession.shared.dataTask(with: req) { _, _, _ in
+            DispatchQueue.main.async {
+                sending = false
+                stage = 2
+                info = "Te enviamos un código de verificación."
+                resendCooldown = 30
+                Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { t in
+                    resendCooldown = max(0, resendCooldown - 1)
+                    if resendCooldown == 0 { t.invalidate() }
+                }
+            }
+        }.resume()
+    }
+    private func verifyCode() {
+        
+        guard !phone.isEmpty, !code.isEmpty else { return }
+        let uid = UserSession.shared.currentUserId
+        guard !uid.isEmpty, let url = URL(string: "\(APIConfig.baseURL)/users/\(uid)/register") else { return }
+        var req = URLRequest(url: url)
+        req.httpMethod = "POST"
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        let digits = phone.filter { $0.isNumber }
+        let body: [String: Any] = ["phoneNumber": selectedCountry.dialCode + digits, "code": code]
+        req.httpBody = try? JSONSerialization.data(withJSONObject: body)
+        sending = true
+        URLSession.shared.dataTask(with: req) { data, response, _ in
+            DispatchQueue.main.async {
+                sending = false
+                if let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode),
+                   let data = data,
+                   let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                   let token = obj["token"] as? String {
+                    UserDefaults.standard.set(token, forKey: "auth_token")
+                    UserDefaults.standard.set(true, forKey: "user_is_verified")
+                    UserSession.shared.token = token
+                    UserSession.shared.isVerified = true
+                    onSuccess?(); dismiss()
+                } else {
+                    error = "Código inválido. Intenta nuevamente."
+                }
+            }
+        }.resume()
+    }
+
+    private func dismissKeyboard() {
+        UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+    }
+    
+    var body: some View {
+        NavigationView {
+            VStack(spacing: 16) {
+                VStack(spacing: 8) {
+                    Image(systemName: "person.crop.circle.badge.check")
+                        .font(.system(size: 48))
+                        .foregroundColor(.blue)
+                    Text("Inicia sesión")
+                        .font(.title3).fontWeight(.semibold)
+                    Text("Ingresa tu número de teléfono y el código de verificación")
+                        .font(.footnote).foregroundColor(.secondary)
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal)
+                }
+                Form {
+                    Section("Número de teléfono") {
+                        HStack(spacing: 10) {
+                            Menu {
+                                ForEach(countries) { c in
+                                    Button(action: { selectedCountry = c }) {
+                                        HStack { Text(c.flag); Text(c.name); Spacer(); Text(c.dialCode).foregroundColor(.secondary) }
+                                    }
+                                }
+                            } label: {
+                                HStack(spacing: 6) {
+                                    Text(selectedCountry.flag)
+                                    Text(selectedCountry.dialCode)
+                                        .font(.subheadline)
+                                        .foregroundColor(.secondary)
+                                }
+                                .padding(.horizontal, 10)
+                                .padding(.vertical, 6)
+                                .background(Color(.systemGray6))
+                                .cornerRadius(8)
+                            }
+                            ZStack {
+                                RoundedRectangle(cornerRadius: 8).fill(Color(.systemGray6))
+                                HStack {
+                                    TextField("300 000 0000", text: $phone)
+                                        .keyboardType(.numberPad)
+                                        .textContentType(.telephoneNumber)
+                                        .focused($phoneFocused)
+                                        .onChange(of: phone) { v in phone = v.filter { $0.isNumber } }
+                                    if !phone.isEmpty {
+                                        Button(action: { phone = "" }) {
+                                            Image(systemName: "xmark.circle.fill").foregroundColor(.secondary)
+                                        }
+                                    }
+                                }
+                                .padding(.horizontal, 10)
+                                .padding(.vertical, 8)
+                            }
+                        }
+                        .contentShape(Rectangle())
+                        .highPriorityGesture(TapGesture().onEnded { phoneFocused = true })
+                    }
+                    if stage == 1 {
+                        Button(action: requestCode) {
+                            HStack { if sending { ProgressView() }; Image(systemName: "paperplane.fill"); Text("Enviar código").fontWeight(.semibold) }
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .tint(.blue)
+                        .frame(maxWidth: .infinity)
+                        .disabled(phone.isEmpty || sending)
+                    } else {
+                        Section("Código") {
+                            if let info = info { Text(info).font(.footnote).foregroundColor(.secondary) }
+                            ZStack {
+                                HStack(spacing: 8) {
+                                    ForEach(0..<6, id: \.self) { i in
+                                        ZStack {
+                                            RoundedRectangle(cornerRadius: 8)
+                                                .stroke(i == code.count ? Color.blue : Color.gray.opacity(0.3), lineWidth: 1)
+                                                .frame(width: 44, height: 52)
+                                            Text(i < code.count ? String(code[code.index(code.startIndex, offsetBy: i)]) : "")
+                                                .font(.title3)
+                                        }
+                                        .scaleEffect(activeCodeIndex == i ? 1.08 : 1.0)
+                                        .animation(.spring(response: 0.22, dampingFraction: 0.8), value: activeCodeIndex)
+                                    }
+                                }
+                                .frame(maxWidth: .infinity, alignment: .center)
+                                .contentShape(Rectangle())
+                                .onTapGesture { codeFocused = true }
+                                TextField("", text: $code)
+                                    .keyboardType(.numberPad)
+                                    .textContentType(.oneTimeCode)
+                                    .focused($codeFocused)
+                                    .onChange(of: code) { v in
+                                        let clean = String(v.filter { $0.isNumber }.prefix(6))
+                                        code = clean
+                                        withAnimation(.spring(response: 0.22, dampingFraction: 0.8)) {
+                                            activeCodeIndex = min(clean.count, 5)
+                                        }
+                                    }
+                                    .frame(width: 1, height: 1)
+                                    .opacity(0.01)
+                            }
+                            if let e = error { Text(e).foregroundColor(.red) }
+                            Button(action: verifyCode) {
+                                HStack { if sending { ProgressView() }; Image(systemName: "checkmark.seal.fill"); Text("Verificar").fontWeight(.semibold) }
+                            }
+                            .buttonStyle(.borderedProminent)
+                            .tint(.green)
+                            .frame(maxWidth: .infinity)
+                            .disabled(code.count < 6 || sending)
+                            Button(action: { if resendCooldown == 0 { requestCode() } }) {
+                                Label(resendCooldown == 0 ? "Reenviar código" : "Reenviar en \(resendCooldown)s", systemImage: "clock")
+                            }
+                            .disabled(resendCooldown > 0)
+                        }
+                    }
+                }
+            }
+            .navigationTitle("Iniciar sesión")
+            .toolbar { ToolbarItem(placement: .navigationBarLeading) { Button("Cerrar") { dismiss() } } }
+            .simultaneousGesture(TapGesture().onEnded { phoneFocused = false; codeFocused = false; dismissKeyboard() })
+        }
     }
 }
 
@@ -2781,7 +3248,7 @@ struct ComposeMessageView: View {
                                         var title: String = detail.title
                                         if let pd = pd, let parent = try? JSONDecoder().decode(ChannelDetail.self, from: pd) {
                                             if let subs = parent.subchannels, !subs.isEmpty {
-                                                let principal = subs.sorted { ($0.memberCount ?? 0) > ($1.memberCount ?? 0) }.first
+                                                let principal = subs.sorted(by: { ($0.memberCount ?? 0) > ($1.memberCount ?? 0) }).first
                                                 title = (principal?.id == detail.id) ? parent.title : "\(parent.title) • \(detail.title)"
                                             } else {
                                                 title = "\(parent.title) • \(detail.title)"

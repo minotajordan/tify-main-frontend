@@ -57,12 +57,15 @@ router.post('/login', async (req, res) => {
     const { identifier, password } = req.body;
     if (!identifier || !password) return res.status(400).json({ error: 'identifier y password son requeridos', code: 'VALIDATION_ERROR' });
     const user = await prisma.user.findFirst({
-      where: { OR: [{ email: identifier }, { username: identifier }] }
+      where: { OR: [{ email: identifier }, { username: identifier }] },
+      select: { id: true, email: true, username: true, fullName: true, isAdmin: true, passwordHash: true, isDisabled: true }
     });
     if (!user?.passwordHash) return res.status(401).json({ error: 'Credenciales inválidas', code: 'INVALID_CREDENTIALS' });
+    if (user.isDisabled) return res.status(403).json({ error: 'Usuario deshabilitado', code: 'USER_DISABLED' });
     const ok = await bcrypt.compare(password, user.passwordHash);
     if (!ok) return res.status(401).json({ error: 'Credenciales inválidas', code: 'INVALID_CREDENTIALS' });
-    const token = signToken(user);
+    const token = signToken({ id: user.id, isAdmin: user.isAdmin });
+    try { await prisma.auditLog.create({ data: { actorId: user.id, action: 'USER_LOGIN', targetUserId: user.id, details: {} } }); } catch {}
     res.json({ token, user: { id: user.id, email: user.email, username: user.username, fullName: user.fullName, isAdmin: user.isAdmin } });
   } catch (error) {
     res.status(500).json({ error: 'Error en inicio de sesión', code: 'LOGIN_FAILED', details: error.message });
