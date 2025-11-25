@@ -40,6 +40,8 @@ model User {
   messagingSettings      UserMessagingSetting[]
   approverAssignments    ChannelApprover[]
   createdCategories      MessageCategory[]      @relation("MessageCategory_creator")
+  messageViews           MessageView[]
+  channelVisits          ChannelVisit[]
 
   @@map("tify_users")
 }
@@ -78,6 +80,7 @@ model Channel {
   verificationDocs  ChannelVerificationDocument[]
   categories        ChannelCategoryAssignment[]
   messageCategories MessageCategory[]
+  visits           ChannelVisit[]
 
   @@map("tify_channels")
 }
@@ -111,6 +114,7 @@ model Message {
   approvals      MessageApproval[]
   attachments    MessageAttachment[]
   revisions      MessageRevision[]
+  views          MessageView[]
 
   @@map("tify_messages")
 }
@@ -408,4 +412,32 @@ model ChannelCategoryAssignment {
 
   @@unique([channelId, categoryId])
   @@map("tify_channel_category_assignments")
+}
+
+model MessageView {
+  id        String   @id @default(uuid())
+  messageId String   @map("message_id")
+  userId    String?  @map("user_id")
+  viewedAt  DateTime @default(now()) @map("viewed_at")
+
+  message Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  user    User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([messageId])
+  @@index([userId])
+  @@map("tify_message_views")
+}
+
+model ChannelVisit {
+  id        String   @id @default(uuid())
+  channelId String   @map("channel_id")
+  userId    String?  @map("user_id")
+  visitedAt DateTime @default(now()) @map("visited_at")
+
+  channel Channel @relation(fields: [channelId], references: [id], onDelete: Cascade)
+  user    User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([channelId])
+  @@index([userId])
+  @@map("tify_channel_visits")
 }

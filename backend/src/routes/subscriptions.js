@@ -57,6 +57,7 @@ router.post('/', async (req, res) => {
     // TODO: Suscribirse a subcanales específicos
     // Esto requeriría una tabla adicional para manejar suscripciones granulares
 
+    await prisma.auditLog.create({ data: { actorId: userId, action: 'USER_SUBSCRIBE', targetUserId: userId, targetChannelId: channelId, details: {} } });
     res.status(201).json({
       message: 'Suscripción creada exitosamente',
       subscription

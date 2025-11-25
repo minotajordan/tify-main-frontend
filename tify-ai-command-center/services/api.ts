@@ -155,6 +155,22 @@ export const api = {
     });
   },
 
+  viewMessage: async (id: string): Promise<{ ok: boolean }> => {
+    return request(`${API_BASE}/messages/${id}/view`, { method: 'POST' });
+  },
+
+  getMessageViews: async (id: string): Promise<{ total: number; uniqueViewers: number; viewers: Array<{ id: string; username: string; fullName: string; count: number }> }> => {
+    return request(`${API_BASE}/messages/${id}/views`);
+  },
+
+  visitChannel: async (id: string): Promise<{ ok: boolean }> => {
+    return request(`${API_BASE}/channels/${id}/visit`, { method: 'POST' });
+  },
+
+  getChannelVisits: async (id: string): Promise<{ total: number; uniqueVisitors: number }> => {
+    return request(`${API_BASE}/channels/${id}/visits`);
+  },
+
   // --- Users ---
   getUsers: async (): Promise<User[]> => {
     return request<User[]>(`${API_BASE}/users`);

@@ -2796,11 +2796,13 @@ const ChannelManager: React.FC = () => {
                                   <div
                                     key={m.id}
                                     className={`relative overflow-hidden p-4 rounded-lg border ${m.isEmergency ? 'bg-gradient-to-br from-red-50 via-white to-rose-100 border-red-200' : new Date(m.expiresAt) > new Date() ? 'bg-emerald-50 border-emerald-200' : 'bg-gray-50 border-gray-200'}`}
+                                    onMouseEnter={() => { try { api.viewMessage(m.id); } catch {} }}
                                   >
                                     {m.isEmergency && (
                                       <span className="pointer-events-none absolute inset-0 rounded-lg bg-red-300/10 animate-pulse"></span>
                                     )}
                                     <div className="absolute top-2 right-2 flex items-center gap-2 text-xs">
+                                      <span className="text-[10px] text-gray-500">Vistas: {m.viewsCount ?? (m._count?.views || 0)}</span>
                                       {m.eventAt && (
                                         <span className="relative inline-flex items-center gap-1">
                                           <button

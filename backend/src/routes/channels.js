@@ -128,9 +128,8 @@ router.get('/:id', async (req, res) => {
           take: 20,
           orderBy: { createdAt: 'desc' },
           include: {
-            sender: {
-              select: { id: true, username: true, fullName: true }
-            }
+            sender: { select: { id: true, username: true, fullName: true } },
+            _count: { select: { views: true } }
           }
         },
         approvers: {
@@ -149,11 +148,21 @@ router.get('/:id', async (req, res) => {
       return res.status(404).json({ error: 'Canal no encontrado' });
     }
 
-    const channelWithSubscription = {
+    let channelWithSubscription = {
       ...channel,
       isSubscribed: userId ? channel.subscriptions?.length > 0 : false,
       subscriptions: undefined
     };
+
+    if (userId && channelWithSubscription.messages?.length) {
+      const ids = channelWithSubscription.messages.map(m => m.id);
+      const seen = await prisma.messageView.findMany({ where: { messageId: { in: ids }, userId }, select: { messageId: true } });
+      const seenSet = new Set(seen.map(s => s.messageId));
+      channelWithSubscription = {
+        ...channelWithSubscription,
+        messages: channelWithSubscription.messages.map(m => ({ ...m, viewsCount: m._count?.views || 0, viewedByMe: seenSet.has(m.id) }))
+      };
+    }
 
     res.json(channelWithSubscription);
   } catch (error) {
@@ -635,6 +644,39 @@ router.post('/:id/categories', async (req, res) => {
     res.status(201).json(assignment);
   } catch (error) {
     res.status(500).json({ error: 'Error asignando categoría' });
+  }
+});
+
+// Registrar visita de canal
+router.post('/:id/visit', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const auth = req.headers.authorization || '';
+    const [, token] = auth.split(' ');
+    let actorId = null;
+    if (token) { try { const payload = jwt.verify(token, process.env.JWT_SECRET || 'dev_secret'); actorId = payload.sub; } catch {} }
+
+    const ch = await prisma.channel.findUnique({ where: { id }, select: { id: true } });
+    if (!ch) return res.status(404).json({ error: 'Canal no encontrado' });
+
+    await prisma.channelVisit.create({ data: { channelId: id, userId: actorId } });
+    if (actorId) await prisma.auditLog.create({ data: { actorId, action: 'CHANNEL_VISIT', targetChannelId: id, details: {} } });
+
+    res.json({ ok: true });
+  } catch (error) {
+    res.status(500).json({ error: 'Error registrando visita' });
+  }
+});
+
+// Resumen de visitas de canal
+router.get('/:id/visits', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const total = await prisma.channelVisit.count({ where: { channelId: id } });
+    const distinct = await prisma.channelVisit.findMany({ where: { channelId: id, userId: { not: null } }, distinct: ['userId'], select: { userId: true } });
+    res.json({ total, uniqueVisitors: distinct.length });
+  } catch (error) {
+    res.status(500).json({ error: 'Error obteniendo visitas' });
   }
 });
 

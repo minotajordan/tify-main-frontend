@@ -13,6 +13,11 @@ router.get('/channel/:channelId', async (req, res) => {
     const limit = parseInt(req.query.limit || '20');
     const skip = (page - 1) * limit;
 
+    const auth = req.headers.authorization || '';
+    const [, token] = auth.split(' ');
+    let viewerId = null;
+    if (token) { try { const payload = jwt.verify(token, process.env.JWT_SECRET || 'dev_secret'); viewerId = payload.sub; } catch {} }
+
     const {
       q = '',
       quick = 'all',
@@ -68,7 +73,8 @@ router.get('/channel/:channelId', async (req, res) => {
         include: {
           sender: { select: { id: true, username: true, fullName: true } },
           channel: { select: { title: true, icon: true } },
-          approvals: { include: { approver: { select: { id: true, username: true, fullName: true } } } }
+          approvals: { include: { approver: { select: { id: true, username: true, fullName: true } } } },
+          _count: { select: { views: true } }
         },
         orderBy: { createdAt: 'desc' },
         skip,
@@ -77,7 +83,16 @@ router.get('/channel/:channelId', async (req, res) => {
       prisma.message.count({ where })
     ]);
 
-    res.json({ messages, pagination: { page, limit, total, pages: Math.ceil(total / limit) } });
+    let seenIds = new Set();
+    if (viewerId && messages.length > 0) {
+      const ids = messages.map(m => m.id);
+      const seen = await prisma.messageView.findMany({ where: { messageId: { in: ids }, userId: viewerId }, select: { messageId: true } });
+      seenIds = new Set(seen.map(s => s.messageId));
+    }
+
+    const augmented = messages.map(m => ({ ...m, viewsCount: m._count?.views || 0, viewedByMe: seenIds.has(m.id) }));
+
+    res.json({ messages: augmented, pagination: { page, limit, total, pages: Math.ceil(total / limit) } });
   } catch (error) {
     console.error('Error obteniendo mensajes:', error);
     res.status(500).json({ error: 'Error interno del servidor' });
@@ -547,6 +562,40 @@ router.get('/:id/approvals', async (req, res) => {
   } catch (error) {
     console.error('Error obteniendo aprobaciones del mensaje:', error);
     res.status(500).json({ error: 'Error interno del servidor' });
+  }
+});
+
+// Registrar vista de mensaje
+router.post('/:id/view', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const auth = req.headers.authorization || '';
+    const [, token] = auth.split(' ');
+    let actorId = null;
+    if (token) { try { const payload = jwt.verify(token, process.env.JWT_SECRET || 'dev_secret'); actorId = payload.sub; } catch {} }
+
+    const msg = await prisma.message.findUnique({ where: { id }, select: { id: true } });
+    if (!msg) return res.status(404).json({ error: 'Mensaje no encontrado' });
+
+    await prisma.messageView.create({ data: { messageId: id, userId: actorId } });
+    if (actorId) await prisma.auditLog.create({ data: { actorId, action: 'MESSAGE_VIEW', details: { messageId: id } } });
+
+    res.json({ ok: true });
+  } catch (error) {
+    res.status(500).json({ error: 'Error registrando vista' });
+  }
+});
+
+// Resumen de vistas de mensaje
+router.get('/:id/views', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const total = await prisma.messageView.count({ where: { messageId: id } });
+    const distinct = await prisma.messageView.findMany({ where: { messageId: id, userId: { not: null } }, distinct: ['userId'], select: { userId: true } });
+    const viewers = await prisma.$queryRaw`SELECT u.id, u.username, u.full_name as "fullName", COUNT(mv.id) as count FROM tify_message_views mv LEFT JOIN tify_users u ON mv.user_id = u.id WHERE mv.message_id = ${id} GROUP BY u.id, u.username, u.full_name ORDER BY count DESC LIMIT 20`;
+    res.json({ total, uniqueViewers: distinct.length, viewers });
+  } catch (error) {
+    res.status(500).json({ error: 'Error obteniendo vistas' });
   }
 });
 
