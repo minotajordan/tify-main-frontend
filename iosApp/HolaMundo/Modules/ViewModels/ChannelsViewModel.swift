@@ -20,6 +20,7 @@ class ChannelsViewModel: ObservableObject {
     private var prefTask: Task<Void, Never>? = nil
     private var subscribeTask: Task<Void, Never>? = nil
     private var unsubscribeTask: Task<Void, Never>? = nil
+    private var detailsPrefetchTask: Task<Void, Never>? = nil
 
     init() {
         if let cachedChannels = PersistenceManager.shared.loadChannels() {
@@ -47,6 +48,7 @@ class ChannelsViewModel: ObservableObject {
                     self?.isRefreshing = false
                     PersistenceManager.shared.saveChannels(items)
                 }
+                self?.prefetchChannelDetails(for: items)
             } catch {
                 await MainActor.run { [weak self] in
                     if self?.channels.isEmpty ?? true { self?.errorMessage = "Error de conexión" }
@@ -101,6 +103,7 @@ class ChannelsViewModel: ObservableObject {
                     self?.isLoading = false
                     PersistenceManager.shared.saveChannels(items)
                 }
+                self?.prefetchChannelDetails(for: mine)
             } catch {
                 await MainActor.run { [weak self] in
                     self?.isLoading = false
@@ -143,6 +146,8 @@ class ChannelsViewModel: ObservableObject {
                 self.lastSubscribedLoadAt = Date()
                 UserDefaults.standard.set(Date().timeIntervalSince1970, forKey: "cache_channels_subs_ts")
             }
+            let subscribed = subs
+            self?.prefetchChannelDetails(for: subscribed)
         }
     }
 
@@ -295,5 +300,28 @@ class ChannelsViewModel: ObservableObject {
             let items = try JSONDecoder().decode([Channel].self, from: data)
             return items
         } catch { return [] }
+    }
+
+    private func prefetchChannelDetails(for channels: [Channel], limit: Int = 16) {
+        detailsPrefetchTask?.cancel()
+        guard !channels.isEmpty, !UserSession.shared.currentUserId.isEmpty else { return }
+        let ids = Array(channels.map { $0.id }.prefix(limit))
+        detailsPrefetchTask = Task { [weak self] in
+            for id in ids {
+                if Task.isCancelled { break }
+                if PersistenceManager.shared.loadChannelDetail(id: id) != nil { continue }
+                guard let url = URL(string: "\(APIConfig.baseURL)/channels/\(id)?userId=\(UserSession.shared.currentUserId)") else { continue }
+                do {
+                    let (data, res) = try await URLSession.shared.data(from: url)
+                    guard (res as? HTTPURLResponse)?.statusCode == 200 else { continue }
+                    if let detail = try? JSONDecoder().decode(ChannelDetail.self, from: data) {
+                        PersistenceManager.shared.saveChannelDetail(detail)
+                    }
+                } catch {
+                    continue
+                }
+            }
+            _ = self
+        }
     }
 }

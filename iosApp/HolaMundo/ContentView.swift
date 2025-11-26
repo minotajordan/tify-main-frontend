@@ -604,10 +604,11 @@ struct ChannelsView: View {
                 }
                 ForEach(ordered) { channel in
                     NavigationLink(destination: ChannelDetailView(channelId: channel.id, channelTitle: channel.title)) {
-                        chatRow(channel: channel)
+                        MyChannelCard(channel: channel)
                     }
                     .buttonStyle(PlainButtonStyle())
-                    .listRowInsets(EdgeInsets(top: 3, leading: 3, bottom: 3, trailing: 3))
+                    .listRowInsets(EdgeInsets(top: 10, leading: 12, bottom: 10, trailing: 12))
+                    .listRowSeparator(.hidden)
                 }
             } else if selectedTopTab == 2 {
                 Section {
@@ -742,6 +743,102 @@ struct ChannelsView: View {
         var s = isoOrDateString
         if s.contains(" ") { s = s.replacingOccurrences(of: " ", with: "T") }
         return iso.date(from: s) ?? df.date(from: s)
+    }
+
+    struct MyChannelCard: View {
+        let channel: Channel
+
+        private func timeString(_ raw: String?) -> String? {
+            guard let s0 = raw else { return nil }
+            let iso = ISO8601DateFormatter()
+            iso.formatOptions = [.withInternetDateTime, .withDashSeparatorInDate, .withColonSeparatorInTime, .withTimeZone, .withFractionalSeconds]
+            let df = DateFormatter()
+            df.locale = Locale(identifier: "en_US_POSIX")
+            df.dateFormat = "yyyy-MM-dd'T'HH:mm:ss"
+            var s = s0
+            if s.contains(" ") { s = s.replacingOccurrences(of: " ", with: "T") }
+            let d = iso.date(from: s) ?? df.date(from: s)
+            guard let date = d else { return nil }
+            let out = DateFormatter()
+            out.locale = Locale.current
+            out.dateStyle = .none
+            out.timeStyle = .short
+            return out.string(from: date)
+        }
+
+        private func prefetch() {
+            if PersistenceManager.shared.loadChannelDetail(id: channel.id) != nil { return }
+            guard let url = URL(string: "\(APIConfig.baseURL)/channels/\(channel.id)?userId=\(UserSession.shared.currentUserId)") else { return }
+            URLSession.shared.dataTask(with: url) { data, _, _ in
+                if let data = data, let detail = try? JSONDecoder().decode(ChannelDetail.self, from: data) {
+                    PersistenceManager.shared.saveChannelDetail(detail)
+                }
+            }.resume()
+        }
+
+        var body: some View {
+            let accent = LinearGradient(colors: [Color.cyan, Color.purple, Color.blue], startPoint: .topLeading, endPoint: .bottomTrailing)
+            HStack(spacing: 12) {
+                ZStack {
+                    Circle()
+                        .fill(Color.white.opacity(0.06))
+                        .frame(width: 46, height: 46)
+                        .overlay(
+                            Circle()
+                                .fill(accent)
+                                .blur(radius: 18)
+                                .opacity(0.35)
+                        )
+                    Image(systemName: channel.icon)
+                        .foregroundColor(.cyan)
+                }
+                VStack(alignment: .leading, spacing: 6) {
+                    HStack {
+                        Text(channel.title)
+                            .font(.subheadline)
+                            .fontWeight(.semibold)
+                            .lineLimit(1)
+                        Spacer()
+                        if let t = timeString(channel.lastMessageAt) {
+                            Text(t)
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        }
+                    }
+                    HStack(spacing: 8) {
+                        Text(channel.lastMessagePreview ?? (channel.description ?? ""))
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                            .lineLimit(1)
+                        Spacer()
+                        if let unread = channel.unreadCount, unread > 0 {
+                            Text(String(unread))
+                                .font(.caption2)
+                                .foregroundColor(.white)
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 4)
+                                .background(
+                                    Capsule().fill(Color.green)
+                                )
+                        }
+                    }
+                }
+            }
+            .padding(12)
+            .background(
+                ZStack {
+                    RoundedRectangle(cornerRadius: 18).fill(.ultraThinMaterial)
+                    RoundedRectangle(cornerRadius: 18).fill(accent.opacity(0.08))
+                }
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 18)
+                    .stroke(accent, lineWidth: 1.1)
+            )
+            .shadow(color: Color.blue.opacity(0.18), radius: 10, x: 0, y: 4)
+            .contentShape(Rectangle())
+            .onAppear { prefetch() }
+        }
     }
     
     var body: some View {
@@ -1278,35 +1375,7 @@ struct ChannelDetailView: View {
                 }
             } else if let detail = viewModel.channelDetail {
                 VStack(spacing: 0) {
-                    HStack(spacing: 12) {
-                        Image(systemName: detail.icon)
-                            .font(.title2)
-                            .foregroundColor(.blue)
-                            .frame(width: 40, height: 40)
-                            .background(Circle().fill(Color.blue.opacity(0.1)))
-                        
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(detail.description)
-                                .font(.subheadline)
-                                .foregroundColor(.secondary)
-                            
-                            HStack(spacing: 4) {
-                                Image(systemName: "person.2.fill")
-                                    .font(.caption2)
-                                Text(String(detail.memberCount) + " miembros")
-                                    .font(.caption)
-                            }
-                            .foregroundColor(.secondary)
-                        }
-                        
-                        Spacer()
-                        Button(action: { viewModel.showCompose = true }) {
-                            Image(systemName: "square.and.pencil")
-                                .foregroundColor(.blue)
-                        }
-                    }
-                    .padding()
-                    .background(Color(.systemBackground))
+                    ChannelHeaderCard(detail: detail) { viewModel.showCompose = true }
 
                     if !detail.isPublic {
                         HStack(spacing: 8) {
@@ -1377,7 +1446,7 @@ struct ChannelDetailView: View {
                         }
                         .padding(.horizontal)
                     }
-                    if let subchannels = detail.subchannels, !subchannels.isEmpty {
+                    if detail.isPublic, let subchannels = detail.subchannels, !subchannels.isEmpty {
                         VStack(alignment: .leading, spacing: 8) {
                             HStack {
                                 Image(systemName: "arrow.turn.down.right")
@@ -1467,11 +1536,10 @@ struct ChannelDetailView: View {
             }
         }
         .onAppear {
-            if viewModel.channelDetail == nil {
-                viewModel.loadChannelDetail(channelId: channelId)
-            } else {
-                viewModel.loadChannelDetail(channelId: channelId, isRefresh: true)
+            if let cached = PersistenceManager.shared.loadChannelDetail(id: channelId) {
+                viewModel.channelDetail = cached
             }
+            viewModel.loadChannelDetail(channelId: channelId, isRefresh: true)
             if let url = URL(string: "\(APIConfig.baseURL)/channels/\(channelId)/visit") {
                 var req = URLRequest(url: url)
                 req.httpMethod = "POST"
@@ -1686,6 +1754,82 @@ struct MessageBubble: View {
         .shadow(color: isEmergency ? Color.red.opacity(0.2) : Color.black.opacity(0.05),
                 radius: isEmergency ? 10 : 4,
                 y: isEmergency ? 4 : 2)
+    }
+}
+
+struct ChannelHeaderCard: View {
+    let detail: ChannelDetail
+    let onCompose: () -> Void
+
+    var cityTitle: String? {
+        PersistenceManager.shared.loadChannels()?.first(where: { $0.id == detail.parentId })?.title
+    }
+
+    var body: some View {
+        let accent = LinearGradient(colors: [Color.cyan, Color.purple, Color.blue], startPoint: .topLeading, endPoint: .bottomTrailing)
+        HStack(spacing: 12) {
+            ZStack {
+                Circle()
+                    .fill(Color.white.opacity(0.06))
+                    .frame(width: 46, height: 46)
+                    .overlay(
+                        Circle()
+                            .fill(accent)
+                            .blur(radius: 18)
+                            .opacity(0.35)
+                    )
+                Image(systemName: detail.icon)
+                    .foregroundColor(.cyan)
+            }
+            VStack(alignment: .leading, spacing: 6) {
+                HStack(spacing: 6) {
+                    Text(detail.title)
+                        .font(.headline)
+                    if !detail.isPublic {
+                        Image(systemName: "lock.fill")
+                            .font(.caption)
+                            .foregroundColor(.orange)
+                    }
+                }
+                Text(detail.description)
+                    .font(.subheadline)
+                    .foregroundColor(.secondary)
+                HStack(spacing: 8) {
+                    Label(String(detail.memberCount), systemImage: "person.2.fill")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                    if let cityTitle = cityTitle {
+                        Label(cityTitle, systemImage: "mappin.and.ellipse")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                    Label(detail.isPublic ? "Público" : "Privado", systemImage: detail.isPublic ? "globe" : "lock")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                    Label("Categoría no especificada", systemImage: "tag")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+            }
+            Spacer()
+            Button(action: onCompose) {
+                Image(systemName: "square.and.pencil")
+                    .foregroundColor(.blue)
+            }
+        }
+        .padding()
+        .background(
+            ZStack {
+                RoundedRectangle(cornerRadius: 18).fill(.ultraThinMaterial)
+                RoundedRectangle(cornerRadius: 18).fill(accent.opacity(0.08))
+            }
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 18)
+                .stroke(accent, lineWidth: 1.1)
+        )
+        .padding(.horizontal)
+        .padding(.top, 6)
     }
 }
 
