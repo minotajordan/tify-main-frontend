@@ -16,6 +16,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onChangeView }) => {
   const [channels, setChannels] = useState<Channel[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  
 
   useEffect(() => {
     const fetchData = async () => {
@@ -214,6 +215,8 @@ const Dashboard: React.FC<DashboardProps> = ({ onChangeView }) => {
             </button>
           </div>
         </div>
+
+        
       </div>
     </div>
   );

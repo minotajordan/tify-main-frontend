@@ -2,17 +2,6 @@ import SwiftUI
 import UserNotifications
 import UIKit
 
-class NotificationRouter: ObservableObject {
-    static let shared = NotificationRouter()
-    @Published var targetChannelId: String?
-    @Published var targetMessageId: String?
-    func route(channelId: String, messageId: String?) {
-        targetChannelId = channelId
-        targetMessageId = messageId
-    }
-    func reset() { targetChannelId = nil; targetMessageId = nil }
-}
-
 class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCenterDelegate {
     func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil) -> Bool {
         UNUserNotificationCenter.current().delegate = self
@@ -29,7 +18,7 @@ class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCenterDele
         let channelId = info["channelId"] as? String
         let messageId = info["messageId"] as? String
         if let cid = channelId, !cid.isEmpty {
-            NotificationRouter.shared.route(channelId: cid, messageId: messageId)
+            NotificationCenter.default.post(name: Notification.Name("DeepLinkRoute"), object: nil, userInfo: ["channelId": cid, "messageId": messageId as Any])
         }
         completionHandler()
     }

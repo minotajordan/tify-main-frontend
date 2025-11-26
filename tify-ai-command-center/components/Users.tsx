@@ -1,6 +1,6 @@
 // /Users/minotajordan/WebstormProjects/tify/tify-ai-command-center/components/Users.tsx
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { api } from '../services/api';
+import { api, API_BASE } from '../services/api';
 import { User, Message } from '../types';
 import { DEFAULT_AVATAR } from '../constants';
 import { Search, Loader2, RefreshCw, User as UserIcon, ShieldCheck, Mail, Phone, MessageSquare, CheckCircle, ChevronRight, ChevronLeft, ChevronDown, Bell, Copy, Key, UserCheck, SlidersHorizontal, Ban, Trash2 } from 'lucide-react';
@@ -46,7 +46,7 @@ const UsersModule: React.FC = () => {
   const [me, setMe] = useState<User | null>(null);
   const [subsModalOpen, setSubsModalOpen] = useState(false);
   const [confirmSubId, setConfirmSubId] = useState<string|null>(null);
-  const [detailTab, setDetailTab] = useState<'overview'|'subscriptions'|'assignments'|'pending'|'audit'>('subscriptions');
+  const [detailTab, setDetailTab] = useState<'overview'|'subscriptions'|'assignments'|'pending'|'audit'|'requests'>('subscriptions');
   const [auditLogs, setAuditLogs] = useState<any[]>([]);
   const [auditLoading, setAuditLoading] = useState(false);
   const [confirmDisable, setConfirmDisable] = useState(false);
@@ -56,6 +56,126 @@ const UsersModule: React.FC = () => {
   const [topChannels, setTopChannels] = useState<Array<{ channel: { id: string; title: string; icon?: string; logoUrl?: string }, count: number }>>([]);
   const [leftCollapsed, setLeftCollapsed] = useState(false);
   const [rangeIndex, setRangeIndex] = useState(1);
+  const [requestsModalOpen, setRequestsModalOpen] = useState(false);
+  const [colWidths, setColWidths] = useState<{ endpoint: number; status: number; type: number; payload: number; response: number; fecha: number }>({ endpoint: 320, status: 80, type: 90, payload: 300, response: 300, fecha: 140 });
+  const setWidth = (key: keyof typeof colWidths, value: number) => setColWidths(prev => ({ ...prev, [key]: Math.max(80, Math.min(1000, value)) }));
+  const [dragKey, setDragKey] = useState<keyof typeof colWidths | null>(null);
+  const [dragStartX, setDragStartX] = useState<number>(0);
+  const [dragStartWidth, setDragStartWidth] = useState<number>(0);
+  const startDrag = (key: keyof typeof colWidths, e: React.MouseEvent) => { setDragKey(key); setDragStartX(e.clientX); setDragStartWidth(colWidths[key]); };
+  const autofit = (key: keyof typeof colWidths) => {
+    const rows = requestLog || [];
+    const getText = (row: any) => {
+      if (key === 'endpoint') return String(row.endpoint || '');
+      if (key === 'status') return String(row.status || 0);
+      if (key === 'payload') { try { const obj = typeof row.payload === 'string' ? JSON.parse(row.payload) : row.payload; return JSON.stringify(obj || null); } catch { return typeof row.payload === 'string' ? row.payload : JSON.stringify(row.payload || null); } }
+      if (key === 'response') { try { const obj = typeof row.response === 'string' ? JSON.parse(row.response) : row.response; return JSON.stringify(obj || null); } catch { return typeof row.response === 'string' ? row.response : JSON.stringify(row.response || null); } }
+      if (key === 'fecha') return String(new Date(row.date).toLocaleString());
+      return '';
+    };
+    let maxLen = 16;
+    for (const r of rows) { const txt = getText(r); maxLen = Math.max(maxLen, (txt || '').length); }
+    const px = Math.min(1000, Math.max(80, Math.round(maxLen * 7.2))); // aprox monospace
+    setWidth(key, px);
+  };
+  useEffect(() => {
+    const onMove = (e: MouseEvent) => { if (!dragKey) return; const dx = e.clientX - dragStartX; setWidth(dragKey, dragStartWidth + dx); };
+    const onUp = () => { setDragKey(null); };
+    if (dragKey) { window.addEventListener('mousemove', onMove); window.addEventListener('mouseup', onUp); }
+    return () => { window.removeEventListener('mousemove', onMove); window.removeEventListener('mouseup', onUp); };
+  }, [dragKey, dragStartX, dragStartWidth]);
+  const [nowTick, setNowTick] = useState<number>(Date.now());
+  useEffect(() => { const h = setInterval(()=>setNowTick(Date.now()), 1000); return ()=>clearInterval(h); }, []);
+  useEffect(() => {
+    const key = selected?.id ? `tify_user_requests_colwidths_${selected.id}` : 'tify_user_requests_colwidths_default';
+    try { const saved = localStorage.getItem(key); if (saved) { const obj = JSON.parse(saved); if (obj && typeof obj === 'object') setColWidths(prev => ({ ...prev, ...obj })); } } catch {}
+  }, [selected?.id]);
+  useEffect(() => {
+    const key = selected?.id ? `tify_user_requests_colwidths_${selected.id}` : 'tify_user_requests_colwidths_default';
+    try { localStorage.setItem(key, JSON.stringify(colWidths)); } catch {}
+  }, [colWidths, selected?.id]);
+  const [jsonModalOpen, setJsonModalOpen] = useState(false);
+  const [jsonModalTitle, setJsonModalTitle] = useState('');
+  const [jsonModalValue, setJsonModalValue] = useState<any>(null);
+  const [jsonSearch, setJsonSearch] = useState('');
+  const [expanded, setExpanded] = useState<Set<string>>(new Set(['root']));
+  const formatElapsed = (ts: number): string => {
+    const diff = Math.max(0, Math.floor((nowTick - ts) / 1000));
+    const h = Math.floor(diff / 3600); const m = Math.floor((diff % 3600) / 60); const s = diff % 60;
+    if (h > 0) return `hace ${h}h ${m}m ${s}s`;
+    if (m > 0) return `hace ${m}m ${s}s`;
+    return `hace ${s}s`;
+  };
+  const extractMethod = (endpoint: string): string => {
+    const m = String(endpoint||'').split(' ')[0];
+    return m || 'REQ';
+  };
+
+  const renderJsonColored = (value: any): any => {
+    const t = typeof value;
+    if (value === null) return (<span className="text-orange-600">null</span>);
+    if (t === 'string') return (<span className="text-green-700">"{value}"</span>);
+    if (t === 'number') return (<span className="text-purple-700">{String(value)}</span>);
+    if (t === 'boolean') return (<span className="text-orange-700">{String(value)}</span>);
+    if (Array.isArray(value)) {
+      return (<span className="text-gray-800">[ {value.map((v, i) => (<span key={i}>{renderJsonColored(v)}{i < value.length-1 ? ', ' : ''}</span>))} ]</span>);
+    }
+    if (t === 'object') {
+      const entries = Object.entries(value || {});
+      return (
+        <span className="text-gray-800">{'{'} {entries.map(([k,v], idx) => (
+          <span key={k}>
+            <span className="text-blue-700">"{k}"</span>
+            <span>: </span>
+            {renderJsonColored(v)}
+            {idx < entries.length-1 ? <span>, </span> : null}
+          </span>
+        ))} {'}'}
+        </span>
+      );
+    }
+    return (<span className="text-gray-700">{String(value)}</span>);
+  };
+
+  const colorizeJsonString = (s: string): any => {
+    const parts: any[] = [];
+    const regex = /"(\\.|[^"\\])*"|\b(true|false|null)\b|-?\d+(?:\.\d+)?(?:[eE][+\-]?\d+)?|[{}\[\],:]/g;
+    let lastIndex = 0; let m;
+    while ((m = regex.exec(s)) !== null) {
+      if (m.index > lastIndex) parts.push(<span key={lastIndex} className="text-gray-800">{s.slice(lastIndex, m.index)}</span>);
+      const token = m[0];
+      let cls = 'text-gray-800';
+      if (token === 'true' || token === 'false') cls = 'text-orange-700';
+      else if (token === 'null') cls = 'text-orange-600';
+      else if (/^"/.test(token)) cls = 'text-green-700';
+      else if (/^-?\d/.test(token)) cls = 'text-purple-700';
+      else if (/[{}\[\],:]/.test(token)) cls = 'text-gray-500';
+      parts.push(<span key={m.index} className={cls}>{token}</span>);
+      lastIndex = regex.lastIndex;
+    }
+    if (lastIndex < s.length) parts.push(<span key={lastIndex} className="text-gray-800">{s.slice(lastIndex)}</span>);
+    return <>{parts}</>;
+  };
+  const renderJsonPreview = (value: any): any => {
+    let txt = '';
+    try { const obj = typeof value === 'string' ? JSON.parse(value) : value; txt = JSON.stringify(obj || null); }
+    catch { txt = typeof value === 'string' ? value : JSON.stringify(value || null); }
+    if (txt.length > 300) txt = txt.slice(0, 300) + '…';
+    return (<span className="font-mono text-[11px]">{colorizeJsonString(txt)}</span>);
+  };
+
+
+  const [requestLog, setRequestLog] = useState<Array<{ id: string; endpoint: string; status: number; payloadSnippet?: string; responseSnippet?: string; date: number }>>([]);
+  useEffect(() => {
+    if (!selected?.id) return;
+    const es = new EventSource(`${API_BASE}/streams/user-requests/${selected.id}`);
+    es.onmessage = (ev) => {
+      try { const evt = JSON.parse(ev.data); setRequestLog(prev => [evt, ...prev].slice(0, 500)); } catch {}
+    };
+    es.onerror = () => { /* silently ignore */ };
+    return () => { try { es.close(); } catch {} };
+  }, [selected?.id]);
+  
   useEffect(() => {
     const hours = windowRange === '1h' ? 1 : windowRange === '24h' ? 24 : windowRange === '7d' ? 7*24 : windowRange === '1m' ? 30*24 : 24*365;
     setWindowHours(hours);
@@ -89,7 +209,7 @@ const UsersModule: React.FC = () => {
         setUsers(res.items || []);
         setUsersPage(1);
         setUsersPages(res.pagination?.pages || 1);
-        setSelected((res.items || [])[0] || null);
+        setSelected(null);
       } finally {
         setLoadingUsers(false);
       }
@@ -190,7 +310,8 @@ const UsersModule: React.FC = () => {
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-12 gap-6 h-screen">
-      <aside className={`${leftCollapsed ? 'md:col-span-1' : 'md:col-span-4'} bg-white border border-gray-200 rounded-xl p-4 flex flex-col h-screen transition-all duration-300`}>
+      {!selected && (
+      <aside className={`md:col-span-12 bg-white border border-gray-200 rounded-xl p-4 flex flex-col h-screen transition-all duration-300`}>
         {leftCollapsed ? (
           <div className="flex items-center justify-center mb-3">
             <button onClick={()=>setLeftCollapsed(false)} className="px-2 py-1 border rounded flex items-center gap-1 text-xs" title="Mostrar usuarios" aria-label="Mostrar usuarios"><ChevronRight size={14} /></button>
@@ -237,7 +358,7 @@ const UsersModule: React.FC = () => {
             {users.map(u => (
               <button
                 key={u.id}
-                onClick={() => setSelected(u)}
+                onClick={() => { setSelected(u); setLeftCollapsed(true); }}
                 className={`w-full flex items-center gap-3 p-3 rounded-lg border text-left ${selected?.id === u.id ? 'border-indigo-500 bg-indigo-50' : 'border-gray-200 hover:bg-gray-50'}`}
               >
                 <img src={u.avatarUrl || DEFAULT_AVATAR} alt={u.fullName} className="w-8 h-8 rounded-full border border-gray-200" />
@@ -262,8 +383,10 @@ const UsersModule: React.FC = () => {
         )}
         </>)}
       </aside>
+      )}
 
-      <section className={`${leftCollapsed ? 'md:col-span-11' : 'md:col-span-8'} bg-white border border-gray-200 rounded-xl p-4 transition-all duration-300`}>
+      {selected && (
+      <section className={`md:col-span-12 bg-white border border-gray-200 rounded-xl p-4 transition-all duration-300`}>
         {!selected ? (
           <div className="flex items-center justify-center h-48 text-gray-500">
             <UserIcon size={18} className="mr-2" />
@@ -287,6 +410,7 @@ const UsersModule: React.FC = () => {
                 </div>
               </div>
               <div className="ml-auto flex items-center gap-2 text-xs">
+                <button onClick={()=>{ setSelected(null); setLeftCollapsed(false); }} className="px-2 py-1 border rounded flex items-center gap-1" aria-label="Volver"><ChevronLeft size={14} /><span>Volver</span></button>
                 <span className="px-2 py-0.5 border rounded">{windowRange==='all' ? 'Hist' : (windowRange==='7d' ? '7d' : windowRange)}</span>
                 <SlidersHorizontal size={14} className="text-gray-500" />
                 <input type="range" min={0} max={4} value={rangeIndex} onChange={e=>setRangeIndex(Number(e.target.value))} className="w-32" />
@@ -300,6 +424,7 @@ const UsersModule: React.FC = () => {
                 <button onClick={()=>setDetailTab('subscriptions')} className={`px-2 py-1 rounded flex items-center gap-1 ${detailTab==='subscriptions'?'bg-indigo-600 text-white':'hover:bg-gray-100'}`} title="Suscripciones" aria-label="Suscripciones"><MessageSquare size={14} /><span>Suscripciones</span></button>
                 <button onClick={()=>setDetailTab('assignments')} className={`px-2 py-1 rounded flex items-center gap-1 ${detailTab==='assignments'?'bg-indigo-600 text-white':'hover:bg-gray-100'}`} title="Asignaciones" aria-label="Asignaciones"><ShieldCheck size={14} /><span>Asignaciones</span></button>
                 <button onClick={()=>setDetailTab('pending')} className={`px-2 py-1 rounded flex items-center gap-1 ${detailTab==='pending'?'bg-indigo-600 text-white':'hover:bg-gray-100'}`} title="Pendientes" aria-label="Pendientes"><Bell size={14} /><span>Pendientes</span></button>
+                <button onClick={()=>setDetailTab('requests')} className={`px-2 py-1 rounded flex items-center gap-1 ${detailTab==='requests'?'bg-indigo-600 text-white':'hover:bg-gray-100'}`} title="Actividad de peticiones" aria-label="Actividad de peticiones"><ChevronDown size={14} /><span>Actividad</span></button>
                 {me?.isAdmin && (
                   <button onClick={()=>{ setDetailTab('audit'); if (selected?.id) loadAuditLogs(selected.id); }} className={`px-2 py-1 rounded flex items-center gap-1 ${detailTab==='audit'?'bg-indigo-600 text-white':'hover:bg-gray-100'}`} title="Auditoría" aria-label="Auditoría"><ShieldCheck size={14} /><span>Auditoría</span></button>
                 )}
@@ -606,11 +731,74 @@ const UsersModule: React.FC = () => {
                     </div>
                   </div>
                 )}
+
+                {detailTab === 'requests' && (
+                  <div className="border rounded-lg">
+                    <div className="flex items-center justify-between px-4 py-3 border-b">
+                      <div className="flex items-center gap-2">
+                        <ChevronDown size={16} className="text-indigo-600" />
+                        <span className="text-sm font-semibold">Actividad de peticiones</span>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <button onClick={()=>setRequestsModalOpen(true)} className="px-2 py-1 border rounded text-xs hover:bg-indigo-50" aria-label="Ampliar tabla">Ampliar</button>
+                        <div className="text-xs text-gray-500">{requestLog.length}</div>
+                      </div>
+                    </div>
+                    <div className="max-h-[60vh] overflow-y-auto">
+                      <table className="min-w-full text-xs table-fixed">
+                        <thead>
+                          <tr className="text-left text-gray-600 sticky top-0 bg-white/90 backdrop-blur border-b shadow-sm">
+                            <th className="py-2 px-3 border-b relative select-none" style={{ width: colWidths.endpoint }}>Endpoint<div className="absolute top-0 right-0 h-full w-2 cursor-col-resize hover:bg-indigo-100" onMouseDown={(e)=>startDrag('endpoint', e)} onDoubleClick={()=>autofit('endpoint')} /></th>
+                            <th className="py-2 px-3 border-b relative select-none" style={{ width: colWidths.status }}>Status<div className="absolute top-0 right-0 h-full w-2 cursor-col-resize hover:bg-indigo-100" onMouseDown={(e)=>startDrag('status', e)} onDoubleClick={()=>autofit('status')} /></th>
+                            <th className="py-2 px-3 border-b relative select-none" style={{ width: colWidths.type }}>Type<div className="absolute top-0 right-0 h-full w-2 cursor-col-resize hover:bg-indigo-100" onMouseDown={(e)=>startDrag('type', e)} onDoubleClick={()=>autofit('type')} /></th>
+                            <th className="py-2 px-3 border-b relative select-none" style={{ width: colWidths.payload }}>Payload<div className="absolute top-0 right-0 h-full w-2 cursor-col-resize hover:bg-indigo-100" onMouseDown={(e)=>startDrag('payload', e)} onDoubleClick={()=>autofit('payload')} /></th>
+                            <th className="py-2 px-3 border-b relative select-none" style={{ width: colWidths.response }}>Response<div className="absolute top-0 right-0 h-full w-2 cursor-col-resize hover:bg-indigo-100" onMouseDown={(e)=>startDrag('response', e)} onDoubleClick={()=>autofit('response')} /></th>
+                            <th className="py-2 px-3 border-b relative select-none" style={{ width: colWidths.fecha }}>Fecha<div className="absolute top-0 right-0 h-full w-2 cursor-col-resize hover:bg-indigo-100" onMouseDown={(e)=>startDrag('fecha', e)} onDoubleClick={()=>autofit('fecha')} /></th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {requestLog.map((row, idx) => (
+                            <tr key={idx} className="border-b hover:bg-indigo-50/40 even:bg-gray-50">
+                              <td className="py-2 px-3 font-mono text-[11px] break-all" style={{ width: colWidths.endpoint }}>{row.endpoint}</td>
+                              <td className="py-2 px-3" style={{ width: colWidths.status }}>
+                                <span className={`${row.status>=500?'bg-red-100 text-red-700':row.status>=400?'bg-yellow-100 text-yellow-700':'bg-green-100 text-green-700'} px-2 py-1 rounded`}>{row.status || 0}</span>
+                              </td>
+                              <td className="py-2 px-3" style={{ width: colWidths.type }}>
+                                <span className="px-2 py-1 bg-gray-100 text-gray-700 rounded">{extractMethod(row.endpoint)}</span>
+                              </td>
+                              <td className="py-2 px-3 font-mono text-[11px] break-all max-h-20 overflow-hidden cursor-pointer" style={{ width: colWidths.payload }} onClick={async ()=>{
+                                setJsonModalTitle('Payload');
+                                try { const full = await fetch(`${API_BASE}/streams/user-requests/${selected!.id}/events/${row.id}`).then(r=>r.json()); setJsonModalValue(full.payload); } catch { setJsonModalValue(row.payloadSnippet||''); }
+                                setJsonModalOpen(true);
+                              }}>
+                                {renderJsonPreview(row.payloadSnippet||'')}
+                              </td>
+                              <td className="py-2 px-3 font-mono text-[11px] break-all max-h-20 overflow-hidden cursor-pointer" style={{ width: colWidths.response }} onClick={async ()=>{
+                                setJsonModalTitle('Response');
+                                try { const full = await fetch(`${API_BASE}/streams/user-requests/${selected!.id}/events/${row.id}`).then(r=>r.json()); setJsonModalValue(full.response); } catch { setJsonModalValue(row.responseSnippet||''); }
+                                setJsonModalOpen(true);
+                              }}>
+                                {renderJsonPreview(row.responseSnippet||'')}
+                              </td>
+                              <td className="py-2 px-3 text-gray-500" style={{ width: colWidths.fecha }} title={new Date(row.date).toLocaleString()}>{formatElapsed(row.date)}</td>
+                            </tr>
+                          ))}
+                          {requestLog.length === 0 && (
+                            <tr>
+                              <td className="py-3 px-3 text-gray-500" colSpan={5}>Sin actividad</td>
+                            </tr>
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
           </>
         )}
       </section>
+      )}
     {showCreateModal && (
       <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center">
         <div className="bg-white w-full max-w-lg rounded-xl shadow-lg border border-gray-200">
@@ -638,6 +826,129 @@ const UsersModule: React.FC = () => {
       </div>
     )}
 
+    {requestsModalOpen && (
+      <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center">
+        <div className="bg-white w-full h-full rounded-none shadow-lg border border-gray-200 flex flex-col">
+          <div className="p-4 border-b border-gray-100 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <h3 className="text-lg font-semibold text-gray-900">Actividad de peticiones</h3>
+              <span className="text-xs text-gray-500">{requestLog.length}</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <button onClick={()=>{ setColWidths({ endpoint: 320, status: 80, type: 90, payload: 300, response: 300, fecha: 140 }); }} className="px-3 py-2 border border-gray-300 rounded text-xs">Restablecer columnas</button>
+              <button onClick={()=>setRequestsModalOpen(false)} className="px-3 py-2 border border-gray-300 rounded text-xs">Cerrar</button>
+            </div>
+          </div>
+          <div className="p-3 border-b flex items-center justify-between text-[12px] text-gray-600">
+            <div className="flex items-center gap-2">
+              <span className="px-2 py-1 bg-indigo-50 text-indigo-700 rounded">Real-time</span>
+              <span>{requestLog.length} eventos</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <button onClick={()=>{ setColWidths({ endpoint: 425, status: 80, type: 90, payload: 300, response: 300, fecha: 140 }); }} className="px-2 py-1 border border-gray-300 rounded text-xs hover:bg-gray-50">Ancho recomendado</button>
+            </div>
+          </div>
+          <div className="flex-1 overflow-auto p-4">
+            <table className="min-w-full text-xs table-fixed">
+              <thead>
+                <tr className="text-left text-gray-600 sticky top-0 bg-white/90 backdrop-blur border-b shadow-sm">
+                  <th className="py-2 px-3 border-b relative select-none" style={{ width: colWidths.endpoint }}>Endpoint<div className="absolute top-0 right-0 h-full w-1 cursor-col-resize" onMouseDown={(e)=>startDrag('endpoint', e)} /></th>
+                  <th className="py-2 px-3 border-b relative select-none" style={{ width: colWidths.status }}>Status<div className="absolute top-0 right-0 h-full w-1 cursor-col-resize" onMouseDown={(e)=>startDrag('status', e)} /></th>
+                  <th className="py-2 px-3 border-b relative select-none" style={{ width: colWidths.type }}>Type<div className="absolute top-0 right-0 h-full w-1 cursor-col-resize" onMouseDown={(e)=>startDrag('type', e)} /></th>
+                  <th className="py-2 px-3 border-b relative select-none" style={{ width: colWidths.payload }}>Payload<div className="absolute top-0 right-0 h-full w-1 cursor-col-resize" onMouseDown={(e)=>startDrag('payload', e)} /></th>
+                  <th className="py-2 px-3 border-b relative select-none" style={{ width: colWidths.response }}>Response<div className="absolute top-0 right-0 h-full w-1 cursor-col-resize" onMouseDown={(e)=>startDrag('response', e)} /></th>
+                  <th className="py-2 px-3 border-b relative select-none" style={{ width: colWidths.fecha }}>Fecha<div className="absolute top-0 right-0 h-full w-1 cursor-col-resize" onMouseDown={(e)=>startDrag('fecha', e)} /></th>
+                </tr>
+              </thead>
+              <tbody>
+                {requestLog.map((row, idx) => (
+                  <tr key={idx} className="border-b hover:bg-indigo-50/40 even:bg-gray-50">
+                    <td className="py-2 px-3 font-mono text-[11px] break-all" style={{ width: colWidths.endpoint }}>{row.endpoint}</td>
+                    <td className="py-2 px-3" style={{ width: colWidths.status }}><span className={`${row.status>=500?'bg-red-100 text-red-700':row.status>=400?'bg-yellow-100 text-yellow-700':'bg-green-100 text-green-700'} px-2 py-1 rounded`}>{row.status || 0}</span></td>
+                    <td className="py-2 px-3" style={{ width: colWidths.type }}><span className="px-2 py-1 bg-gray-100 text-gray-700 rounded">{String(row.endpoint||'').split(' ')[0]}</span></td>
+                    <td className="py-2 px-3 font-mono text-[11px] break-all max-h-20 overflow-hidden cursor-pointer" style={{ width: colWidths.payload }} onClick={async ()=>{ setJsonModalTitle('Payload'); try { const full = await fetch(`${API_BASE}/streams/user-requests/${selected!.id}/events/${row.id}`).then(r=>r.json()); setJsonModalValue(full.payload); } catch { setJsonModalValue(row.payloadSnippet||''); } setJsonModalOpen(true); }}>{renderJsonPreview(row.payloadSnippet||'')}</td>
+                    <td className="py-2 px-3 font-mono text-[11px] break-all max-h-20 overflow-hidden cursor-pointer" style={{ width: colWidths.response }} onClick={async ()=>{ setJsonModalTitle('Response'); try { const full = await fetch(`${API_BASE}/streams/user-requests/${selected!.id}/events/${row.id}`).then(r=>r.json()); setJsonModalValue(full.response); } catch { setJsonModalValue(row.responseSnippet||''); } setJsonModalOpen(true); }}>{renderJsonPreview(row.responseSnippet||'')}</td>
+                    <td className="py-2 px-3 text-gray-500" style={{ width: colWidths.fecha }} title={new Date(row.date).toLocaleString()}>{formatElapsed(row.date)}</td>
+                  </tr>
+                ))}
+                {requestLog.length === 0 && (
+                  <tr>
+                    <td className="py-3 px-3 text-gray-500" colSpan={5}>Sin actividad</td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    )}
+    {jsonModalOpen && (
+      <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center">
+        <div className="bg-white w-full h-full rounded-none shadow-lg border border-gray-200 flex flex-col">
+          <div className="p-4 border-b border-gray-100 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <h3 className="text-lg font-semibold text-gray-900">{jsonModalTitle}</h3>
+            </div>
+            <div className="flex items-center gap-2">
+              <button onClick={()=>{ try { navigator.clipboard.writeText(JSON.stringify(jsonModalValue, null, 2)); } catch {} }} className="px-3 py-2 border border-gray-300 rounded text-xs">Copiar</button>
+              <button onClick={()=>setJsonModalOpen(false)} className="px-3 py-2 border border-gray-300 rounded text-xs">Cerrar</button>
+            </div>
+          </div>
+          <div className="flex items-center justify-between px-4 py-2 border-b">
+            <input type="text" placeholder="Buscar en JSON" className="px-2 py-1 border rounded text-xs w-64" onChange={(e)=>setJsonSearch(e.target.value)} />
+            <div className="flex items-center gap-2 text-xs">
+              <button onClick={()=>{ const next = new Set(expanded); next.add('root'); setExpanded(next); }} className="px-2 py-1 border rounded">Desplegar</button>
+              <button onClick={()=>setExpanded(new Set())} className="px-2 py-1 border rounded">Plegar</button>
+            </div>
+          </div>
+          <div className="flex-1 overflow-auto p-4">
+            {(() => { let obj: any = null; try { obj = typeof jsonModalValue === 'string' ? JSON.parse(jsonModalValue) : jsonModalValue; } catch { obj = jsonModalValue; }
+              const JsonNode = ({ value, path = 'root' }: { value: any; path?: string }) => {
+                const t = typeof value;
+                const isObj = t === 'object' && value !== null && !Array.isArray(value);
+                const isArr = Array.isArray(value);
+                const open = expanded.has(path);
+                const toggle = () => { const next = new Set(expanded); if (next.has(path)) next.delete(path); else next.add(path); setExpanded(next); };
+                const mark = (s: string) => {
+                  if (!jsonSearch) return (<span>{s}</span>);
+                  const idx = s.toLowerCase().indexOf(jsonSearch.toLowerCase());
+                  if (idx < 0) return (<span>{s}</span>);
+                  return (<span>{s.slice(0, idx)}<mark className="bg-yellow-200 text-gray-900">{s.slice(idx, idx+jsonSearch.length)}</mark>{s.slice(idx+jsonSearch.length)}</span>);
+                };
+                if (value === null) return (<span className="text-orange-600">null</span>);
+                if (t === 'string') return (<span className="text-green-700">"{mark(value)}"</span>);
+                if (t === 'number') return (<span className="text-purple-700">{String(value)}</span>);
+                if (t === 'boolean') return (<span className="text-orange-700">{String(value)}</span>);
+                if (isArr) {
+                  return (
+                    <div>
+                      <button onClick={toggle} className="inline-flex items-center gap-1 text-xs px-1 py-[1px] rounded hover:bg-gray-100 text-gray-600">{open?'▾':'▸'} Array({value.length})</button>
+                      {open && value.map((v:any,i:number)=>(<div key={i} className="pl-4"><span className="text-gray-400">{i}:</span> <JsonNode value={v} path={`${path}[${i}]`} /></div>))}
+                    </div>
+                  );
+                }
+                if (isObj) {
+                  const entries = Object.entries(value);
+                  return (
+                    <div>
+                      <button onClick={toggle} className="inline-flex items-center gap-1 text-xs px-1 py-[1px] rounded hover:bg-gray-100 text-gray-600">{open?'▾':'▸'} Object</button>
+                      {open && entries.map(([k,v]) => (
+                        <div key={k} className="pl-4">
+                          <span className="text-blue-700">"{mark(k)}"</span><span>: </span>
+                          <JsonNode value={v} path={`${path}.${k}`} />
+                        </div>
+                      ))}
+                    </div>
+                  );
+                }
+                return (<span className="text-gray-700">{String(value)}</span>);
+              };
+              return (<div className="text-xs leading-5 font-mono"><JsonNode value={obj} /></div>);
+            })()}
+          </div>
+        </div>
+      </div>
+    )}
     {subsModalOpen && (
       <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center">
         <div className="bg-white w-full max-w-2xl rounded-xl shadow-lg border border-gray-200">
@@ -691,5 +1002,6 @@ const UsersModule: React.FC = () => {
     </div>
   );
 };
+
 
 export default UsersModule;

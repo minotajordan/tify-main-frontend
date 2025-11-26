@@ -46,6 +46,7 @@ router.get('/', async (req, res) => {
       subscriptions: undefined // Remover del response
     }));
 
+    res.set('Cache-Control', 'public, max-age=30, stale-while-revalidate=300');
     res.json(channelsWithSubscription);
   } catch (error) {
     console.error('Error obteniendo canales:', error);
@@ -105,6 +106,7 @@ router.get('/search', async (req, res) => {
       skip,
       take: pageSize
     });
+    res.set('Cache-Control', 'public, max-age=10, stale-while-revalidate=60');
     res.json(channels);
   } catch (error) {
     res.status(500).json({ error: 'Error buscando canales' });
@@ -164,6 +166,7 @@ router.get('/:id', async (req, res) => {
       };
     }
 
+    res.set('Cache-Control', 'public, max-age=15, stale-while-revalidate=120');
     res.json(channelWithSubscription);
   } catch (error) {
     console.error('Error obteniendo canal:', error);
@@ -209,6 +212,7 @@ router.get('/:id/stats', async (req, res) => {
     });
     const approvers = new Set(approverUsers.map(a => a.userId)).size;
 
+    res.set('Cache-Control', 'public, max-age=5, stale-while-revalidate=30');
     res.json({ delivered, read, unread, subscribers, approvers });
   } catch (error) {
     console.error('Error obteniendo estadísticas de canal:', error);
@@ -244,6 +248,7 @@ router.get('/:id/subchannels', async (req, res) => {
       return { ...sc, memberCount: subsCount, counts: { approvers: approversCount, pending: pendingCount, sent: sentCount } };
     }));
 
+    res.set('Cache-Control', 'public, max-age=20, stale-while-revalidate=120');
     res.json({
       items: augmented,
       pagination: { page, limit, total, pages: Math.ceil(total / limit) }
@@ -289,6 +294,7 @@ router.get('/:id/subscriptions', async (req, res) => {
       prisma.channelSubscription.count({ where })
     ]);
 
+    res.set('Cache-Control', 'public, max-age=10, stale-while-revalidate=60');
     res.json({ items, pagination: { page, limit, total, pages: Math.ceil(total / limit) } });
   } catch (error) {
     console.error('Error listando suscriptores:', error);
@@ -326,6 +332,7 @@ router.get('/user/:userId/subscribed', async (req, res) => {
       subscribedAt: sub.subscribedAt
     }));
 
+    res.set('Cache-Control', 'public, max-age=30, stale-while-revalidate=300');
     res.json(channels);
   } catch (error) {
     console.error('Error obteniendo canales suscritos:', error);

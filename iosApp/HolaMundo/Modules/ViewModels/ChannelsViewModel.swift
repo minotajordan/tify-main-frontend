@@ -3,12 +3,23 @@ import SwiftUI
 class ChannelsViewModel: ObservableObject {
     @Published var channels: [Channel] = []
     @Published var favorites: [Channel] = []
+    @Published var myChannels: [Channel] = []
     @Published var isLoading = false
     @Published var isRefreshing = false
     @Published var errorMessage: String?
+    @Published var subscribedChannelsCount: Int = 0
+    @Published var messagesCount: Int = 0
+    @Published var ownedChannelsCount: Int = 0
+    private var bootstrapTask: Task<Void, Never>? = nil
     private var lastPublicLoadAt: Date?
     private var lastSubscribedLoadAt: Date?
     private let minReloadInterval: TimeInterval = 10
+    private var channelsTask: Task<Void, Never>? = nil
+    private var subsTask: Task<Void, Never>? = nil
+    private var favoritesTask: Task<Void, Never>? = nil
+    private var prefTask: Task<Void, Never>? = nil
+    private var subscribeTask: Task<Void, Never>? = nil
+    private var unsubscribeTask: Task<Void, Never>? = nil
 
     init() {
         if let cachedChannels = PersistenceManager.shared.loadChannels() {
@@ -17,113 +28,136 @@ class ChannelsViewModel: ObservableObject {
     }
     
     func loadChannels(isRefresh: Bool = false, publicOnly: Bool = false) {
-        if isRefresh {
-            isRefreshing = true
-        } else {
-            isLoading = channels.isEmpty
-        }
-        
-        if !isRefresh {
-            if publicOnly, let last = lastPublicLoadAt, Date().timeIntervalSince(last) < minReloadInterval {
-                errorMessage = nil
-                isLoading = false
-                return
-            }
-            if !publicOnly, let last = lastSubscribedLoadAt, Date().timeIntervalSince(last) < minReloadInterval {
-                errorMessage = nil
-                isLoading = false
-                return
-            }
-        }
-        
+        channelsTask?.cancel()
+        if isRefresh { isRefreshing = true } else { isLoading = channels.isEmpty }
         errorMessage = nil
-        
         let base = "\(APIConfig.baseURL)/channels"
         let urlStr = publicOnly ? "\(base)?isPublic=true" : "\(base)?userId=\(UserSession.shared.currentUserId)"
-        guard let url = URL(string: urlStr) else {
-            errorMessage = "URL inválida"
-            isLoading = false
-            isRefreshing = false
-            return
-        }
-        
-        URLSession.shared.dataTask(with: url) { [weak self] data, response, error in
-            DispatchQueue.main.async {
-                self?.isLoading = false
-                self?.isRefreshing = false
-                
-                if let error = error {
-                    if self?.channels.isEmpty ?? true {
-                        self?.errorMessage = "Error de conexión: \(error.localizedDescription)"
-                    }
-                    return
-                }
-                
-                guard let data = data else {
-                    if self?.channels.isEmpty ?? true {
-                        self?.errorMessage = "No se recibieron datos"
-                    }
-                    return
-                }
-                
-                do {
-                    let decoder = JSONDecoder()
-                    let newChannels = try decoder.decode([Channel].self, from: data)
-                    self?.channels = newChannels
+        guard let url = URL(string: urlStr) else { errorMessage = "URL inválida"; isLoading = false; isRefreshing = false; return }
+        channelsTask = Task { [weak self] in
+            do {
+                let (data, res) = try await URLSession.shared.data(from: url)
+                let ok = (res as? HTTPURLResponse)?.statusCode == 200
+                if !ok { throw URLError(.badServerResponse) }
+                let items = (try? JSONDecoder().decode([Channel].self, from: data)) ?? []
+                await MainActor.run {
+                    self?.channels = items
                     if publicOnly { self?.lastPublicLoadAt = Date() } else { self?.lastSubscribedLoadAt = Date() }
-                    PersistenceManager.shared.saveChannels(newChannels)
-                } catch {
-                    if self?.channels.isEmpty ?? true {
-                        self?.errorMessage = "Lo sentimos, te invitamos a cerrar la app y volver a abrirla. Lamentamos de todo corazón las molestias."
-                    }
-                    print("Error detallado: \(error)")
+                    self?.isLoading = false
+                    self?.isRefreshing = false
+                    PersistenceManager.shared.saveChannels(items)
+                }
+            } catch {
+                await MainActor.run { [weak self] in
+                    if self?.channels.isEmpty ?? true { self?.errorMessage = "Error de conexión" }
+                    self?.isLoading = false
+                    self?.isRefreshing = false
                 }
             }
-        }.resume()
+        }
+    }
+
+    func loadBootstrap() {
+        bootstrapTask?.cancel()
+        isLoading = channels.isEmpty
+        errorMessage = nil
+        guard let url = URL(string: "\(APIConfig.baseURL)/app/bootstrap?userId=\(UserSession.shared.currentUserId)") else { isLoading = false; return }
+        bootstrapTask = Task { [weak self] in
+            do {
+                let (data, res) = try await URLSession.shared.data(from: url)
+                let status = (res as? HTTPURLResponse)?.statusCode ?? 0
+                if status == 304 {
+                    await MainActor.run { self?.isLoading = false }
+                    return
+                }
+                guard status == 200 else { return }
+                let objAny = try JSONSerialization.jsonObject(with: data)
+                guard let obj = objAny as? [String: Any] else { return }
+                var items: [Channel] = []
+                var favs: [Channel] = []
+                var mine: [Channel] = []
+                var sc = 0, mc = 0, oc = 0
+                if let chData = obj["channels"], let chJSON = try? JSONSerialization.data(withJSONObject: chData) {
+                    items = (try? JSONDecoder().decode([Channel].self, from: chJSON)) ?? []
+                }
+                if let favData = obj["favorites"], let favJSON = try? JSONSerialization.data(withJSONObject: favData) {
+                    favs = (try? JSONDecoder().decode([Channel].self, from: favJSON)) ?? []
+                }
+                if let myData = obj["myChannels"], let myJSON = try? JSONSerialization.data(withJSONObject: myData) {
+                    mine = (try? JSONDecoder().decode([Channel].self, from: myJSON)) ?? []
+                }
+                if let stats = obj["stats"] as? [String: Any] {
+                    sc = stats["subscribedChannelsCount"] as? Int ?? 0
+                    mc = stats["messagesCount"] as? Int ?? 0
+                    oc = stats["ownedChannelsCount"] as? Int ?? 0
+                }
+                await MainActor.run {
+                    self?.channels = items
+                    self?.favorites = favs
+                    self?.myChannels = mine
+                    self?.subscribedChannelsCount = sc
+                    self?.messagesCount = mc
+                    self?.ownedChannelsCount = oc
+                    self?.isLoading = false
+                    PersistenceManager.shared.saveChannels(items)
+                }
+            } catch {
+                await MainActor.run { [weak self] in
+                    self?.isLoading = false
+                    self?.errorMessage = "Error de conexión"
+                }
+            }
+        }
     }
 
     func loadSubscribedChannels(isRefresh: Bool = false) {
+        subsTask?.cancel()
         if isRefresh { isRefreshing = true } else { isLoading = channels.isEmpty }
         errorMessage = nil
-        Task {
-            let subs = await fetchSubscribedChannels()
+        subsTask = Task { [weak self] in
+            let subs = await self?.fetchSubscribedChannels() ?? []
             let ids = Set(subs.map { $0.id })
-            channels = channels.map { c in
-                Channel(
-                    id: c.id,
-                    title: c.title,
-                    description: c.description,
-                    icon: c.icon,
-                    memberCount: c.memberCount,
-                    parentId: c.parentId,
-                    isPublic: c.isPublic,
-                    isSubscribed: ids.contains(c.id),
-                    isFavorite: c.isFavorite,
-                    last24hCount: c.last24hCount,
-                    subchannels: c.subchannels
-                )
+            await MainActor.run {
+                guard let self = self else { return }
+                self.channels = self.channels.map { c in
+                    Channel(
+                        id: c.id,
+                        title: c.title,
+                        description: c.description,
+                        icon: c.icon,
+                        memberCount: c.memberCount,
+                        parentId: c.parentId,
+                        isPublic: c.isPublic,
+                        isSubscribed: ids.contains(c.id),
+                        isFavorite: c.isFavorite,
+                        last24hCount: c.last24hCount,
+                        subchannels: c.subchannels,
+                        lastMessagePreview: c.lastMessagePreview,
+                        lastMessageAt: c.lastMessageAt,
+                        unreadCount: c.unreadCount
+                    )
+                }
+                self.favorites = self.channels.filter { ($0.isFavorite ?? false) }
+                self.isLoading = false
+                self.isRefreshing = false
+                self.lastSubscribedLoadAt = Date()
+                UserDefaults.standard.set(Date().timeIntervalSince1970, forKey: "cache_channels_subs_ts")
             }
-            favorites = channels.filter { ($0.isFavorite ?? false) }
-            isLoading = false
-            isRefreshing = false
-            lastSubscribedLoadAt = Date()
-            UserDefaults.standard.set(Date().timeIntervalSince1970, forKey: "cache_channels_subs_ts")
         }
     }
 
     func loadFavorites() {
-        guard let url = URL(string: "\(APIConfig.baseURL)/channels/user/\(UserSession.shared.currentUserId)/subscribed") else { return }
-        URLSession.shared.dataTask(with: url) { [weak self] data, _, _ in
-            DispatchQueue.main.async {
-                guard let data = data else { return }
-                if let items = try? JSONDecoder().decode([Channel].self, from: data) {
-                    self?.favorites = items.filter { ($0.isFavorite ?? false) && $0.parentId == nil }
-                }
+        favoritesTask?.cancel()
+        favoritesTask = Task { [weak self] in
+            let items = await self?.fetchSubscribedChannels() ?? []
+            await MainActor.run {
+                self?.favorites = items.filter { ($0.isFavorite ?? false) && $0.parentId == nil }
             }
-        }.resume()
+        }
     }
 
     func toggleFavorite(channelId: String, makeFavorite: Bool) {
+        prefTask?.cancel()
         guard let url = URL(string: "\(APIConfig.baseURL)/subscriptions/preferences/favorite") else { return }
         var req = URLRequest(url: url)
         req.httpMethod = "PATCH"
@@ -134,21 +168,38 @@ class ChannelsViewModel: ObservableObject {
             "isFavorite": makeFavorite
         ]
         req.httpBody = try? JSONSerialization.data(withJSONObject: body)
-        URLSession.shared.dataTask(with: req) { [weak self] _, response, _ in
-            DispatchQueue.main.async {
-                if let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) {
-                    if let idx = self?.channels.firstIndex(where: { $0.id == channelId }) {
-                        var c = self!.channels[idx]
-                        c = Channel(id: c.id, title: c.title, description: c.description, icon: c.icon, memberCount: c.memberCount, parentId: c.parentId, isPublic: c.isPublic, isSubscribed: c.isSubscribed, isFavorite: makeFavorite, last24hCount: c.last24hCount, subchannels: c.subchannels)
+        prefTask = Task { [weak self] in
+            do {
+                let (_, response) = try await URLSession.shared.data(for: req)
+                guard (response as? HTTPURLResponse).map({ (200..<300).contains($0.statusCode) }) ?? false else { return }
+                await MainActor.run {
+                    if let idx = self?.channels.firstIndex(where: { $0.id == channelId }), let c0 = self?.channels[idx] {
+                        let c = Channel(
+                            id: c0.id,
+                            title: c0.title,
+                            description: c0.description,
+                            icon: c0.icon,
+                            memberCount: c0.memberCount,
+                            parentId: c0.parentId,
+                            isPublic: c0.isPublic,
+                            isSubscribed: c0.isSubscribed,
+                            isFavorite: makeFavorite,
+                            last24hCount: c0.last24hCount,
+                            subchannels: c0.subchannels,
+                            lastMessagePreview: c0.lastMessagePreview,
+                            lastMessageAt: c0.lastMessageAt,
+                            unreadCount: c0.unreadCount
+                        )
                         self?.channels[idx] = c
                     }
-                    self?.loadFavorites()
                 }
-            }
-        }.resume()
+                self?.loadFavorites()
+            } catch { /* silencioso */ }
+        }
     }
 
     func unsubscribe(channelId: String, completion: @escaping (Bool)->Void) {
+        unsubscribeTask?.cancel()
         guard let url = URL(string: "\(APIConfig.baseURL)/subscriptions") else { completion(false); return }
         var req = URLRequest(url: url)
         req.httpMethod = "DELETE"
@@ -158,48 +209,68 @@ class ChannelsViewModel: ObservableObject {
             "channelId": channelId
         ]
         req.httpBody = try? JSONSerialization.data(withJSONObject: body)
-        URLSession.shared.dataTask(with: req) { [weak self] _, response, error in
-            DispatchQueue.main.async {
-                let ok = (error == nil) && (response as? HTTPURLResponse).map { (200..<300).contains($0.statusCode) } ?? false
-                if ok { self?.loadSubscribedChannels(isRefresh: true) }
-                completion(ok)
+        unsubscribeTask = Task { [weak self] in
+            do {
+                let (_, response) = try await URLSession.shared.data(for: req)
+                let ok = (response as? HTTPURLResponse).map { (200..<300).contains($0.statusCode) } ?? false
+                await MainActor.run {
+                    if ok {
+                        self?.loadSubscribedChannels(isRefresh: true)
+                        self?.loadBootstrap()
+                    }
+                    completion(ok)
+                }
+            } catch {
+                await MainActor.run { completion(false) }
             }
-        }.resume()
+        }
     }
 
     func subscribe(channelId: String, completion: @escaping (Bool)->Void) {
+        subscribeTask?.cancel()
         guard let url = URL(string: "\(APIConfig.baseURL)/subscriptions") else { completion(false); return }
         var req = URLRequest(url: url)
         req.httpMethod = "POST"
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
         let body: [String: Any] = ["userId": UserSession.shared.currentUserId, "channelId": channelId]
         req.httpBody = try? JSONSerialization.data(withJSONObject: body)
-        URLSession.shared.dataTask(with: req) { [weak self] data, response, error in
-            DispatchQueue.main.async {
+        subscribeTask = Task { [weak self] in
+            do {
+                let (data, response) = try await URLSession.shared.data(for: req)
                 if let http = response as? HTTPURLResponse, http.statusCode == 403,
-                   let data = data,
                    let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
                    (obj["code"] as? String) == "USER_DISABLED" {
-                    self?.errorMessage = "Tu cuenta está deshabilitada. Contacta al administrador."
-                    completion(false)
+                    await MainActor.run { self?.errorMessage = "Tu cuenta está deshabilitada. Contacta al administrador." }
+                    await MainActor.run { completion(false) }
                     return
                 }
-                let ok = (error == nil) && (response as? HTTPURLResponse).map { (200..<300).contains($0.statusCode) } ?? false
-                if ok { self?.loadSubscribedChannels(isRefresh: true) }
-                completion(ok)
+                let ok = (response as? HTTPURLResponse).map { (200..<300).contains($0.statusCode) } ?? false
+                await MainActor.run {
+                    if ok {
+                        self?.loadSubscribedChannels(isRefresh: true)
+                        self?.loadBootstrap()
+                    }
+                    completion(ok)
+                }
+            } catch {
+                await MainActor.run { completion(false) }
             }
-        }.resume()
+        }
     }
 
     func canGuestSubscribe(completion: @escaping (Bool)->Void) {
         if UserSession.shared.isVerified { completion(true); return }
         guard let url = URL(string: "\(APIConfig.baseURL)/subscriptions/user/\(UserSession.shared.currentUserId)") else { completion(false); return }
-        URLSession.shared.dataTask(with: url) { data, _, _ in
-            DispatchQueue.main.async {
-                let count = (try? JSONDecoder().decode([Subscription].self, from: data ?? Data()))?.count ?? 0
-                completion(count < 1)
+        Task {
+            do {
+                let (data, res) = try await URLSession.shared.data(from: url)
+                guard (res as? HTTPURLResponse)?.statusCode == 200 else { await MainActor.run { completion(false) }; return }
+                let count = (try? JSONDecoder().decode([Subscription].self, from: data))?.count ?? 0
+                await MainActor.run { completion(count < 1) }
+            } catch {
+                await MainActor.run { completion(false) }
             }
-        }.resume()
+        }
     }
 
     private func fetchChannels(publicOnly: Bool) async -> [Channel] {

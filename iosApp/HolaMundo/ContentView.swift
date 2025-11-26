@@ -15,6 +15,9 @@ struct Channel: Identifiable, Codable, Equatable {
     let isFavorite: Bool?
     let last24hCount: Int?
     let subchannels: [Subchannel]?
+    let lastMessagePreview: String?
+    let lastMessageAt: String?
+    let unreadCount: Int?
     
     struct Subchannel: Identifiable, Codable, Equatable {
         let id: String
@@ -436,8 +439,7 @@ struct ChannelsView: View {
     @State private var showHistoryDrawer = false
     @State private var searchHistory: [String] = []
     @State private var selectedTopTab = 0
-    @State private var navChannelId: String? = nil
-    @State private var navNavigate = false
+    
     @AppStorage("app_appearance") private var appAppearance: String = "system"
     @State private var pendingSubscribeChannelId: String? = nil
     @State private var showLoginFromList = false
@@ -540,6 +542,15 @@ struct ChannelsView: View {
     
     @ViewBuilder private func channelsList() -> some View {
         List {
+            Section {
+                HStack {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Mis canales").font(.headline)
+                        Text("Suscripciones: \(viewModel.subscribedChannelsCount) • Mensajes: \(viewModel.messagesCount) • Propios: \(viewModel.ownedChannelsCount)").font(.caption).foregroundColor(.secondary)
+                    }
+                    Spacer()
+                }
+            }
             if isSearchMode {
                 Section {
                     HStack {
@@ -583,28 +594,36 @@ struct ChannelsView: View {
                 }
             }
             if selectedTopTab == 0 {
-                ForEach(viewModel.channels.filter { $0.parentId == nil && ($0.isSubscribed ?? false) }) { channel in
-                    ChannelCard(channel: channel, isSearchMode: isSearchMode)
-                        .environmentObject(viewModel)
-                        .listRowInsets(EdgeInsets(top: 3, leading: 3, bottom: 3, trailing: 3))
+                let ordered = viewModel.myChannels.sorted { a, b in
+                    let au = a.unreadCount ?? 0
+                    let bu = b.unreadCount ?? 0
+                    if au != bu { return au > bu }
+                    let ad = parseDate(a.lastMessageAt ?? "") ?? Date.distantPast
+                    let bd = parseDate(b.lastMessageAt ?? "") ?? Date.distantPast
+                    return ad > bd
+                }
+                ForEach(ordered) { channel in
+                    NavigationLink(destination: ChannelDetailView(channelId: channel.id, channelTitle: channel.title)) {
+                        chatRow(channel: channel)
+                    }
+                    .buttonStyle(PlainButtonStyle())
+                    .listRowInsets(EdgeInsets(top: 3, leading: 3, bottom: 3, trailing: 3))
                 }
             } else if selectedTopTab == 2 {
                 Section {
                     let trending = viewModel.channels.filter { $0.parentId == nil }.sorted { ($0.last24hCount ?? 0) > ($1.last24hCount ?? 0) }
                     ForEach(trending) { ch in
-                        HStack(spacing: 10) {
-                            Image(systemName: ch.icon).foregroundColor(.blue)
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text(ch.title).font(.subheadline)
-                                Text("Inscritos 24h: \(ch.last24hCount ?? 0)").font(.caption).foregroundColor(.secondary)
+                        NavigationLink(destination: ChannelDetailView(channelId: ch.id, channelTitle: ch.title)) {
+                            HStack(spacing: 10) {
+                                Image(systemName: ch.icon).foregroundColor(.blue)
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text(ch.title).font(.subheadline)
+                                    Text("Inscritos 24h: \(ch.last24hCount ?? 0)").font(.caption).foregroundColor(.secondary)
+                                }
+                                Spacer()
                             }
-                            Spacer()
                         }
-                        .contentShape(Rectangle())
-                        .onTapGesture { navChannelId = ch.id; navNavigate = true }
-                        .background(
-                            NavigationLink(destination: ChannelDetailView(channelId: navChannelId ?? "", channelTitle: ""), isActive: $navNavigate) { EmptyView() }
-                        )
+                        .buttonStyle(PlainButtonStyle())
                     }
                 }
             } else {
@@ -613,20 +632,16 @@ struct ChannelsView: View {
                     Section(header: HStack { Image(systemName: city.icon).foregroundColor(.blue); Text(city.title) }) {
                         if let subs = city.subchannels, !subs.isEmpty {
                             ForEach(subs) { sub in
-                                HStack(spacing: 10) { Image(systemName: sub.icon).foregroundColor(.green); Text(sub.title); Spacer() }
-                                                .contentShape(Rectangle())
-                                                .onTapGesture { navChannelId = sub.id; navNavigate = true }
-                                                .background(
-                                                    NavigationLink(destination: ChannelDetailView(channelId: navChannelId ?? "", channelTitle: ""), isActive: $navNavigate) { EmptyView() }
-                                                )
+                                NavigationLink(destination: ChannelDetailView(channelId: sub.id, channelTitle: sub.title)) {
+                                    HStack(spacing: 10) { Image(systemName: sub.icon).foregroundColor(.green); Text(sub.title); Spacer() }
+                                }
+                                .buttonStyle(PlainButtonStyle())
                             }
                         } else {
-                            HStack(spacing: 10) { Image(systemName: city.icon).foregroundColor(.blue); Text(city.title); Spacer() }
-                                            .contentShape(Rectangle())
-                                            .onTapGesture { navChannelId = city.id; navNavigate = true }
-                                            .background(
-                                                NavigationLink(destination: ChannelDetailView(channelId: navChannelId ?? "", channelTitle: ""), isActive: $navNavigate) { EmptyView() }
-                                            )
+                            NavigationLink(destination: ChannelDetailView(channelId: city.id, channelTitle: city.title)) {
+                                HStack(spacing: 10) { Image(systemName: city.icon).foregroundColor(.blue); Text(city.title); Spacer() }
+                            }
+                            .buttonStyle(PlainButtonStyle())
                         }
                     }
                 }
@@ -657,13 +672,76 @@ struct ChannelsView: View {
                 if isSearchMode {
                     searchChannels()
                 } else {
-                    viewModel.loadSubscribedChannels(isRefresh: true)
+                    viewModel.loadBootstrap()
                 }
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
                     continuation.resume()
                 }
             }
         }
+    }
+
+    @ViewBuilder private func chatRow(channel: Channel) -> some View {
+        HStack(spacing: 12) {
+            ZStack {
+                Circle().fill(Color(.systemGray5)).frame(width: 42, height: 42)
+                Image(systemName: channel.icon).foregroundColor(.blue)
+            }
+            VStack(alignment: .leading, spacing: 4) {
+                HStack {
+                    Text(channel.title).font(.subheadline).fontWeight(.semibold).lineLimit(1)
+                    if channel.isFavorite == true { Image(systemName: "star.fill").foregroundColor(.yellow).font(.caption) }
+                    Spacer()
+                    if let t = channel.lastMessageAt, let timeStr = formatTime(t) {
+                        Text(timeStr).font(.caption).foregroundColor(.secondary)
+                    }
+                }
+                HStack(spacing: 6) {
+                    Text(channel.lastMessagePreview ?? (channel.description ?? ""))
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                        .lineLimit(1)
+                    Spacer()
+                    if let unread = channel.unreadCount, unread > 0 {
+                        Text(String(unread))
+                            .font(.caption2)
+                            .foregroundColor(.white)
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
+                            .background(Color.green)
+                            .cornerRadius(10)
+                    }
+                }
+            }
+        }
+    }
+
+    private func formatTime(_ isoOrDateString: String) -> String? {
+        let iso = ISO8601DateFormatter()
+        iso.formatOptions = [.withInternetDateTime, .withDashSeparatorInDate, .withColonSeparatorInTime, .withTimeZone, .withFractionalSeconds]
+        let df = DateFormatter()
+        df.locale = Locale(identifier: "en_US_POSIX")
+        df.dateFormat = "yyyy-MM-dd'T'HH:mm:ss"
+        var s = isoOrDateString
+        if s.contains(" ") { s = s.replacingOccurrences(of: " ", with: "T") }
+        let d = iso.date(from: s) ?? df.date(from: s)
+        guard let date = d else { return nil }
+        let out = DateFormatter()
+        out.locale = Locale.current
+        out.dateStyle = .none
+        out.timeStyle = .short
+        return out.string(from: date)
+    }
+
+    private func parseDate(_ isoOrDateString: String) -> Date? {
+        let iso = ISO8601DateFormatter()
+        iso.formatOptions = [.withInternetDateTime, .withDashSeparatorInDate, .withColonSeparatorInTime, .withTimeZone, .withFractionalSeconds]
+        let df = DateFormatter()
+        df.locale = Locale(identifier: "en_US_POSIX")
+        df.dateFormat = "yyyy-MM-dd'T'HH:mm:ss"
+        var s = isoOrDateString
+        if s.contains(" ") { s = s.replacingOccurrences(of: " ", with: "T") }
+        return iso.date(from: s) ?? df.date(from: s)
     }
     
     var body: some View {
@@ -796,20 +874,8 @@ struct ChannelsView: View {
             .onAppear {
                 searchHistory = PersistenceManager.shared.loadSearchHistory()
                 let verified = UserSession.shared.isVerified || UserDefaults.standard.bool(forKey: "user_is_verified")
-                if verified {
-                    let cachedSubsCount = (PersistenceManager.shared.loadSubscriptions()?.count ?? 0)
-                    let hasSubscribedLocal = cachedSubsCount > 0 || viewModel.channels.contains { $0.parentId == nil && ($0.isSubscribed ?? false) }
-                    selectedTopTab = hasSubscribedLocal ? 0 : 2
-                    viewModel.loadSubscribedChannels(isRefresh: true)
-                    if !hasSubscribedLocal {
-                        viewModel.loadChannels(isRefresh: true, publicOnly: true)
-                        DispatchQueue.main.async { viewModel.channels.sort { ($0.last24hCount ?? 0) > ($1.last24hCount ?? 0) } }
-                    }
-                } else {
-                    selectedTopTab = 2
-                    viewModel.loadChannels(isRefresh: true, publicOnly: true)
-                    DispatchQueue.main.async { viewModel.channels.sort { ($0.last24hCount ?? 0) > ($1.last24hCount ?? 0) } }
-                }
+                selectedTopTab = verified ? 0 : 2
+                viewModel.loadBootstrap()
                 if !viewModel.isLoading && !didNotifyInitialReady {
                     didNotifyInitialReady = true
                     onInitialDataReady?()
@@ -845,14 +911,12 @@ struct ChannelsView: View {
             .onChange(of: selectedTopTab) { tab in
                 switch tab {
                 case 0:
-                    viewModel.loadSubscribedChannels(isRefresh: true)
+                    viewModel.loadBootstrap()
                 case 1:
                     viewModel.loadChannels(isRefresh: true, publicOnly: true)
                 default:
                     viewModel.loadChannels(isRefresh: true, publicOnly: true)
-                    DispatchQueue.main.async {
-                        viewModel.channels.sort { ($0.last24hCount ?? 0) > ($1.last24hCount ?? 0) }
-                    }
+                    DispatchQueue.main.async { viewModel.channels.sort { ($0.last24hCount ?? 0) > ($1.last24hCount ?? 0) } }
                 }
             }
             .sheet(isPresented: $showSettingsSheet) {
@@ -1834,7 +1898,7 @@ class EmergencyMonitor: ObservableObject {
         let bodyBase = message.content
         content.body = formatted != nil ? "\(bodyBase) • \(formatted!)" : bodyBase
         if UIApplication.shared.applicationState == .active {
-            NotificationRouter.shared.targetMessageId = message.id
+            NotificationCenter.default.post(name: Notification.Name("DeepLinkRoute"), object: nil, userInfo: ["channelId": message.channelId, "messageId": message.id])
             return
         }
         if let url = URL(string: "\(APIConfig.baseURL)/channels/\(message.channelId)") {
@@ -1953,7 +2017,7 @@ class EmergencyEmitterClient: ObservableObject {
         let bodyBase = event.content
         content.body = formatted != nil ? "\(bodyBase) • \(formatted!)" : bodyBase
         if UIApplication.shared.applicationState == .active {
-            NotificationRouter.shared.targetMessageId = event.id
+            NotificationCenter.default.post(name: Notification.Name("DeepLinkRoute"), object: nil, userInfo: ["channelId": event.channelId, "messageId": event.id])
             return
         }
         if let url = URL(string: "\(APIConfig.baseURL)/channels/\(event.channelId)") {
@@ -2314,8 +2378,8 @@ struct ContentView: View {
     @AppStorage("app_appearance") private var appAppearance: String = "system"
     @StateObject private var emergencyMonitor = EmergencyMonitor()
     @StateObject private var emitterClient = EmergencyEmitterClient(baseURL: "http://192.168.3.149:8766")
-    @StateObject private var router = NotificationRouter.shared
     @State private var showDeepLink = false
+    @State private var deepLinkMessageId: String? = nil
     
     var body: some View {
         ZStack {
@@ -2354,18 +2418,26 @@ struct ContentView: View {
                 }
             }
         }
+        .onReceive(NotificationCenter.default.publisher(for: Notification.Name("DeepLinkRoute"))) { note in
+            if let info = note.userInfo,
+               let _ = info["channelId"] as? String {
+                let messageId = info["messageId"] as? String
+                deepLinkMessageId = messageId
+                showDeepLink = messageId != nil
+            }
+        }
         .onDisappear {
             emergencyMonitor.stop()
             emitterClient.stop()
         }
         .sheet(isPresented: $showDeepLink) {
-            if let mid = router.targetMessageId {
-                MessageDetailView(messageId: mid) { router.reset(); showDeepLink = false }
+            if let mid = deepLinkMessageId {
+                MessageDetailView(messageId: mid) { deepLinkMessageId = nil; showDeepLink = false }
             }
         }
 
-        .onChange(of: router.targetMessageId) { _ in
-            showDeepLink = router.targetMessageId != nil
+        .onChange(of: deepLinkMessageId) { _ in
+            showDeepLink = deepLinkMessageId != nil
         }
     }
 }

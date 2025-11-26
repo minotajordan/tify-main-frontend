@@ -17,6 +17,7 @@
 		CA44A46A2ED65B9F00338707 /* SearchViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA44A4692ED65B9E00338707 /* SearchViewModel.swift */; };
 		CA44A46C2ED65D1A00338707 /* AuthViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA44A46B2ED65D1800338707 /* AuthViewModel.swift */; };
 		CA44A4702ED65D8800338707 /* LoginView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA44A46F2ED65D8700338707 /* LoginView.swift */; };
+		CA44A4762ED6612400338707 /* NotificationRouter.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA44A4752ED6611A00338707 /* NotificationRouter.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -31,6 +32,7 @@
 		CA44A4692ED65B9E00338707 /* SearchViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SearchViewModel.swift; sourceTree = "<group>"; };
 		CA44A46B2ED65D1800338707 /* AuthViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthViewModel.swift; sourceTree = "<group>"; };
 		CA44A46F2ED65D8700338707 /* LoginView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LoginView.swift; sourceTree = "<group>"; };
+		CA44A4752ED6611A00338707 /* NotificationRouter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationRouter.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXGroup section */
@@ -55,6 +57,7 @@
 		CA44A45B2ED655D300338707 /* Modules */ = {
 			isa = PBXGroup;
 			children = (
+				CA44A4712ED65F7200338707 /* Services */,
 				CA44A46E2ED65D8100338707 /* Views */,
 				CA44A4612ED6563F00338707 /* ViewModels */,
 				CA44A45C2ED655FC00338707 /* Components */,
@@ -89,6 +92,14 @@
 				CA44A46F2ED65D8700338707 /* LoginView.swift */,
 			);
 			path = Views;
+			sourceTree = "<group>";
+		};
+		CA44A4712ED65F7200338707 /* Services */ = {
+			isa = PBXGroup;
+			children = (
+				CA44A4752ED6611A00338707 /* NotificationRouter.swift */,
+			);
+			path = Services;
 			sourceTree = "<group>";
 		};
 		CAF32BFE44C298E20DFC28FB = {
@@ -159,6 +170,7 @@
 				CA44A4652ED6565500338707 /* ChannelsViewModel.swift in Sources */,
 				CA44A4602ED6563700338707 /* ChannelRow.swift in Sources */,
 				CA44A46A2ED65B9F00338707 /* SearchViewModel.swift in Sources */,
+				CA44A4762ED6612400338707 /* NotificationRouter.swift in Sources */,
 				CA44A45E2ED6561D00338707 /* ChannelCard.swift in Sources */,
 				225E4EC030CC1F847F5C051B /* App.swift in Sources */,
 				6EDDBF52AFE7291EAB180145 /* ContentView.swift in Sources */,

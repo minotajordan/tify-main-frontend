@@ -8,7 +8,18 @@ import {
   DeliveryMethod
 } from '../types';
 
-const API_BASE = 'http://localhost:3333/api';
+export const API_BASE = (() => {
+  if (typeof window !== 'undefined') {
+    const injected = (window as any).__API_BASE__;
+    if (injected) return injected;
+    const stored = localStorage.getItem('tify_api_base');
+    if (stored) return stored;
+  }
+  if (typeof process !== 'undefined' && (process as any).env && (process as any).env.TIFY_API_BASE) {
+    return (process as any).env.TIFY_API_BASE;
+  }
+  return 'http://192.168.3.149:3333/api';
+})();
 export function getAuthToken(): string | null {
   return typeof localStorage !== 'undefined' ? localStorage.getItem('tify_token') : null;
 }
@@ -28,22 +39,39 @@ export function getCurrentUserId(): string | null {
 async function request<T>(url: string, options?: RequestInit): Promise<T> {
   const token = typeof localStorage !== 'undefined' ? localStorage.getItem('tify_token') : null;
   const headers = { ...(options?.headers || {}), ...(token ? { Authorization: `Bearer ${token}` } : {}) } as any;
+  const startedAt = Date.now();
+  if (typeof window !== 'undefined') {
+    try {
+      window.dispatchEvent(new CustomEvent('tify:request', { detail: { url, options: { ...options, headers }, startedAt } }));
+    } catch {}
+  }
   const res = await fetch(url, { ...options, headers });
   if (!res.ok) {
     let payload: any = null;
     try { payload = await res.json(); } catch {}
     const text = payload?.error || (await res.text().catch(() => '')) || 'Error';
     if (typeof window !== 'undefined') {
-      window.dispatchEvent(new CustomEvent('tify:error', { detail: { status: res.status, code: payload?.code, error: text, url } }));
+      window.dispatchEvent(new CustomEvent('tify:error', { detail: { status: res.status, code: payload?.code, error: text, url, payload, finishedAt: Date.now(), startedAt } }));
     }
     throw new Error(`HTTP ${res.status}: ${text}`);
   }
-  return await res.json();
+  const json = await res.json();
+  if (typeof window !== 'undefined') {
+    try {
+      window.dispatchEvent(new CustomEvent('tify:response', { detail: { url, status: res.status, payload: options?.body, response: json, finishedAt: Date.now(), startedAt } }));
+    } catch {}
+  }
+  return json;
 }
 
 export const api = {
 
   getCurrentUserId: () => getCurrentUserId() || '',
+  getBootstrap: async (userId?: string): Promise<any> => {
+    const uid = userId || getCurrentUserId();
+    const query = new URLSearchParams(uid ? { userid: uid } : {} as any);
+    return request(`${API_BASE}/app/bootstrap?${query.toString()}`);
+  },
   // --- Channels ---
   getChannels: async (params?: { search?: string, isPublic?: boolean }): Promise<Channel[]> => {
     const uid = getCurrentUserId();
