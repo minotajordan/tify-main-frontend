@@ -9,7 +9,9 @@ class SearchViewModel: ObservableObject {
 
     func loadSuggestions() {
         guard let url = URL(string: "\(APIConfig.baseURL)/channels?isPublic=true") else { return }
-        URLSession.shared.dataTask(with: url) { [weak self] data, _, _ in
+        var req = URLRequest(url: url)
+        req.setValue(UserSession.shared.currentUserId, forHTTPHeaderField: "X-User-Id")
+        URLSession.shared.dataTask(with: req) { [weak self] data, _, _ in
             DispatchQueue.main.async {
                 guard let data = data else { return }
                 if let items = try? JSONDecoder().decode([Channel].self, from: data) {

@@ -76,6 +76,8 @@ app.use((req, res, next) => {
   try {
     if (req.path.startsWith('/api/streams/user-requests') || req.path === '/health') return next();
     const getActorId = () => {
+      const hdr = req.headers['x-user-id'] || req.headers['x-actor-id'];
+      if (hdr) return String(hdr);
       const auth = req.headers.authorization || '';
       const [, token] = auth.split(' ');
       if (token) {

@@ -444,6 +444,11 @@ struct ChannelsView: View {
     @State private var pendingSubscribeChannelId: String? = nil
     @State private var showLoginFromList = false
     @State private var showSubscribeErrorAlert = false
+    @State private var showTappedAlert = false
+    @State private var tappedChannel: Channel? = nil
+    @State private var tappedChannelAlertMessage: String = ""
+    @State private var tappedChannelDetail: ChannelDetail? = nil
+    @State private var tappedChannelError: String? = nil
     
     @ViewBuilder private func bottomFloatingBar() -> some View {
         HStack(spacing: 10) {
@@ -603,7 +608,14 @@ struct ChannelsView: View {
                     return ad > bd
                 }
                 ForEach(ordered) { channel in
-                    NavigationLink(destination: ChannelDetailView(channelId: channel.id, channelTitle: channel.title)) {
+                    Button(action: {
+                        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                        tappedChannel = channel
+                        Task {
+                            tappedChannelAlertMessage = await channelAlertMessage(channel)
+                            showTappedAlert = true
+                        }
+                    }) {
                         MyChannelCard(channel: channel)
                     }
                     .buttonStyle(PlainButtonStyle())
@@ -667,6 +679,11 @@ struct ChannelsView: View {
             Button("OK", role: .cancel) {}
         } message: {
             Text("Intenta más tarde.")
+        }
+        .alert("Canal seleccionado", isPresented: $showTappedAlert) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(tappedChannelAlertMessage)
         }
         .refreshable {
             await withCheckedContinuation { continuation in
@@ -744,6 +761,64 @@ struct ChannelsView: View {
         if s.contains(" ") { s = s.replacingOccurrences(of: " ", with: "T") }
         return iso.date(from: s) ?? df.date(from: s)
     }
+
+    private func channelAlertMessage(_ c: Channel) async -> String {
+    await fetchTappedChannelDetail(c.id)
+    
+    let title = c.title
+    let id = c.id
+    let lastDur: String = {
+        guard let s = c.lastMessageAt, let d = parseDate(s) else { return "sin actividad" }
+        return d.timeAgoString()
+    }()
+    let c24 = c.last24hCount ?? 0
+    let url = "\(APIConfig.baseURL)/channels/\(id)"
+    
+    var msg = "\(title)\nID: \(id)\nURL: \(url)\nHola Bienvenido a TIfy.pro\nActividad: \(lastDur)\nMensajes 24h: \(c24)"
+    
+    if let err = tappedChannelError, !err.isEmpty {
+        msg += "\nError: \(err)"
+    } else if let det = tappedChannelDetail {
+        msg += "\nDescripción: \(det.description)\nMiembros: \(det.memberCount)\nPrivacidad: \(det.isPublic ? "Público" : "Privado")"
+    }
+    
+    return msg
+}
+
+    private func fetchTappedChannelDetail(_ id: String) async {
+        tappedChannelError = nil
+        tappedChannelDetail = nil
+        
+        guard let url = URL(string: "\(APIConfig.baseURL)/channels/\(id)?userId=\(UserSession.shared.currentUserId)") else { return }
+        
+        do {
+            var req = URLRequest(url: url)
+            req.setValue(UserSession.shared.currentUserId, forHTTPHeaderField: "X-User-Id")
+            let (data, response) = try await URLSession.shared.data(for: req)
+        
+        guard let http = response as? HTTPURLResponse else { return }
+        
+        if http.statusCode == 200 {
+            if let detail = try? JSONDecoder().decode(ChannelDetail.self, from: data) {
+                await MainActor.run {
+                    tappedChannelDetail = detail
+                    PersistenceManager.shared.saveChannelDetail(detail)
+                }
+            }
+        } else {
+            if let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+               let err = obj["error"] as? String {
+                await MainActor.run {
+                    tappedChannelError = err
+                }
+            }
+        }
+    } catch {
+        await MainActor.run {
+            tappedChannelError = error.localizedDescription
+        }
+    }
+}
 
     struct MyChannelCard: View {
         let channel: Channel
@@ -1072,7 +1147,9 @@ struct ChannelsView: View {
             searching = false
             return
         }
-        let task = URLSession.shared.dataTask(with: url) { data, _, _ in
+        var req = URLRequest(url: url)
+        req.setValue(UserSession.shared.currentUserId, forHTTPHeaderField: "X-User-Id")
+        let task = URLSession.shared.dataTask(with: req) { data, _, _ in
             DispatchQueue.main.async {
                 self.searching = false
                 guard let data = data else { return }

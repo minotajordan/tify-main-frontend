@@ -37,7 +37,9 @@ class ChannelsViewModel: ObservableObject {
         guard let url = URL(string: urlStr) else { errorMessage = "URL inválida"; isLoading = false; isRefreshing = false; return }
         channelsTask = Task { [weak self] in
             do {
-                let (data, res) = try await URLSession.shared.data(from: url)
+                var req = URLRequest(url: url)
+                req.setValue(UserSession.shared.currentUserId, forHTTPHeaderField: "X-User-Id")
+                let (data, res) = try await URLSession.shared.data(for: req)
                 let ok = (res as? HTTPURLResponse)?.statusCode == 200
                 if !ok { throw URLError(.badServerResponse) }
                 let items = (try? JSONDecoder().decode([Channel].self, from: data)) ?? []
@@ -283,7 +285,9 @@ class ChannelsViewModel: ObservableObject {
         let urlStr = publicOnly ? "\(base)?isPublic=true" : "\(base)?userId=\(UserSession.shared.currentUserId)"
         guard let url = URL(string: urlStr) else { return [] }
         do {
-            let (data, res) = try await URLSession.shared.data(from: url)
+            var req = URLRequest(url: url)
+            req.setValue(UserSession.shared.currentUserId, forHTTPHeaderField: "X-User-Id")
+            let (data, res) = try await URLSession.shared.data(for: req)
             guard (res as? HTTPURLResponse)?.statusCode == 200 else { return [] }
             return try JSONDecoder().decode([Channel].self, from: data)
         } catch { return [] }
