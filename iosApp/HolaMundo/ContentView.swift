@@ -449,6 +449,7 @@ struct ChannelsView: View {
     @State private var tappedChannelAlertMessage: String = ""
     @State private var tappedChannelDetail: ChannelDetail? = nil
     @State private var tappedChannelError: String? = nil
+    @State private var goToChannel = false
     
     @ViewBuilder private func bottomFloatingBar() -> some View {
         HStack(spacing: 10) {
@@ -609,12 +610,11 @@ struct ChannelsView: View {
                 }
                 ForEach(ordered) { channel in
                     Button(action: {
+                        goToChannel = false
                         UIImpactFeedbackGenerator(style: .light).impactOccurred()
                         tappedChannel = channel
-                        Task {
-                            tappedChannelAlertMessage = await channelAlertMessage(channel)
-                            showTappedAlert = true
-                        }
+                        tappedChannelAlertMessage = channelAlertMessageSync(channel)
+                        showTappedAlert = true
                     }) {
                         MyChannelCard(channel: channel)
                     }
@@ -681,10 +681,16 @@ struct ChannelsView: View {
             Text("Intenta más tarde.")
         }
         .alert("Canal seleccionado", isPresented: $showTappedAlert) {
-            Button("OK", role: .cancel) {}
+            Button("Abrir canal") { showTappedAlert = false; goToChannel = true }
         } message: {
             Text(tappedChannelAlertMessage)
         }
+        .background(
+            NavigationLink(
+                destination: ChannelDetailView(channelId: tappedChannel?.id ?? "", channelTitle: tappedChannel?.title ?? ""),
+                isActive: $goToChannel
+            ) { EmptyView() }
+        )
         .refreshable {
             await withCheckedContinuation { continuation in
                 if isSearchMode {
@@ -760,6 +766,27 @@ struct ChannelsView: View {
         var s = isoOrDateString
         if s.contains(" ") { s = s.replacingOccurrences(of: " ", with: "T") }
         return iso.date(from: s) ?? df.date(from: s)
+    }
+
+    private func channelAlertMessageSync(_ c: Channel) -> String {
+        DispatchQueue.global(qos: .utility).async {
+            Task { await fetchTappedChannelDetail(c.id) }
+        }
+        let title = c.title
+        let id = c.id
+        let lastDur: String = {
+            guard let s = c.lastMessageAt, let d = parseDate(s) else { return "sin actividad" }
+            return d.timeAgoString()
+        }()
+        let c24 = c.last24hCount ?? 0
+        let url = "\(APIConfig.baseURL)/channels/\(id)"
+        var msg = "\(title)\nID: \(id)\nURL: \(url)\nHola Bienvenido a TIfy.pro\nActividad: \(lastDur)\nMensajes 24h: \(c24)"
+        if let err = tappedChannelError, !err.isEmpty {
+            msg += "\nError: \(err)"
+        } else if let det = tappedChannelDetail {
+            msg += "\nDescripción: \(det.description)\nMiembros: \(det.memberCount)\nPrivacidad: \(det.isPublic ? "Público" : "Privado")"
+        }
+        return msg
     }
 
     private func channelAlertMessage(_ c: Channel) async -> String {
