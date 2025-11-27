@@ -104,4 +104,3 @@ class ProfileViewModel: ObservableObject {
         }.resume()
     }
 }
-

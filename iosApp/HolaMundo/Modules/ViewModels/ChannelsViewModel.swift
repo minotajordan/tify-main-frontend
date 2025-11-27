@@ -26,6 +26,9 @@ class ChannelsViewModel: ObservableObject {
         if let cachedChannels = PersistenceManager.shared.loadChannels() {
             self.channels = cachedChannels
         }
+        if let cachedMy = PersistenceManager.shared.loadMyChannels() {
+            self.myChannels = cachedMy
+        }
     }
     
     func loadChannels(isRefresh: Bool = false, publicOnly: Bool = false) {
@@ -98,18 +101,28 @@ class ChannelsViewModel: ObservableObject {
                 await MainActor.run {
                     self?.channels = items
                     self?.favorites = favs
-                    self?.myChannels = mine
+                    let old = self?.myChannels ?? []
+                    let a = old.sorted { $0.id < $1.id }
+                    let b = mine.sorted { $0.id < $1.id }
+                    if a != b {
+                        self?.myChannels = mine
+                        PersistenceManager.shared.saveMyChannels(mine)
+                    }
                     self?.subscribedChannelsCount = sc
                     self?.messagesCount = mc
                     self?.ownedChannelsCount = oc
                     self?.isLoading = false
                     PersistenceManager.shared.saveChannels(items)
                 }
-                self?.prefetchChannelDetails(for: mine)
+                var merged: [Channel] = []
+                merged.append(contentsOf: mine)
+                merged.append(contentsOf: favs)
+                merged.append(contentsOf: items)
             } catch {
                 await MainActor.run { [weak self] in
                     self?.isLoading = false
-                    self?.errorMessage = "Error de conexión"
+                    let hasCached = !(self?.channels.isEmpty ?? true) || !(self?.myChannels.isEmpty ?? true)
+                    if !hasCached { self?.errorMessage = "Error de conexión" } else { self?.errorMessage = nil }
                 }
             }
         }
@@ -149,7 +162,7 @@ class ChannelsViewModel: ObservableObject {
                 UserDefaults.standard.set(Date().timeIntervalSince1970, forKey: "cache_channels_subs_ts")
             }
             let subscribed = subs
-            self?.prefetchChannelDetails(for: subscribed)
+            self?.prefetchChannelDetails(for: subscribed, limit: subscribed.count)
         }
     }
 
@@ -160,6 +173,8 @@ class ChannelsViewModel: ObservableObject {
             await MainActor.run {
                 self?.favorites = items.filter { ($0.isFavorite ?? false) && $0.parentId == nil }
             }
+            let favs = items.filter { ($0.isFavorite ?? false) }
+            self?.prefetchChannelDetails(for: favs, limit: favs.count)
         }
     }
 
@@ -306,24 +321,52 @@ class ChannelsViewModel: ObservableObject {
         } catch { return [] }
     }
 
-    private func prefetchChannelDetails(for channels: [Channel], limit: Int = 16) {
+    private func prefetchChannelDetails(for channels: [Channel], limit: Int = 24, concurrency: Int = 4) {
         detailsPrefetchTask?.cancel()
         guard !channels.isEmpty, !UserSession.shared.currentUserId.isEmpty else { return }
-        let ids = Array(channels.map { $0.id }.prefix(limit))
+        let sorted = channels.sorted { a, b in
+            let ac = a.last24hCount ?? 0
+            let bc = b.last24hCount ?? 0
+            if ac != bc { return ac > bc }
+            let ad = ISO8601DateFormatter().date(from: a.lastMessageAt ?? "") ?? Date.distantPast
+            let bd = ISO8601DateFormatter().date(from: b.lastMessageAt ?? "") ?? Date.distantPast
+            return ad > bd
+        }
+        var uniq: [String] = []
+        for c in sorted { if !uniq.contains(c.id) { uniq.append(c.id) } }
+        let ids = Array(uniq.prefix(limit))
         detailsPrefetchTask = Task { [weak self] in
-            for id in ids {
+            var i = 0
+            while i < ids.count {
                 if Task.isCancelled { break }
-                if PersistenceManager.shared.loadChannelDetail(id: id) != nil { continue }
-                guard let url = URL(string: "\(APIConfig.baseURL)/channels/\(id)?userId=\(UserSession.shared.currentUserId)") else { continue }
-                do {
-                    let (data, res) = try await URLSession.shared.data(from: url)
-                    guard (res as? HTTPURLResponse)?.statusCode == 200 else { continue }
-                    if let detail = try? JSONDecoder().decode(ChannelDetail.self, from: data) {
-                        PersistenceManager.shared.saveChannelDetail(detail)
+                let end = min(i + concurrency, ids.count)
+                let slice = Array(ids[i..<end])
+                await withTaskGroup(of: Void.self) { group in
+                    for id in slice {
+                        group.addTask {
+                            if let _ = PersistenceManager.shared.loadChannelDetail(id: id) {
+                                guard let u = URL(string: "\(APIConfig.baseURL)/messages/channel/\(id)?limit=100") else { return }
+                                do {
+                                    let (data, res) = try await URLSession.shared.data(from: u)
+                                    guard (res as? HTTPURLResponse)?.statusCode == 200 else { return }
+                                    if let msgs = try? JSONDecoder().decode([Message].self, from: data) {
+                                        PersistenceManager.shared.saveMessages(channelId: id, messages: msgs)
+                                    }
+                                } catch { }
+                                return
+                            }
+                            guard let url = URL(string: "\(APIConfig.baseURL)/channels/\(id)?userId=\(UserSession.shared.currentUserId)") else { return }
+                            do {
+                                let (data, res) = try await URLSession.shared.data(from: url)
+                                guard (res as? HTTPURLResponse)?.statusCode == 200 else { return }
+                                if let detail = try? JSONDecoder().decode(ChannelDetail.self, from: data) {
+                                    PersistenceManager.shared.saveChannelDetail(detail)
+                                }
+                            } catch { }
+                        }
                     }
-                } catch {
-                    continue
                 }
+                i = end
             }
             _ = self
         }

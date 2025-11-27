@@ -17,6 +17,7 @@ const appRoutes = require('./routes/app');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+const MONITORING_PORT = process.env.MONITORING_PORT || 3334;
 const IS_DEV = process.env.NODE_ENV !== 'production';
 const sseClients = new Map();
 const sseEventStore = new Map();
@@ -52,6 +53,11 @@ app.use(cors({
 // Body parsing
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
+
+// Metrics monitoring
+const { metricsMiddleware, getSnapshot, resetMetrics } = require('../monitoring/metricsMiddleware');
+const { startMonitoringServer } = require('../monitoring/monitoringServer');
+app.use(metricsMiddleware);
 
 // SSE: stream user request activity in real-time
 app.get('/api/streams/user-requests/:id', (req, res) => {
@@ -217,4 +223,9 @@ app.use('*', (req, res) => {
 app.listen(PORT, () => {
   console.log(`🚀 Servidor ejecutándose en puerto ${PORT}`);
   console.log(`📊 Health check: http://localhost:${PORT}/health`);
+  try {
+    startMonitoringServer({ getSnapshot, resetMetrics, port: MONITORING_PORT });
+  } catch (e) {
+    console.error('Failed to start monitoring server', e);
+  }
 });

@@ -216,8 +216,10 @@ const Dashboard: React.FC<DashboardProps> = ({ onChangeView }) => {
           </div>
         </div>
 
-        
+      
       </div>
+
+      
     </div>
   );
 };

@@ -851,7 +851,7 @@ const UsersModule: React.FC = () => {
           <div className="flex-1 overflow-auto p-4">
             <table className="min-w-full text-xs table-fixed">
               <thead>
-                <tr className="text-left text-gray-600 sticky top-0 bg-white/90 backdrop-blur border-b shadow-sm">
+                <tr className="text-left text-gray-600 sticky top-0 bg-white/90 backdrop-blur border-b shadow-sm relative before:content-[''] before:absolute before:top-0 before:left-0 before:right-0 before:h-8 before:-translate-y-full before:bg-gradient-to-b before:from-white/0 before:to-white/95 before:pointer-events-none before:[backdrop-filter:blur(50px)]">
                   <th className="py-2 px-3 border-b relative select-none" style={{ width: colWidths.endpoint }}>Endpoint<div className="absolute top-0 right-0 h-full w-1 cursor-col-resize" onMouseDown={(e)=>startDrag('endpoint', e)} /></th>
                   <th className="py-2 px-3 border-b relative select-none" style={{ width: colWidths.status }}>Status<div className="absolute top-0 right-0 h-full w-1 cursor-col-resize" onMouseDown={(e)=>startDrag('status', e)} /></th>
                   <th className="py-2 px-3 border-b relative select-none" style={{ width: colWidths.type }}>Type<div className="absolute top-0 right-0 h-full w-1 cursor-col-resize" onMouseDown={(e)=>startDrag('type', e)} /></th>

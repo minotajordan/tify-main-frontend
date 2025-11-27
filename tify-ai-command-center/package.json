@@ -4,8 +4,8 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "(lsof -ti:3003 | xargs kill -9 2>/dev/null || true) && vite",
-    "build": "(lsof -ti:3003 | xargs kill -9 2>/dev/null || true) && vite build",
+    "dev": "(lsof -ti:3001 | lsof -ti:3002 | lsof -ti:3003 | xargs kill -9 2>/dev/null || true) && vite",
+    "build": "(lsof -ti:3001 | lsof -ti:3002 | lsof -ti:3003 | xargs kill -9 2>/dev/null || true) && vite build",
     "preview": "vite preview",
     "lint": "eslint . --ext .ts,.tsx --max-warnings=0",
     "lint:fix": "eslint . --ext .ts,.tsx --fix",

@@ -11,7 +11,8 @@ import {
   Settings,
   Menu,
   X,
-  LogOut
+  LogOut,
+  RadioTower
 } from 'lucide-react';
 import { DEFAULT_AVATAR, DEFAULT_ORG_NAME } from './constants';
 import { useI18n } from './i18n';
@@ -23,8 +24,9 @@ import MessageCenter from './components/MessageCenter';
 import ApprovalQueue from './components/ApprovalQueue';
 import AIChat from './components/AIChat';
 import UsersModule from './components/Users.tsx';
+import MonitoringDashboard from './components/monitoring/MonitoringDashboard';
 
-type View = 'dashboard' | 'channels' | 'messages' | 'approvals' | 'users' | 'ai';
+type View = 'dashboard' | 'channels' | 'messages' | 'approvals' | 'users' | 'ai' | 'monitoring';
 type BreadcrumbItem = { label: string; view?: View };
 
 const App: React.FC = () => {
@@ -78,6 +80,7 @@ const App: React.FC = () => {
       case 'approvals': return <ApprovalQueue />;
       case 'users': return <UsersModule />;
       case 'ai': return <AIChat />;
+      case 'monitoring': return <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100"><h3 className="text-lg font-semibold text-gray-900 mb-4">{t('nav.monitoring')}</h3><div className="mt-2"><MonitoringDashboard /></div></div>;
       default: return <div className="p-8 text-center text-gray-500">{t('module.underConstruction')}</div>;
     }
   };
@@ -187,6 +190,7 @@ const App: React.FC = () => {
 
         <nav className="flex-1 p-4 space-y-2 overflow-y-auto">
           <NavItem view="dashboard" icon={LayoutDashboard} label={t('nav.dashboard')} />
+          <NavItem view="monitoring" icon={RadioTower} label={t('nav.monitoring')} />
           <NavItem view="channels" icon={GitMerge} label={t('nav.channels')} />
           <NavItem view="messages" icon={MessageSquare} label={t('nav.messages')} />
           <NavItem view="approvals" icon={CheckCircle} label={t('nav.approvals')} count={currentUser?.pendingApprovalsCount} />

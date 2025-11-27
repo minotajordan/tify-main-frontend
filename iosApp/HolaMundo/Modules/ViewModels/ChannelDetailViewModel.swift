@@ -13,7 +13,14 @@ class ChannelDetailViewModel: ObservableObject {
     @Published var passwordInput = ""
     @Published var passwordValidationResult: Bool?
     
+    private var inFlightIds: Set<String> = []
+    private var lastLoadTs: [String: TimeInterval] = [:]
+    
     func loadChannelDetail(channelId: String, isRefresh: Bool = false) {
+        let now = Date().timeIntervalSince1970
+        if let last = lastLoadTs[channelId], isRefresh, now - last < 5 { return }
+        if inFlightIds.contains(channelId) { return }
+        inFlightIds.insert(channelId)
         if channelDetail == nil {
             if let cachedDetail = PersistenceManager.shared.loadChannelDetail(id: channelId) {
                 self.channelDetail = cachedDetail
@@ -39,6 +46,7 @@ class ChannelDetailViewModel: ObservableObject {
             DispatchQueue.main.async {
                 self?.isLoading = false
                 self?.isRefreshing = false
+                self?.inFlightIds.remove(channelId)
                 
                 if let error = error {
                     if self?.channelDetail == nil {
@@ -57,8 +65,10 @@ class ChannelDetailViewModel: ObservableObject {
                 do {
                     let decoder = JSONDecoder()
                     let newDetail = try decoder.decode(ChannelDetail.self, from: data)
-                    self?.channelDetail = newDetail
                     PersistenceManager.shared.saveChannelDetail(newDetail)
+                    let merged = PersistenceManager.shared.loadChannelDetail(id: channelId) ?? newDetail
+                    self?.channelDetail = merged
+                    self?.lastLoadTs[channelId] = now
 
                     self?.isPrimarySubchannel = false
                     if let parentId = newDetail.parentId {
@@ -83,12 +93,22 @@ class ChannelDetailViewModel: ObservableObject {
     }
 
     private func loadSubchannelDetail(_ subId: String) {
+        let now = Date().timeIntervalSince1970
+        if let last = lastLoadTs[subId], now - last < 5 { if let cached = PersistenceManager.shared.loadChannelDetail(id: subId) { self.activeSubchannelDetail = cached }; return }
+        if inFlightIds.contains(subId) { if let cached = PersistenceManager.shared.loadChannelDetail(id: subId) { self.activeSubchannelDetail = cached }; return }
+        inFlightIds.insert(subId)
+        if let cached = PersistenceManager.shared.loadChannelDetail(id: subId) {
+            self.activeSubchannelDetail = cached
+        }
         guard let url = URL(string: "\(APIConfig.baseURL)/channels/\(subId)?userId=\(UserSession.shared.currentUserId)") else { return }
         URLSession.shared.dataTask(with: url) { [weak self] data, _, _ in
             DispatchQueue.main.async {
                 guard let data = data, let detail = try? JSONDecoder().decode(ChannelDetail.self, from: data) else { return }
-                self?.activeSubchannelDetail = detail
                 PersistenceManager.shared.saveChannelDetail(detail)
+                let merged = PersistenceManager.shared.loadChannelDetail(id: subId) ?? detail
+                self?.activeSubchannelDetail = merged
+                self?.lastLoadTs[subId] = now
+                self?.inFlightIds.remove(subId)
             }
         }.resume()
     }

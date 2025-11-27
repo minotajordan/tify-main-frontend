@@ -48,6 +48,7 @@ struct Message: Identifiable, Codable {
         let username: String
         let fullName: String
     }
+
     
     // MARK: - Parsing robusto de fechas (cubre todos los casos de Supabase)
     private func parseDate(from string: String) -> Date? {
@@ -191,6 +192,7 @@ struct Subscription: Identifiable, Codable {
     }
 }
 
+
 // MARK: - Date Extensions
 extension Date {
     func timeAgoString() -> String {
@@ -328,39 +330,186 @@ class PersistenceManager {
     static let shared = PersistenceManager()
     
     private let channelsKey = "cached_channels"
+    private let myChannelsKey = "cached_my_channels"
     private let channelDetailsPrefix = "cached_channel_"
+    private let channelMessagesPrefix = "cached_messages_"
     private let userProfileKey = "cached_user_profile"
     private let subscriptionsKey = "cached_subscriptions"
     private let searchHistoryKey = "cached_search_history"
     
-    func saveChannels(_ channels: [Channel]) {
-        if let encoded = try? JSONEncoder().encode(channels) {
-            UserDefaults.standard.set(encoded, forKey: channelsKey)
+    private func baseDir() -> URL? {
+        let fm = FileManager.default
+        if let dir = fm.urls(for: .applicationSupportDirectory, in: .userDomainMask).first {
+            let url = dir.appendingPathComponent("tify-cache", isDirectory: true)
+            if !fm.fileExists(atPath: url.path) {
+                try? fm.createDirectory(at: url, withIntermediateDirectories: true)
+            }
+            return url
         }
+        return nil
+    }
+    
+    private func fileURL(_ name: String) -> URL? {
+        baseDir()?.appendingPathComponent(name + ".json")
+    }
+    
+    func saveChannels(_ channels: [Channel]) {
+        guard let encoded = try? JSONEncoder().encode(channels) else { return }
+        if let url = fileURL(channelsKey) { try? encoded.write(to: url, options: .atomic) }
+        UserDefaults.standard.set(encoded, forKey: channelsKey)
     }
     
     func loadChannels() -> [Channel]? {
-        guard let data = UserDefaults.standard.data(forKey: channelsKey),
-              let channels = try? JSONDecoder().decode([Channel].self, from: data) else {
-            return nil
+        let dec = JSONDecoder()
+        if let url = fileURL(channelsKey), let data = try? Data(contentsOf: url), let arr = try? dec.decode([Channel].self, from: data) {
+            return arr
         }
-        return channels
+        if let data = UserDefaults.standard.data(forKey: channelsKey), let arr = try? dec.decode([Channel].self, from: data) {
+            return arr
+        }
+        return nil
+    }
+
+    func saveMyChannels(_ channels: [Channel]) {
+        guard let encoded = try? JSONEncoder().encode(channels) else { return }
+        if let url = fileURL(myChannelsKey) { try? encoded.write(to: url, options: .atomic) }
+        UserDefaults.standard.set(encoded, forKey: myChannelsKey)
+    }
+    
+    func loadMyChannels() -> [Channel]? {
+        let dec = JSONDecoder()
+        if let url = fileURL(myChannelsKey), let data = try? Data(contentsOf: url), let arr = try? dec.decode([Channel].self, from: data) {
+            return arr
+        }
+        if let data = UserDefaults.standard.data(forKey: myChannelsKey), let arr = try? dec.decode([Channel].self, from: data) {
+            return arr
+        }
+        return nil
     }
     
     func saveChannelDetail(_ detail: ChannelDetail) {
         let key = channelDetailsPrefix + detail.id
-        if let encoded = try? JSONEncoder().encode(detail) {
-            UserDefaults.standard.set(encoded, forKey: key)
+        var merged = detail
+        if let old = loadChannelDetail(id: detail.id) {
+            var combined: [Message] = []
+            let newIds = Set(detail.messages.map { $0.id })
+            combined.append(contentsOf: detail.messages)
+            for m in old.messages { if !newIds.contains(m.id) { combined.append(m) } }
+            merged = ChannelDetail(
+                id: detail.id,
+                title: detail.title,
+                description: detail.description,
+                icon: detail.icon,
+                memberCount: detail.memberCount,
+                isPublic: detail.isPublic,
+                parentId: detail.parentId,
+                messages: combined,
+                owner: detail.owner,
+                subchannels: detail.subchannels,
+                approvalPolicy: detail.approvalPolicy,
+                isSubscribed: detail.isSubscribed
+            )
+        } else {
+            merged = ChannelDetail(
+                id: detail.id,
+                title: detail.title,
+                description: detail.description,
+                icon: detail.icon,
+                memberCount: detail.memberCount,
+                isPublic: detail.isPublic,
+                parentId: detail.parentId,
+                messages: detail.messages,
+                owner: detail.owner,
+                subchannels: detail.subchannels,
+                approvalPolicy: detail.approvalPolicy,
+                isSubscribed: detail.isSubscribed
+            )
         }
+        guard let encoded = try? JSONEncoder().encode(merged) else { return }
+        if let url = fileURL(key) { try? encoded.write(to: url, options: .atomic) }
+        UserDefaults.standard.set(encoded, forKey: key)
+        saveMessages(channelId: detail.id, messages: merged.messages)
     }
     
     func loadChannelDetail(id: String) -> ChannelDetail? {
         let key = channelDetailsPrefix + id
-        guard let data = UserDefaults.standard.data(forKey: key),
-              let detail = try? JSONDecoder().decode(ChannelDetail.self, from: data) else {
-            return nil
+        let dec = JSONDecoder()
+        func mergeMessages(_ base: ChannelDetail) -> ChannelDetail {
+            let extra = loadMessages(channelId: id) ?? []
+            if extra.isEmpty { return base }
+            let ids = Set(base.messages.map { $0.id })
+            let combined = base.messages + extra.filter { !ids.contains($0.id) }
+            return ChannelDetail(
+                id: base.id,
+                title: base.title,
+                description: base.description,
+                icon: base.icon,
+                memberCount: base.memberCount,
+                isPublic: base.isPublic,
+                parentId: base.parentId,
+                messages: combined,
+                owner: base.owner,
+                subchannels: base.subchannels,
+                approvalPolicy: base.approvalPolicy,
+                isSubscribed: base.isSubscribed
+            )
         }
-        return detail
+        if let url = fileURL(key), let data = try? Data(contentsOf: url), let val = try? dec.decode(ChannelDetail.self, from: data) {
+            return mergeMessages(val)
+        }
+        if let data = UserDefaults.standard.data(forKey: key), let val = try? dec.decode(ChannelDetail.self, from: data) {
+            return mergeMessages(val)
+        }
+        return nil
+    }
+
+    private func parseMessageDate(_ raw: String) -> Date {
+        var s = raw
+        if s.contains(" ") { s = s.replacingOccurrences(of: " ", with: "T") }
+        let iso = ISO8601DateFormatter()
+        iso.formatOptions = [.withInternetDateTime, .withDashSeparatorInDate, .withColonSeparatorInTime, .withTimeZone, .withFractionalSeconds]
+        return iso.date(from: s) ?? (ISO8601DateFormatter().date(from: s) ?? Date.distantPast)
+    }
+
+    func saveMessages(channelId: String, messages: [Message]) {
+        let key = channelMessagesPrefix + channelId
+        let newIds = Set(messages.map { $0.id })
+        var combined: [Message] = []
+        combined.append(contentsOf: messages)
+        if let old = loadMessages(channelId: channelId) {
+            for m in old { if !newIds.contains(m.id) { combined.append(m) } }
+            func same(_ a: [Message], _ b: [Message]) -> Bool {
+                if a.count != b.count { return false }
+                for i in 0..<a.count {
+                    let x = a[i], y = b[i]
+                    if x.id != y.id { return false }
+                    if x.content != y.content { return false }
+                    if x.createdAt != y.createdAt { return false }
+                    if x.viewsCount != y.viewsCount { return false }
+                    if x.viewedByMe != y.viewedByMe { return false }
+                    if x.expiresAt != y.expiresAt { return false }
+                    if x.eventAt != y.eventAt { return false }
+                    if x.publishedAt != y.publishedAt { return false }
+                }
+                return true
+            }
+            if same(old, combined) { return }
+        }
+        guard let encoded = try? JSONEncoder().encode(combined) else { return }
+        if let url = fileURL(key) { try? encoded.write(to: url, options: .atomic) }
+        UserDefaults.standard.set(encoded, forKey: key)
+    }
+
+    func loadMessages(channelId: String) -> [Message]? {
+        let key = channelMessagesPrefix + channelId
+        let dec = JSONDecoder()
+        if let url = fileURL(key), let data = try? Data(contentsOf: url), let arr = try? dec.decode([Message].self, from: data) {
+            return arr
+        }
+        if let data = UserDefaults.standard.data(forKey: key), let arr = try? dec.decode([Message].self, from: data) {
+            return arr
+        }
+        return nil
     }
     
     func saveUserProfile(_ profile: UserProfile) {
@@ -450,6 +599,10 @@ struct ChannelsView: View {
     @State private var tappedChannelDetail: ChannelDetail? = nil
     @State private var tappedChannelError: String? = nil
     @State private var goToChannel = false
+    @State private var showChannelOptionsSheet = false
+    @State private var sheetChannel: Channel? = nil
+    @State private var sheetDragOffset: CGFloat = 0
+    @State private var longPressingChannelId: String? = nil
     
     @ViewBuilder private func bottomFloatingBar() -> some View {
         HStack(spacing: 10) {
@@ -545,6 +698,102 @@ struct ChannelsView: View {
             }
         }
     }
+
+    @ViewBuilder private func channelOptionsOverlay() -> some View {
+        if showChannelOptionsSheet, let ch = sheetChannel {
+            ZStack(alignment: .center) {
+                Rectangle()
+                    .fill(.ultraThinMaterial)
+                    .ignoresSafeArea()
+                    .onTapGesture { withAnimation { showChannelOptionsSheet = false; sheetDragOffset = 0 } }
+
+                VStack(spacing: 14) {
+                    Capsule().fill(Color.secondary.opacity(0.4)).frame(width: 42, height: 5).padding(.top, 8)
+
+                    VStack(spacing: 10) {
+                        HStack(spacing: 12) {
+                            ZStack {
+                                Circle().fill(Color.white.opacity(0.06)).frame(width: 54, height: 54)
+                                Image(systemName: ch.icon).foregroundColor(.cyan)
+                            }
+                            VStack(alignment: .leading, spacing: 6) {
+                                Text(ch.title).font(.headline)
+                                if let det = PersistenceManager.shared.loadChannelDetail(id: ch.id) {
+                                    Text(det.description).font(.subheadline).foregroundColor(.secondary).lineLimit(2)
+                                    HStack(spacing: 8) {
+                                        Label(String(det.memberCount), systemImage: "person.2.fill").font(.caption).foregroundColor(.secondary)
+                                        Label(det.isPublic ? "Público" : "Privado", systemImage: det.isPublic ? "globe" : "lock").font(.caption).foregroundColor(.secondary)
+                                    }
+                                } else {
+                                    Text((ch.description ?? ch.lastMessagePreview ?? "Sin descripción")).font(.subheadline).foregroundColor(.secondary).lineLimit(2)
+                                }
+                            }
+                            Spacer()
+                        }
+                        .padding(.horizontal)
+                        .padding(.vertical, 12)
+                        .background(
+                            ZStack {
+                                RoundedRectangle(cornerRadius: 18).fill(.ultraThinMaterial)
+                                LinearGradient(colors: [Color.cyan.opacity(0.12), Color.purple.opacity(0.10)], startPoint: .topLeading, endPoint: .bottomTrailing).blur(radius: 16)
+                            }
+                        )
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 18)
+                                .stroke(LinearGradient(colors: [Color.cyan, Color.purple], startPoint: .topLeading, endPoint: .bottomTrailing), lineWidth: 1)
+                        )
+                    }
+
+                    VStack(spacing: 10) {
+                        Button(action: {
+                            withAnimation { showChannelOptionsSheet = false }
+                            viewModel.unsubscribe(channelId: ch.id) { _ in }
+                        }) {
+                            HStack { Image(systemName: "bell.slash"); Text("Desuscribirme del canal"); Spacer() }
+                                .padding(.horizontal, 16)
+                                .padding(.vertical, 12)
+                        }
+
+                        Button(action: {
+                            var hidden = Set(UserDefaults.standard.stringArray(forKey: "hidden_channel_ids") ?? [])
+                            hidden.insert(ch.id)
+                            UserDefaults.standard.set(Array(hidden), forKey: "hidden_channel_ids")
+                            withAnimation { showChannelOptionsSheet = false }
+                        }) {
+                            HStack { Image(systemName: "eye.slash"); Text("Ocultar canal"); Spacer() }
+                                .padding(.horizontal, 16)
+                                .padding(.vertical, 12)
+                        }
+
+                        Button(action: {
+                            var disabled = Set(UserDefaults.standard.stringArray(forKey: "notifications_disabled_ids") ?? [])
+                            disabled.insert(ch.id)
+                            UserDefaults.standard.set(Array(disabled), forKey: "notifications_disabled_ids")
+                            withAnimation { showChannelOptionsSheet = false }
+                        }) {
+                            HStack { Image(systemName: "bell.slash.fill"); Text("Desactivar notificaciones"); Spacer() }
+                                .padding(.horizontal, 16)
+                                .padding(.vertical, 12)
+                        }
+
+                    }
+                    .frame(width: min(UIScreen.main.bounds.width * 0.66, 320), alignment: .leading)
+                    .padding(.bottom, 12)
+                }
+                .frame(width: min(UIScreen.main.bounds.width * 0.88, 420))
+                .offset(y: sheetDragOffset)
+                .gesture(
+                    DragGesture()
+                        .onChanged { v in sheetDragOffset = max(v.translation.height, 0) }
+                        .onEnded { v in
+                            if v.translation.height > 140 { withAnimation { showChannelOptionsSheet = false; sheetDragOffset = 0 } }
+                            else { withAnimation { sheetDragOffset = 0 } }
+                        }
+                )
+                .transition(.move(edge: .bottom))
+            }
+        }
+    }
     
     @ViewBuilder private func channelsList() -> some View {
         List {
@@ -600,7 +849,8 @@ struct ChannelsView: View {
                 }
             }
             if selectedTopTab == 0 {
-                let ordered = viewModel.myChannels.sorted { a, b in
+                let hiddenIds = Set(UserDefaults.standard.stringArray(forKey: "hidden_channel_ids") ?? [])
+                let ordered = viewModel.myChannels.filter { !hiddenIds.contains($0.id) }.sorted { a, b in
                     let au = a.unreadCount ?? 0
                     let bu = b.unreadCount ?? 0
                     if au != bu { return au > bu }
@@ -610,21 +860,32 @@ struct ChannelsView: View {
                 }
                 ForEach(ordered) { channel in
                     Button(action: {
+                        // Aquí se lanza la view detalles del canal
                         goToChannel = false
                         UIImpactFeedbackGenerator(style: .light).impactOccurred()
                         tappedChannel = channel
-                        tappedChannelAlertMessage = channelAlertMessageSync(channel)
-                        showTappedAlert = true
+                        goToChannel = true
                     }) {
                         MyChannelCard(channel: channel)
+                            .scaleEffect(longPressingChannelId == channel.id ? 1.02 : 1.0) // Animación mantener presionado sobre el item
+                            .animation(.spring(response: 0.22, dampingFraction: 0.75), value: longPressingChannelId)
+                            .onLongPressGesture(minimumDuration: 0.6, pressing: { p in
+                                if p { longPressingChannelId = channel.id } else { longPressingChannelId = nil }
+                            }, perform: {
+                                UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                                sheetChannel = channel
+                                withAnimation(.spring(response: 0.28, dampingFraction: 0.85)) { showChannelOptionsSheet = true }
+                                longPressingChannelId = nil
+                            })
                     }
                     .buttonStyle(PlainButtonStyle())
-                    .listRowInsets(EdgeInsets(top: 10, leading: 12, bottom: 10, trailing: 12))
+                    .listRowInsets(EdgeInsets(top: 10, leading: 12, bottom: 0, trailing: 12)) // Pading espacios de los items de mis canales
                     .listRowSeparator(.hidden)
                 }
             } else if selectedTopTab == 2 {
                 Section {
-                    let trending = viewModel.channels.filter { $0.parentId == nil }.sorted { ($0.last24hCount ?? 0) > ($1.last24hCount ?? 0) }
+                    let hiddenIds = Set(UserDefaults.standard.stringArray(forKey: "hidden_channel_ids") ?? [])
+                    let trending = viewModel.channels.filter { $0.parentId == nil && !hiddenIds.contains($0.id) }.sorted { ($0.last24hCount ?? 0) > ($1.last24hCount ?? 0) }
                     ForEach(trending) { ch in
                         NavigationLink(destination: ChannelDetailView(channelId: ch.id, channelTitle: ch.title)) {
                             HStack(spacing: 10) {
@@ -635,18 +896,29 @@ struct ChannelsView: View {
                                 }
                                 Spacer()
                             }
+                            .onLongPressGesture(minimumDuration: 0.6) {
+                                UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                                sheetChannel = ch
+                                withAnimation(.spring(response: 0.28, dampingFraction: 0.85)) { showChannelOptionsSheet = true }
+                            }
                         }
                         .buttonStyle(PlainButtonStyle())
                     }
                 }
             } else {
-                let parents = viewModel.channels.filter { $0.parentId == nil }
+                let hiddenIds = Set(UserDefaults.standard.stringArray(forKey: "hidden_channel_ids") ?? [])
+                let parents = viewModel.channels.filter { $0.parentId == nil && !hiddenIds.contains($0.id) }
                 ForEach(parents) { city in
                     Section(header: HStack { Image(systemName: city.icon).foregroundColor(.blue); Text(city.title) }) {
                         if let subs = city.subchannels, !subs.isEmpty {
                             ForEach(subs) { sub in
                                 NavigationLink(destination: ChannelDetailView(channelId: sub.id, channelTitle: sub.title)) {
                                     HStack(spacing: 10) { Image(systemName: sub.icon).foregroundColor(.green); Text(sub.title); Spacer() }
+                                        .onLongPressGesture(minimumDuration: 0.6) {
+                                            UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                                            sheetChannel = Channel(id: sub.id, title: sub.title, description: nil, icon: sub.icon, memberCount: sub.memberCount ?? 0, parentId: city.id, isPublic: true, isSubscribed: nil, isFavorite: nil, last24hCount: nil, subchannels: nil, lastMessagePreview: nil, lastMessageAt: nil, unreadCount: nil)
+                                            withAnimation(.spring(response: 0.28, dampingFraction: 0.85)) { showChannelOptionsSheet = true }
+                                        }
                                 }
                                 .buttonStyle(PlainButtonStyle())
                             }
@@ -680,17 +952,15 @@ struct ChannelsView: View {
         } message: {
             Text("Intenta más tarde.")
         }
-        .alert("Canal seleccionado", isPresented: $showTappedAlert) {
-            Button("Abrir canal") { showTappedAlert = false; goToChannel = true }
-        } message: {
-            Text(tappedChannelAlertMessage)
-        }
+        
         .background(
             NavigationLink(
                 destination: ChannelDetailView(channelId: tappedChannel?.id ?? "", channelTitle: tappedChannel?.title ?? ""),
                 isActive: $goToChannel
             ) { EmptyView() }
         )
+        .overlay(channelOptionsOverlay())
+        .animation(.spring(response: 0.28, dampingFraction: 0.85), value: showChannelOptionsSheet)
         .refreshable {
             await withCheckedContinuation { continuation in
                 if isSearchMode {
@@ -927,15 +1197,19 @@ struct ChannelsView: View {
                 }
             }
             .padding(12)
-            .background(
+            /**.background(
                 ZStack {
                     RoundedRectangle(cornerRadius: 18).fill(.ultraThinMaterial)
                     RoundedRectangle(cornerRadius: 18).fill(accent.opacity(0.08))
                 }
-            )
+            )**/
+            // @todo
+            // Fondo background del componente detalles de los items de los canales
             .overlay(
                 RoundedRectangle(cornerRadius: 18)
-                    .stroke(accent, lineWidth: 1.1)
+                    .stroke(Color.clear, lineWidth: 1.1)
+                    // @todo
+                    // borde de los items de mis canales
             )
             .shadow(color: Color.blue.opacity(0.18), radius: 10, x: 0, y: 4)
             .contentShape(Rectangle())
@@ -1051,12 +1325,12 @@ struct ChannelsView: View {
                         .padding(.horizontal, 14).padding(.vertical, 6)
                         .background(selectedTopTab == 0 ? AnyView(Capsule().fill(Color(.systemGray5))) : AnyView(Capsule().stroke(Color(.systemGray4))))
 
-                        Button(action: { selectedTopTab = 1 }) {
+                        /**Button(action: { selectedTopTab = 1 }) {
                             Text("Ciudades").font(.subheadline).fontWeight(.semibold)
                         }
                         .padding(.horizontal, 14).padding(.vertical, 6)
                         .background(selectedTopTab == 1 ? AnyView(Capsule().fill(Color(.systemGray5))) : AnyView(Capsule().stroke(Color(.systemGray4))))
-
+                        **/
                         Button(action: { selectedTopTab = 2 }) {
                             Text("Tendencias").font(.subheadline).fontWeight(.semibold)
                         }
@@ -1085,14 +1359,8 @@ struct ChannelsView: View {
             }
             .onChange(of: session.currentUserId) { newId in
                 if !newId.isEmpty {
-                    if UserSession.shared.isVerified {
-                        viewModel.loadSubscribedChannels(isRefresh: true)
-                        selectedTopTab = 0
-                    } else {
-                        selectedTopTab = 2
-                        viewModel.loadChannels(isRefresh: true, publicOnly: true)
-                        DispatchQueue.main.async { viewModel.channels.sort { ($0.last24hCount ?? 0) > ($1.last24hCount ?? 0) } }
-                    }
+                    viewModel.loadBootstrap()
+                    selectedTopTab = (UserSession.shared.isVerified || UserDefaults.standard.bool(forKey: "user_is_verified")) ? 0 : 2
                     UserSession.shared.syncAPNSTokenIfAvailable()
                 }
             }
@@ -1521,6 +1789,8 @@ struct ChannelDetailView: View {
                             if (detail.isSubscribed ?? false) {
                                 if !(viewModel.isPrimarySubchannel && detail.parentId != nil) {
                                     Button(action: { showingUnsubscribeAlert = true }) { Label("Desuscribirse", systemImage: "bell.slash") }
+                                    // @todo
+                                    // Apartado de detalles para la vista de un canal
                                 }
                             } else {
                                 Button(action: {
@@ -1590,22 +1860,47 @@ struct ChannelDetailView: View {
                     
                     Divider()
                     
-                    if (viewModel.activeSubchannelDetail?.messages ?? detail.messages).isEmpty {
-                        VStack(spacing: 16) {
-                            Spacer()
-                            Image(systemName: "message")
-                                .font(.system(size: 50))
-                                .foregroundColor(.gray)
-                            Text("No hay mensajes aún")
-                                .font(.headline)
-                                .foregroundColor(.secondary)
-                            Spacer()
+                if (viewModel.activeSubchannelDetail?.messages ?? detail.messages).isEmpty {
+                    if viewModel.isLoading || viewModel.isRefreshing {
+                            ScrollView {
+                                LazyVStack(spacing: 12) {
+                                    ForEach(0..<6, id: \.self) { _ in
+                                        HStack(spacing: 12) {
+                                            Circle()
+                                                .fill(Color(.systemGray5))
+                                                .frame(width: 44, height: 44)
+                                            VStack(alignment: .leading, spacing: 8) {
+                                                Rectangle().fill(Color(.systemGray5)).frame(width: 180, height: 12)
+                                                Rectangle().fill(Color(.systemGray5)).frame(width: 240, height: 12)
+                                            }
+                                            Spacer()
+                                        }
+                                        .padding(.horizontal, 16)
+                                        .padding(.vertical, 10)
+                                        .background(Color(.systemBackground))
+                                        .cornerRadius(8)
+                                    }
+                                }
+                                .padding()
+                            }
+                        } else {
+                            VStack(spacing: 16) {
+                                Spacer()
+                                Image(systemName: "message")
+                                    .font(.system(size: 50))
+                                    .foregroundColor(.gray)
+                                Text("No hay mensajes aún")
+                                    .font(.headline)
+                                    .foregroundColor(.secondary)
+                                Spacer()
+                            }
                         }
                     } else {
                         ScrollViewReader { proxy in
                             ScrollView {
                                 LazyVStack(spacing: 12) {
-                                    ForEach(viewModel.activeSubchannelDetail?.messages ?? detail.messages) { message in
+                                    let src = viewModel.activeSubchannelDetail?.messages ?? detail.messages
+                                    ForEach(src) { message in
                                         MessageBubble(message: message)
                                             .id(message.id)
                                     }
@@ -1642,6 +1937,12 @@ struct ChannelDetailView: View {
         .onAppear {
             if let cached = PersistenceManager.shared.loadChannelDetail(id: channelId) {
                 viewModel.channelDetail = cached
+                if let subs = cached.subchannels, !subs.isEmpty {
+                    let def = subs.sorted { ($0.memberCount ?? 0) > ($1.memberCount ?? 0) }.first
+                    if let scId = def?.id, let scCached = PersistenceManager.shared.loadChannelDetail(id: scId) {
+                        viewModel.activeSubchannelDetail = scCached
+                    }
+                }
             }
             viewModel.loadChannelDetail(channelId: channelId, isRefresh: true)
             if let url = URL(string: "\(APIConfig.baseURL)/channels/\(channelId)/visit") {
@@ -1732,11 +2033,19 @@ struct MessageBubble: View {
                             pulseScale = 1.4
                         }
                     }
-                    if let url = URL(string: "\(APIConfig.baseURL)/messages/\(message.id)/view") {
-                        var req = URLRequest(url: url)
-                        req.httpMethod = "POST"
-                        if let tok = UserSession.shared.token { req.setValue("Bearer \(tok)", forHTTPHeaderField: "Authorization") }
-                        URLSession.shared.dataTask(with: req) { _,_,_ in }.resume()
+                    let key = "message_last_view_ts"
+                    var map = (UserDefaults.standard.dictionary(forKey: key) as? [String: Double]) ?? [:]
+                    let now = Date().timeIntervalSince1970
+                    let last = map[message.id] ?? 0
+                    if now - last >= 600 {
+                        if let url = URL(string: "\(APIConfig.baseURL)/messages/\(message.id)/view") {
+                            var req = URLRequest(url: url)
+                            req.httpMethod = "POST"
+                            if let tok = UserSession.shared.token { req.setValue("Bearer \(tok)", forHTTPHeaderField: "Authorization") }
+                            URLSession.shared.dataTask(with: req) { _,_,_ in }.resume()
+                        }
+                        map[message.id] = now
+                        UserDefaults.standard.set(map, forKey: key)
                     }
                     hasViewed = true
                 }
@@ -1922,15 +2231,19 @@ struct ChannelHeaderCard: View {
             }
         }
         .padding()
-        .background(
+        /*.background(
             ZStack {
                 RoundedRectangle(cornerRadius: 18).fill(.ultraThinMaterial)
                 RoundedRectangle(cornerRadius: 18).fill(accent.opacity(0.08))
             }
-        )
+        )*/
+        // @todo
+        // Fondo background del componente detalles del canal
         .overlay(
             RoundedRectangle(cornerRadius: 18)
-                .stroke(accent, lineWidth: 1.1)
+                .stroke(Color.clear, lineWidth: 1.1)
+                    // @todo
+                    // borde del card de detalles del canal 
         )
         .padding(.horizontal)
         .padding(.top, 6)
@@ -2018,6 +2331,7 @@ struct SearchView: View {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.45, execute: work)
     }
 }
+
 
 struct MessageDetailView: View {
     let messageId: String
@@ -2139,6 +2453,8 @@ class EmergencyMonitor: ObservableObject {
     }
 
     private func notifyEmergency(message: Message) {
+        let disabled = Set(UserDefaults.standard.stringArray(forKey: "notifications_disabled_ids") ?? [])
+        if disabled.contains(message.channelId) { return }
         let content = UNMutableNotificationContent()
         content.sound = .default
         content.userInfo = ["messageId": message.id, "channelId": message.channelId]
@@ -2248,6 +2564,8 @@ class EmergencyEmitterClient: ObservableObject {
     }
 
     private func notifyEmergency(event: EmergencyEvent) {
+        let disabled = Set(UserDefaults.standard.stringArray(forKey: "notifications_disabled_ids") ?? [])
+        if disabled.contains(event.channelId) { return }
         if !subscribedSubchannelIds.contains(event.channelId) { return }
         let subs = PersistenceManager.shared.loadSubscriptions() ?? []
         if let sub = subs.first(where: { $0.channel.id == event.channelId }) {
@@ -2626,6 +2944,8 @@ struct ContentView: View {
     @AppStorage("app_appearance") private var appAppearance: String = "system"
     @StateObject private var emergencyMonitor = EmergencyMonitor()
     @StateObject private var emitterClient = EmergencyEmitterClient(baseURL: "http://192.168.3.149:8766")
+    @State private var notificationsGranted = false
+    @State private var startedMonitors = false
     @State private var showDeepLink = false
     @State private var deepLinkMessageId: String? = nil
     
@@ -2646,12 +2966,8 @@ struct ContentView: View {
             UserSession.shared.restoreSession()
             UserSession.shared.ensureGuestSync {
                 UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .badge, .sound]) { granted, _ in
-                    if granted {
-                        emergencyMonitor.start()
-                        emitterClient.start()
-                    } else {
-                        print("Notificaciones locales no autorizadas")
-                    }
+                    notificationsGranted = granted
+                    if !granted { print("Notificaciones locales no autorizadas") }
                 }
             }
             DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
@@ -2664,6 +2980,13 @@ struct ContentView: View {
                 if showSplash {
                     withAnimation(.easeOut(duration: 0.3)) { showSplash = false }
                 }
+            }
+        }
+        .onChange(of: initialDataReady) { ready in
+            if ready && notificationsGranted && !startedMonitors {
+                emergencyMonitor.start()
+                emitterClient.start()
+                startedMonitors = true
             }
         }
         .onReceive(NotificationCenter.default.publisher(for: Notification.Name("DeepLinkRoute"))) { note in
