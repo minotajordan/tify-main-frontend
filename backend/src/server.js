@@ -220,12 +220,18 @@ app.use('*', (req, res) => {
   res.status(404).json({ error: 'Endpoint no encontrado' });
 });
 
-app.listen(PORT, () => {
-  console.log(`🚀 Servidor ejecutándose en puerto ${PORT}`);
-  console.log(`📊 Health check: http://localhost:${PORT}/health`);
-  try {
-    startMonitoringServer({ getSnapshot, resetMetrics, port: MONITORING_PORT });
-  } catch (e) {
-    console.error('Failed to start monitoring server', e);
-  }
-});
+// Export for Vercel
+module.exports = app;
+
+// Only start server if run directly
+if (require.main === module) {
+  app.listen(PORT, () => {
+    console.log(`🚀 Servidor ejecutándose en puerto ${PORT}`);
+    console.log(`📊 Health check: http://localhost:${PORT}/health`);
+    try {
+      startMonitoringServer({ getSnapshot, resetMetrics, port: MONITORING_PORT });
+    } catch (e) {
+      console.error('Failed to start monitoring server', e);
+    }
+  });
+}

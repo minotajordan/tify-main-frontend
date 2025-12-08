@@ -7,7 +7,11 @@
     "start": "(lsof -ti:3333 | xargs kill -9 2>/dev/null || true) && node src/server.js",
     "dev": "(lsof -ti:3333 | xargs kill -9 2>/dev/null || true) && nodemon src/server.js",
     "emitter": "(lsof -ti:8766 | xargs kill -9 2>/dev/null || true) && python3 scripts/event_emitter.py",
-    "test": "jest"
+    "test": "jest",
+    "postinstall": "prisma generate"
+  },
+  "engines": {
+    "node": "18.x"
   },
   "dependencies": {
     "express": "^4.18.2",
