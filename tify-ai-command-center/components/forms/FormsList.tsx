@@ -18,6 +18,29 @@ import {
 import { api } from '../../services/api';
 import { useI18n } from '../../i18n';
 import QRCodeStyling from 'qr-code-styling';
+import dayjs from 'dayjs';
+import utc from 'dayjs/plugin/utc';
+import timezone from 'dayjs/plugin/timezone';
+import relativeTime from 'dayjs/plugin/relativeTime';
+import 'dayjs/locale/es';
+
+dayjs.extend(utc);
+dayjs.extend(timezone);
+dayjs.extend(relativeTime);
+dayjs.locale('es');
+
+const COLOMBIA_TZ = 'America/Bogota';
+
+const formatToColombia = (dateStr: string, relative: boolean = false) => {
+  if (!dateStr) return '';
+  // Convert UTC to Colombia time
+  const date = dayjs.utc(dateStr).tz(COLOMBIA_TZ);
+  
+  if (relative) {
+    return date.fromNow();
+  }
+  return date.format('D MMM YYYY, h:mm A');
+};
 
 interface Form {
   id: string;
@@ -135,22 +158,197 @@ const FormsList: React.FC<{
     }
   };
 
-  if (loading) return <div className="p-8 text-center text-gray-500">{t('forms.loading')}</div>;
+  if (loading) {
+    return (
+      <div className="h-full flex flex-col bg-white">
+        <div className="border-b border-gray-200 px-6 py-4 flex justify-between items-center bg-white sticky top-0 z-10">
+          <div className="animate-pulse space-y-2">
+            <div className="h-6 w-48 bg-gray-200 rounded"></div>
+            <div className="h-4 w-64 bg-gray-200 rounded hidden sm:block"></div>
+          </div>
+          <div className="animate-pulse h-10 w-32 bg-gray-200 rounded-lg"></div>
+        </div>
+
+        <div className="flex-1 overflow-auto bg-gray-50 p-4 md:p-6">
+          {/* Mobile Skeleton */}
+          <div className="block md:hidden space-y-4">
+            {[1, 2, 3, 4].map((i) => (
+              <div key={i} className="bg-white rounded-xl border border-gray-200 shadow-sm p-4 animate-pulse">
+                <div className="flex justify-between items-start mb-4">
+                  <div className="space-y-2 flex-1">
+                    <div className="h-5 w-3/4 bg-gray-200 rounded"></div>
+                    <div className="h-3 w-full bg-gray-200 rounded"></div>
+                  </div>
+                  <div className="h-5 w-16 bg-gray-200 rounded-full ml-4"></div>
+                </div>
+                <div className="flex items-center gap-4 mb-4 border-b border-gray-50 pb-3">
+                  <div className="h-4 w-24 bg-gray-200 rounded"></div>
+                  <div className="h-4 w-32 bg-gray-200 rounded"></div>
+                </div>
+                <div className="flex justify-between items-center">
+                  <div className="flex gap-2">
+                    <div className="h-8 w-8 bg-gray-200 rounded-lg"></div>
+                    <div className="h-8 w-8 bg-gray-200 rounded-lg"></div>
+                    <div className="h-8 w-8 bg-gray-200 rounded-lg"></div>
+                  </div>
+                  <div className="flex gap-2">
+                    <div className="h-8 w-8 bg-gray-200 rounded-lg"></div>
+                    <div className="h-8 w-8 bg-gray-200 rounded-lg"></div>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* Desktop Skeleton */}
+          <div className="hidden md:block overflow-x-auto bg-white rounded-lg border border-gray-200 shadow-sm">
+            <table className="w-full">
+              <thead className="bg-gray-50">
+                <tr>
+                  {[1, 2, 3, 4, 5].map((i) => (
+                    <th key={i} className="px-6 py-3">
+                      <div className="h-4 w-24 bg-gray-200 rounded animate-pulse"></div>
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-200">
+                {[1, 2, 3, 4, 5].map((i) => (
+                  <tr key={i}>
+                    <td className="px-6 py-4">
+                      <div className="space-y-2 animate-pulse">
+                        <div className="h-5 w-48 bg-gray-200 rounded"></div>
+                        <div className="h-3 w-64 bg-gray-200 rounded"></div>
+                      </div>
+                    </td>
+                    <td className="px-6 py-4">
+                      <div className="h-6 w-20 bg-gray-200 rounded-full animate-pulse"></div>
+                    </td>
+                    <td className="px-6 py-4">
+                      <div className="h-4 w-12 bg-gray-200 rounded animate-pulse"></div>
+                    </td>
+                    <td className="px-6 py-4">
+                      <div className="h-4 w-32 bg-gray-200 rounded animate-pulse"></div>
+                    </td>
+                    <td className="px-6 py-4">
+                      <div className="flex justify-end gap-2 animate-pulse">
+                        <div className="h-8 w-8 bg-gray-200 rounded-lg"></div>
+                        <div className="h-8 w-8 bg-gray-200 rounded-lg"></div>
+                        <div className="h-8 w-8 bg-gray-200 rounded-lg"></div>
+                        <div className="h-8 w-8 bg-gray-200 rounded-lg"></div>
+                        <div className="h-8 w-8 bg-gray-200 rounded-lg"></div>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
-    <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-      <div className="p-6 border-b border-gray-100 flex justify-between items-center">
-        <h2 className="text-lg font-semibold text-gray-900">{t('forms.list.title')}</h2>
+    <div className="h-full flex flex-col bg-white">
+      <div className="border-b border-gray-200 px-6 py-4 flex justify-between items-center bg-white sticky top-0 z-10">
+        <div>
+          <h2 className="text-xl font-semibold text-gray-900">{t('forms.manager.title')}</h2>
+          <p className="text-sm text-gray-500 hidden sm:block">{t('forms.manager.subtitle')}</p>
+        </div>
         <button
           onClick={() => onEdit('new')}
-          className="flex items-center gap-2 bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700 transition-colors"
+          className="flex items-center gap-2 bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700 transition-colors shadow-sm"
         >
           <Plus size={18} />
-          {t('forms.create')}
+          <span className="hidden sm:inline">{t('forms.create')}</span>
         </button>
       </div>
 
-      <div className="overflow-x-auto">
+      <div className="flex-1 overflow-auto bg-gray-50 p-4 md:p-6">
+        {/* Mobile View: Cards */}
+        <div className="block md:hidden space-y-4">
+        {forms.map((form) => (
+          <div key={form.id} className="bg-white rounded-xl border border-gray-200 shadow-sm p-4">
+            <div className="flex justify-between items-start mb-2">
+              <div>
+                <h3 className="font-medium text-gray-900 line-clamp-1">{form.title}</h3>
+                <p className="text-xs text-gray-500 mt-1 line-clamp-2">{form.description}</p>
+              </div>
+              <span
+                className={`px-2 py-0.5 text-[10px] uppercase font-bold tracking-wide rounded-full ${
+                  form.isActive ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'
+                }`}
+              >
+                {form.isActive ? t('forms.status.active') : t('forms.status.inactive')}
+              </span>
+            </div>
+
+            <div className="flex items-center gap-4 text-xs text-gray-500 mb-4 border-b border-gray-50 pb-3">
+              <div className="flex items-center gap-1">
+                <CheckCircle size={14} className="text-gray-400" />
+                <span>{form._count?.submissions || 0} {t('forms.list.header.submissions')}</span>
+              </div>
+              <div className="flex items-center gap-1">
+                <Clock size={14} className="text-gray-400" />
+                <span>{formatToColombia(form.createdAt, true)}</span>
+              </div>
+            </div>
+
+            <div className="flex justify-between items-center">
+              <div className="flex gap-1">
+                <button
+                  onClick={() => window.open(`/forms/${form.slug}`, '_blank')}
+                  className="p-2 text-gray-500 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
+                  title={t('forms.action.viewPublic')}
+                >
+                  <ExternalLink size={18} />
+                </button>
+                <button
+                  onClick={() => handleOpenQR(form)}
+                  className="p-2 text-gray-500 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
+                  title={t('forms.action.qrCode')}
+                >
+                  <QrCode size={18} />
+                </button>
+                <button
+                  onClick={() => onViewSubmissions(form.id)}
+                  className="p-2 text-gray-500 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
+                  title={t('forms.action.viewSubmissions')}
+                >
+                  <Eye size={18} />
+                </button>
+              </div>
+              
+              <div className="flex gap-1 border-l border-gray-100 pl-2">
+                <button
+                  onClick={() => onEdit(form.id)}
+                  className="p-2 text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
+                  title={t('forms.action.edit')}
+                >
+                  <Edit2 size={18} />
+                </button>
+                <button
+                  onClick={() => handleDelete(form.id)}
+                  className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                  title={t('forms.action.delete')}
+                >
+                  <Trash2 size={18} />
+                </button>
+              </div>
+            </div>
+          </div>
+        ))}
+        
+        {forms.length === 0 && (
+          <div className="text-center py-8 text-gray-500 bg-white rounded-xl border border-dashed border-gray-200">
+            {t('forms.list.empty')}
+          </div>
+        )}
+      </div>
+
+      {/* Desktop View: Table */}
+      <div className="hidden md:block overflow-x-auto">
         <table className="w-full">
           <thead className="bg-gray-50">
             <tr>
@@ -193,7 +391,7 @@ const FormsList: React.FC<{
                   {form._count?.submissions || 0}
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                  {new Date(form.createdAt).toLocaleDateString()}
+                  {formatToColombia(form.createdAt, true)}
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                   <div className="flex justify-end gap-2">
@@ -247,6 +445,8 @@ const FormsList: React.FC<{
         </table>
       </div>
 
+      </div>
+
       {qrModalForm && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
           <div className="bg-white w-full max-w-md rounded-2xl shadow-xl overflow-hidden animate-in fade-in zoom-in duration-200">
@@ -263,7 +463,8 @@ const FormsList: React.FC<{
             <div className="p-6 flex flex-col items-center">
               <div
                 ref={qrRef}
-                className="bg-white p-4 rounded-xl shadow-sm border border-gray-100 mb-6"
+                className="p-4 rounded-xl shadow-sm border border-gray-100 mb-6"
+                style={{ backgroundColor: '#ffffff' }}
               />
 
               <h4 className="text-lg font-bold text-gray-900 text-center mb-1">
@@ -274,7 +475,7 @@ const FormsList: React.FC<{
                 <div className="flex items-center gap-1.5 text-amber-600 text-sm mb-6 bg-amber-50 px-3 py-1 rounded-full">
                   <Clock size={14} />
                   <span>
-                    {t('forms.modal.expiresOn')} {new Date(qrModalForm.expiresAt).toLocaleDateString()}
+                    {t('forms.modal.expiresOn')} {formatToColombia(qrModalForm.expiresAt || '', true)} ({formatToColombia(qrModalForm.expiresAt || '')})
                   </span>
                 </div>
               )}

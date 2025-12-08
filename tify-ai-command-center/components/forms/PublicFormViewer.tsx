@@ -149,22 +149,117 @@ const PublicFormViewer: React.FC<{ slug: string }> = ({ slug }) => {
             value={answers[field.label] || ''}
           />
         ) : field.type === 'select' ? (
-          <select
-            required={field.required}
-            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
-            onChange={(e) => handleInputChange(field.label, e.target.value)}
-            value={answers[field.label] || ''}
-          >
-            <option value="" disabled>
-              {t('forms.public.selectOption')}
-            </option>
-            {field.options &&
-              field.options.map((opt: string) => (
-                <option key={opt} value={opt}>
-                  {opt}
-                </option>
-              ))}
-          </select>
+          (() => {
+            const opts = Array.isArray(field.options) 
+              ? { items: field.options, multiple: false, allowOther: false } 
+              : (field.options || { items: [], multiple: false, allowOther: false });
+
+            const handleSelectChange = (val: string, checked: boolean) => {
+              const current = answers[field.label] ? (Array.isArray(answers[field.label]) ? answers[field.label] : [answers[field.label]]) : [];
+              let newVal;
+              if (checked) {
+                newVal = [...current, val];
+              } else {
+                newVal = current.filter((v: string) => v !== val);
+              }
+              handleInputChange(field.label, newVal);
+            };
+
+            const handleSingleChange = (val: string) => {
+              handleInputChange(field.label, val);
+            };
+
+            return (
+              <div className="space-y-3">
+                {opts.items.map((opt: string, optIdx: number) => (
+                  <div key={optIdx} className="flex items-center gap-3">
+                    <input
+                      type={opts.multiple ? "checkbox" : "radio"}
+                      name={`field-${idx}`}
+                      id={`field-${idx}-opt-${optIdx}`}
+                      value={opt}
+                      checked={
+                        opts.multiple 
+                          ? (Array.isArray(answers[field.label]) && answers[field.label].includes(opt))
+                          : answers[field.label] === opt
+                      }
+                      onChange={(e) => {
+                        if (opts.multiple) {
+                          handleSelectChange(opt, e.target.checked);
+                        } else {
+                          handleSingleChange(opt);
+                        }
+                      }}
+                      className="w-5 h-5 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
+                    />
+                    <label htmlFor={`field-${idx}-opt-${optIdx}`} className="text-gray-700 cursor-pointer select-none">
+                      {opt}
+                    </label>
+                  </div>
+                ))}
+
+                {opts.allowOther && (
+                  <div className="flex items-center gap-3 mt-2">
+                    <input
+                      type={opts.multiple ? "checkbox" : "radio"}
+                      name={`field-${idx}`}
+                      id={`field-${idx}-other`}
+                      checked={
+                        opts.multiple 
+                          ? (Array.isArray(answers[field.label]) && answers[field.label]?.some((v: string) => !opts.items.includes(v)))
+                          : (answers[field.label] && !opts.items.includes(answers[field.label]))
+                      }
+                      onChange={(e) => {
+                        if (!opts.multiple && e.target.checked) {
+                          // Clear selection to prepare for "Other" text input
+                          handleSingleChange('');
+                        }
+                      }}
+                      className="w-5 h-5 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
+                    />
+                    <div className="flex-1">
+                      <input
+                        type="text"
+                        placeholder="Otro (especificar)"
+                        value={
+                          opts.multiple 
+                            ? (Array.isArray(answers[field.label]) ? answers[field.label].find((v: string) => !opts.items.includes(v)) || '' : '')
+                            : (answers[field.label] && !opts.items.includes(answers[field.label]) ? answers[field.label] : '')
+                        }
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          if (opts.multiple) {
+                            const current = Array.isArray(answers[field.label]) ? answers[field.label] : [];
+                            // Remove old custom value if exists
+                            const clean = current.filter((v: string) => opts.items.includes(v));
+                            if (val) {
+                              handleInputChange(field.label, [...clean, val]);
+                            } else {
+                              handleInputChange(field.label, clean);
+                            }
+                          } else {
+                            handleSingleChange(val);
+                          }
+                        }}
+                        className="w-full px-3 py-1.5 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 disabled:bg-gray-100 disabled:text-gray-400"
+                        disabled={
+                          opts.multiple 
+                            ? false // Always enabled if checkbox checked logic is weird, actually better to just check if input has value
+                            : false
+                        }
+                        onFocus={() => {
+                          // Auto select radio when focusing input
+                          if (!opts.multiple && answers[field.label] && opts.items.includes(answers[field.label])) {
+                             handleSingleChange('');
+                          }
+                        }}
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+          })()
         ) : field.type === 'checkbox' ? (
           <div className="flex items-center gap-2 mt-1">
             <input
@@ -240,8 +335,22 @@ const PublicFormViewer: React.FC<{ slug: string }> = ({ slug }) => {
 
   if (loading)
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        {t('forms.public.loading')}
+      <div className="min-h-screen flex flex-col items-center justify-center bg-gray-50 p-4 animate-pulse">
+        <div className="w-full max-w-3xl bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+          <div className="h-48 bg-gray-200 w-full"></div>
+          <div className="p-8 space-y-6">
+            <div className="h-10 w-3/4 bg-gray-200 rounded"></div>
+            <div className="h-4 w-1/2 bg-gray-200 rounded"></div>
+            <div className="space-y-6 pt-6">
+              {[1, 2, 3].map((i) => (
+                <div key={i} className="space-y-2">
+                  <div className="h-4 w-32 bg-gray-200 rounded"></div>
+                  <div className="h-10 w-full bg-gray-200 rounded"></div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
       </div>
     );
   if (error)
@@ -387,6 +496,24 @@ const PublicFormViewer: React.FC<{ slug: string }> = ({ slug }) => {
           className="bg-white border-t border-gray-200 p-6 text-center text-sm text-gray-500"
           dangerouslySetInnerHTML={{ __html: form.footerContent }}
         />
+      )}
+
+      {/* Loading Modal */}
+      {submitting && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center backdrop-blur-sm">
+          <div className="bg-white p-8 rounded-2xl shadow-2xl flex flex-col items-center gap-6 animate-in fade-in zoom-in duration-200 max-w-sm w-full mx-4">
+            <div className="relative">
+              <div className="w-16 h-16 border-4 border-indigo-100 border-t-indigo-600 rounded-full animate-spin"></div>
+              <div className="absolute inset-0 flex items-center justify-center">
+                <CheckCircle size={24} className="text-indigo-600" />
+              </div>
+            </div>
+            <div className="text-center space-y-2">
+              <h3 className="text-lg font-semibold text-gray-900">{t('forms.public.submitting')}</h3>
+              <p className="text-sm text-gray-500">Procesando su solicitud...</p>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
