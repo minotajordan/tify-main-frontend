@@ -10,7 +10,7 @@ const PublicFormViewer: React.FC<{ slug: string }> = ({ slug }) => {
   const qrRef = useRef<HTMLDivElement>(null);
   const [form, setForm] = useState<any>(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
+  const [error, setError] = useState<{message: string, status?: string} | null>(null);
   const [submitted, setSubmitted] = useState(false);
   const [submissionId, setSubmissionId] = useState('');
   const [answers, setAnswers] = useState<Record<string, any>>({});
@@ -42,7 +42,12 @@ const PublicFormViewer: React.FC<{ slug: string }> = ({ slug }) => {
       const data = await api.getPublicForm(slug);
       setForm(data);
     } catch (err: any) {
-      setError(err.message || t('forms.public.notFound'));
+      // Check if error response has status/message
+      const errorData = err.response?.data || {};
+      setError({
+        message: errorData.message || err.message || t('forms.public.notFound'),
+        status: errorData.status || (err.response?.status === 403 ? 'paused' : err.response?.status === 410 ? 'deleted' : 'error')
+      });
     } finally {
       setLoading(false);
     }
@@ -353,12 +358,49 @@ const PublicFormViewer: React.FC<{ slug: string }> = ({ slug }) => {
         </div>
       </div>
     );
-  if (error)
+  if (error) {
+    const isDeleted = error.status === 'deleted';
+    const isPaused = error.status === 'paused';
+
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50 text-red-600">
-        {error}
+      <div className="min-h-screen flex items-center justify-center bg-gray-50 p-4">
+        <div className="bg-white max-w-md w-full rounded-2xl shadow-xl p-8 text-center space-y-6">
+          <div className={`w-20 h-20 rounded-full flex items-center justify-center mx-auto ${
+            isDeleted ? 'bg-red-100 text-red-600' : 
+            isPaused ? 'bg-amber-100 text-amber-600' : 
+            'bg-gray-100 text-gray-600'
+          }`}>
+            {isDeleted ? (
+              <svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
+            ) : isPaused ? (
+              <svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>
+            ) : (
+              <svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+            )}
+          </div>
+          
+          <div className="space-y-2">
+            <h2 className="text-2xl font-bold text-gray-900">
+              {isDeleted ? t('forms.public.deletedTitle') || 'Formulario no disponible' : 
+               isPaused ? t('forms.public.pausedTitle') || 'Formulario en pausa' : 
+               t('forms.public.errorTitle') || 'Error'}
+            </h2>
+            <p className="text-gray-500 text-lg leading-relaxed">
+              {error.message || (isDeleted ? 'Este formulario ha sido eliminado y ya no está accesible.' : 
+               isPaused ? 'Este formulario no está recibiendo respuestas en este momento.' : 
+               'No se pudo cargar el formulario.')}
+            </p>
+          </div>
+
+          <div className="pt-4">
+             <a href="/" className="text-indigo-600 hover:text-indigo-800 font-medium hover:underline">
+               {t('forms.public.goHome') || 'Volver al inicio'}
+             </a>
+          </div>
+        </div>
       </div>
     );
+  }
 
   if (form && form.expiresAt && dayjs().isAfter(dayjs(form.expiresAt))) {
     return (
