@@ -381,20 +381,20 @@ const PublicFormViewer: React.FC<{ slug: string }> = ({ slug }) => {
           
           <div className="space-y-2">
             <h2 className="text-2xl font-bold text-gray-900">
-              {isDeleted ? t('forms.public.deletedTitle') || 'Formulario no disponible' : 
-               isPaused ? t('forms.public.pausedTitle') || 'Formulario en pausa' : 
-               t('forms.public.errorTitle') || 'Error'}
+              {isDeleted ? t('forms.public.deletedTitle') : 
+               isPaused ? t('forms.public.pausedTitle') : 
+               t('forms.public.errorTitle')}
             </h2>
             <p className="text-gray-500 text-lg leading-relaxed">
-              {error.message || (isDeleted ? 'Este formulario ha sido eliminado y ya no está accesible.' : 
-               isPaused ? 'Este formulario no está recibiendo respuestas en este momento.' : 
-               'No se pudo cargar el formulario.')}
+              {isDeleted ? t('forms.public.deletedMessage') : 
+               isPaused ? t('forms.public.pausedMessage') : 
+               error.message || t('forms.public.notFound')}
             </p>
           </div>
 
           <div className="pt-4">
              <a href="/" className="text-indigo-600 hover:text-indigo-800 font-medium hover:underline">
-               {t('forms.public.goHome') || 'Volver al inicio'}
+               {t('forms.public.goHome')}
              </a>
           </div>
         </div>
@@ -552,7 +552,7 @@ const PublicFormViewer: React.FC<{ slug: string }> = ({ slug }) => {
             </div>
             <div className="text-center space-y-2">
               <h3 className="text-lg font-semibold text-gray-900">{t('forms.public.submitting')}</h3>
-              <p className="text-sm text-gray-500">Procesando su solicitud...</p>
+              <p className="text-sm text-gray-500">{t('forms.public.submittingMessage')}</p>
             </div>
           </div>
         </div>
