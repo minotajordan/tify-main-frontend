@@ -16,7 +16,6 @@ const Dashboard: React.FC<DashboardProps> = ({ onChangeView }) => {
   const [channels, setChannels] = useState<Channel[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  
 
   useEffect(() => {
     const fetchData = async () => {
@@ -24,9 +23,23 @@ const Dashboard: React.FC<DashboardProps> = ({ onChangeView }) => {
       let ch: Channel[] = [];
       try {
         const uid = api.getCurrentUserId();
-        s = uid ? await api.getUserStats(uid) : { subscribedChannelsCount: 0, messagesCount: 0, ownedChannelsCount: 0, pendingApprovalsCount: 0, recentActivity: [] } as any;
+        s = uid
+          ? await api.getUserStats(uid)
+          : ({
+              subscribedChannelsCount: 0,
+              messagesCount: 0,
+              ownedChannelsCount: 0,
+              pendingApprovalsCount: 0,
+              recentActivity: [],
+            } as any);
       } catch (err) {
-        s = { subscribedChannelsCount: 0, messagesCount: 0, ownedChannelsCount: 0, pendingApprovalsCount: 0, recentActivity: [] } as any;
+        s = {
+          subscribedChannelsCount: 0,
+          messagesCount: 0,
+          ownedChannelsCount: 0,
+          pendingApprovalsCount: 0,
+          recentActivity: [],
+        } as any;
       }
       try {
         ch = await api.getChannels();
@@ -45,16 +58,20 @@ const Dashboard: React.FC<DashboardProps> = ({ onChangeView }) => {
     if (!Array.isArray(channs)) return 0;
     return channs.reduce((acc, curr) => {
       const base = Number((curr as any).memberCount || 0);
-      const subCount = Array.isArray(curr.subchannels) ? calculateTotalMembers(curr.subchannels) : 0;
+      const subCount = Array.isArray(curr.subchannels)
+        ? calculateTotalMembers(curr.subchannels)
+        : 0;
       return acc + base + subCount;
     }, 0);
   };
 
   const totalMembers = calculateTotalMembers(channels);
-  const verifiedChannels = channels.filter(c => ['VERIFIED','VERIFIED_CERTIFIED'].includes((c as any).verificationStatus)).length;
+  const verifiedChannels = channels.filter((c) =>
+    ['VERIFIED', 'VERIFIED_CERTIFIED'].includes((c as any).verificationStatus)
+  ).length;
 
   const StatCard = ({ title, value, icon: Icon, color, subtext, onClick }: any) => (
-    <div 
+    <div
       onClick={onClick}
       className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 hover:shadow-md transition-shadow cursor-pointer group"
     >
@@ -69,7 +86,10 @@ const Dashboard: React.FC<DashboardProps> = ({ onChangeView }) => {
       </div>
       <div className="flex items-center text-xs text-gray-400 group-hover:text-indigo-600 transition-colors">
         <span>{subtext}</span>
-        <ArrowRight size={12} className="ml-1 opacity-0 group-hover:opacity-100 transition-opacity" />
+        <ArrowRight
+          size={12}
+          className="ml-1 opacity-0 group-hover:opacity-100 transition-opacity"
+        />
       </div>
     </div>
   );
@@ -85,7 +105,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onChangeView }) => {
           <div className="h-7 w-40 bg-gray-200 rounded" />
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-          {Array.from({length:4}).map((_,i)=> (
+          {Array.from({ length: 4 }).map((_, i) => (
             <div key={i} className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
               <div className="flex items-start justify-between mb-4">
                 <div>
@@ -106,7 +126,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onChangeView }) => {
           <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
             <div className="h-5 w-40 bg-gray-200 rounded mb-4" />
             <div className="space-y-3">
-              {Array.from({length:5}).map((_,i)=> (
+              {Array.from({ length: 5 }).map((_, i) => (
                 <div key={i} className="h-16 bg-gray-100 rounded" />
               ))}
             </div>
@@ -117,7 +137,11 @@ const Dashboard: React.FC<DashboardProps> = ({ onChangeView }) => {
   }
 
   if (error) {
-      return <div className="flex h-full items-center justify-center text-red-500"><AlertTriangle className="mr-2"/> {error}</div>
+    return (
+      <div className="flex h-full items-center justify-center text-red-500">
+        <AlertTriangle className="mr-2" /> {error}
+      </div>
+    );
   }
 
   return (
@@ -135,35 +159,35 @@ const Dashboard: React.FC<DashboardProps> = ({ onChangeView }) => {
 
       {/* Stats Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        <StatCard 
-          title={t('dashboard.totalReach')} 
-          value={totalMembers.toLocaleString()} 
-          icon={Users} 
-          color="bg-blue-500" 
+        <StatCard
+          title={t('dashboard.totalReach')}
+          value={totalMembers.toLocaleString()}
+          icon={Users}
+          color="bg-blue-500"
           subtext="Across all channels"
           onClick={() => onChangeView('channels')}
         />
-        <StatCard 
-          title={t('dashboard.pendingApprovals')} 
-          value={stats?.pendingApprovalsCount || 0} 
-          icon={CheckCircle} 
-          color="bg-amber-500" 
+        <StatCard
+          title={t('dashboard.pendingApprovals')}
+          value={stats?.pendingApprovalsCount || 0}
+          icon={CheckCircle}
+          color="bg-amber-500"
           subtext={t('dashboard.requiresAttention')}
           onClick={() => onChangeView('approvals')}
         />
-        <StatCard 
-          title={t('dashboard.messagesSent')} 
-          value={stats?.messagesCount || 0} 
-          icon={Activity} 
-          color="bg-indigo-500" 
+        <StatCard
+          title={t('dashboard.messagesSent')}
+          value={stats?.messagesCount || 0}
+          icon={Activity}
+          color="bg-indigo-500"
           subtext={t('dashboard.lifetimeTotal')}
           onClick={() => onChangeView('messages')}
         />
-        <StatCard 
-          title={t('dashboard.verifiedChannels')} 
-          value={verifiedChannels} 
-          icon={CheckCircle} 
-          color="bg-emerald-500" 
+        <StatCard
+          title={t('dashboard.verifiedChannels')}
+          value={verifiedChannels}
+          icon={CheckCircle}
+          color="bg-emerald-500"
           subtext={t('dashboard.trustSafety')}
           onClick={() => onChangeView('channels')}
         />
@@ -173,16 +197,31 @@ const Dashboard: React.FC<DashboardProps> = ({ onChangeView }) => {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Delivery Chart */}
         <div className="lg:col-span-2 bg-white p-6 rounded-xl shadow-sm border border-gray-100">
-          <h3 className="text-lg font-semibold text-gray-900 mb-6">{t('dashboard.messageActivity')}</h3>
+          <h3 className="text-lg font-semibold text-gray-900 mb-6">
+            {t('dashboard.messageActivity')}
+          </h3>
           <div className="h-80 w-full">
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={CHART_DATA_PLACEHOLDER} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
+              <BarChart
+                data={CHART_DATA_PLACEHOLDER}
+                margin={{ top: 10, right: 30, left: 0, bottom: 0 }}
+              >
                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: '#64748b' }} dy={10} />
+                <XAxis
+                  dataKey="name"
+                  axisLine={false}
+                  tickLine={false}
+                  tick={{ fill: '#64748b' }}
+                  dy={10}
+                />
                 <YAxis axisLine={false} tickLine={false} tick={{ fill: '#64748b' }} />
-                <Tooltip 
+                <Tooltip
                   cursor={{ fill: '#f8fafc' }}
-                  contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
+                  contentStyle={{
+                    borderRadius: '8px',
+                    border: 'none',
+                    boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)',
+                  }}
                 />
                 <Bar dataKey="sent" name="Sent" fill="#6366f1" radius={[4, 4, 0, 0]} barSize={20} />
               </BarChart>
@@ -192,22 +231,28 @@ const Dashboard: React.FC<DashboardProps> = ({ onChangeView }) => {
 
         {/* Recent Activity */}
         <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 flex flex-col">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">{t('dashboard.recentActivity')}</h3>
+          <h3 className="text-lg font-semibold text-gray-900 mb-4">
+            {t('dashboard.recentActivity')}
+          </h3>
           <div className="flex-1 overflow-y-auto space-y-4 pr-2">
             {stats?.recentActivity && stats.recentActivity.length > 0 ? (
-                stats.recentActivity.map((msg: any) => (
+              stats.recentActivity.map((msg: any) => (
                 <div key={msg.id} className="p-3 rounded-lg bg-gray-50 border border-gray-100">
-                    <div className="flex items-center justify-between mb-2">
-                    <span className="text-xs text-gray-400">{new Date(msg.createdAt).toLocaleDateString()}</span>
-                    </div>
-                    <p className="text-sm text-gray-800 line-clamp-2 font-medium">New message in {msg.channel?.title || 'Channel'}</p>
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-xs text-gray-400">
+                      {new Date(msg.createdAt).toLocaleDateString()}
+                    </span>
+                  </div>
+                  <p className="text-sm text-gray-800 line-clamp-2 font-medium">
+                    New message in {msg.channel?.title || 'Channel'}
+                  </p>
                 </div>
-                ))
+              ))
             ) : (
-                <p className="text-sm text-gray-500">{t('dashboard.noRecentActivity')}</p>
+              <p className="text-sm text-gray-500">{t('dashboard.noRecentActivity')}</p>
             )}
-            
-            <button 
+
+            <button
               onClick={() => onChangeView('messages')}
               className="w-full py-2 text-sm text-gray-500 hover:text-indigo-600 transition-colors border-t border-gray-100 mt-2"
             >
@@ -215,11 +260,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onChangeView }) => {
             </button>
           </div>
         </div>
-
-      
       </div>
-
-      
     </div>
   );
 };

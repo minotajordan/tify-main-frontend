@@ -1,31 +1,31 @@
 export enum VerificationStatus {
   UNVERIFIED = 'UNVERIFIED',
   VERIFIED = 'VERIFIED',
-  VERIFIED_CERTIFIED = 'VERIFIED_CERTIFIED'
+  VERIFIED_CERTIFIED = 'VERIFIED_CERTIFIED',
 }
 
 export enum ApprovalPolicy {
   REQUIRED = 'REQUIRED',
   OPTIONAL = 'OPTIONAL',
-  DISABLED = 'DISABLED'
+  DISABLED = 'DISABLED',
 }
 
 export enum MessagePriority {
   LOW = 'LOW',
   MEDIUM = 'MEDIUM',
-  HIGH = 'HIGH'
+  HIGH = 'HIGH',
 }
 
 export enum DeliveryStatus {
   PENDING = 'PENDING',
   DELIVERED = 'DELIVERED',
   FAILED = 'FAILED',
-  READ = 'READ'
+  READ = 'READ',
 }
 
 export enum CategoryScope {
   GLOBAL = 'GLOBAL',
-  CHANNEL = 'CHANNEL'
+  CHANNEL = 'CHANNEL',
 }
 
 export enum DeliveryMethod {
@@ -34,7 +34,7 @@ export enum DeliveryMethod {
   WHATSAPP = 'WHATSAPP',
   TELEGRAM = 'TELEGRAM',
   EMAIL = 'EMAIL',
-  BOTH = 'BOTH'
+  BOTH = 'BOTH',
 }
 
 export interface UserProfileShort {

@@ -1,11 +1,11 @@
-import { 
-  Channel, 
-  Message, 
-  MessageListResponse, 
-  User, 
-  UserStats, 
-  MessagePriority, 
-  DeliveryMethod
+import {
+  Channel,
+  Message,
+  MessageListResponse,
+  User,
+  UserStats,
+  MessagePriority,
+  DeliveryMethod,
 } from '../types';
 
 export const API_BASE = (() => {
@@ -15,10 +15,15 @@ export const API_BASE = (() => {
     const stored = localStorage.getItem('tify_api_base');
     if (stored) return stored;
   }
-  if (typeof process !== 'undefined' && (process as any).env && (process as any).env.TIFY_API_BASE) {
+  if (
+    typeof process !== 'undefined' &&
+    (process as any).env &&
+    (process as any).env.TIFY_API_BASE
+  ) {
     return (process as any).env.TIFY_API_BASE;
   }
-  return 'http://192.168.3.149:3333/api';
+  return 'https://tify-main-backend.vercel.app/api';
+  // return 'http://localhost:3333/api';
 })();
 export function getAuthToken(): string | null {
   return typeof localStorage !== 'undefined' ? localStorage.getItem('tify_token') : null;
@@ -34,48 +39,77 @@ export function getCurrentUserId(): string | null {
   }
 }
 
-
-
 async function request<T>(url: string, options?: RequestInit): Promise<T> {
   const token = typeof localStorage !== 'undefined' ? localStorage.getItem('tify_token') : null;
-  const headers = { ...(options?.headers || {}), ...(token ? { Authorization: `Bearer ${token}` } : {}) } as any;
+  const headers = {
+    ...(options?.headers || {}),
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+  } as any;
   const startedAt = Date.now();
   if (typeof window !== 'undefined') {
     try {
-      window.dispatchEvent(new CustomEvent('tify:request', { detail: { url, options: { ...options, headers }, startedAt } }));
+      window.dispatchEvent(
+        new CustomEvent('tify:request', {
+          detail: { url, options: { ...options, headers }, startedAt },
+        })
+      );
     } catch {}
   }
   const res = await fetch(url, { ...options, headers });
   if (!res.ok) {
     let payload: any = null;
-    try { payload = await res.json(); } catch {}
+    try {
+      payload = await res.json();
+    } catch {}
     const text = payload?.error || (await res.text().catch(() => '')) || 'Error';
     if (typeof window !== 'undefined') {
-      window.dispatchEvent(new CustomEvent('tify:error', { detail: { status: res.status, code: payload?.code, error: text, url, payload, finishedAt: Date.now(), startedAt } }));
+      window.dispatchEvent(
+        new CustomEvent('tify:error', {
+          detail: {
+            status: res.status,
+            code: payload?.code,
+            error: text,
+            url,
+            payload,
+            finishedAt: Date.now(),
+            startedAt,
+          },
+        })
+      );
     }
     throw new Error(`HTTP ${res.status}: ${text}`);
   }
   const json = await res.json();
   if (typeof window !== 'undefined') {
     try {
-      window.dispatchEvent(new CustomEvent('tify:response', { detail: { url, status: res.status, payload: options?.body, response: json, finishedAt: Date.now(), startedAt } }));
+      window.dispatchEvent(
+        new CustomEvent('tify:response', {
+          detail: {
+            url,
+            status: res.status,
+            payload: options?.body,
+            response: json,
+            finishedAt: Date.now(),
+            startedAt,
+          },
+        })
+      );
     } catch {}
   }
   return json;
 }
 
 export const api = {
-
   getCurrentUserId: () => getCurrentUserId() || '',
   getBootstrap: async (userId?: string): Promise<any> => {
     const uid = userId || getCurrentUserId();
-    const query = new URLSearchParams(uid ? { userid: uid } : {} as any);
+    const query = new URLSearchParams(uid ? { userid: uid } : ({} as any));
     return request(`${API_BASE}/app/bootstrap?${query.toString()}`);
   },
   // --- Channels ---
-  getChannels: async (params?: { search?: string, isPublic?: boolean }): Promise<Channel[]> => {
+  getChannels: async (params?: { search?: string; isPublic?: boolean }): Promise<Channel[]> => {
     const uid = getCurrentUserId();
-    const query = new URLSearchParams(uid ? { userId: uid } : {} as any);
+    const query = new URLSearchParams(uid ? { userId: uid } : ({} as any));
     if (params?.search) query.append('search', params.search);
     if (params?.isPublic !== undefined) query.append('isPublic', String(params.isPublic));
     return request<Channel[]>(`${API_BASE}/channels?${query.toString()}`);
@@ -87,15 +121,39 @@ export const api = {
     return request<Channel & { messages: Message[] }>(`${API_BASE}/channels/${id}${suffix}`);
   },
 
-  getSubchannels: async (parentId: string, page = 1, limit = 20): Promise<{ items: Array<Channel & { counts: { approvers: number; pending: number; sent: number } }>; pagination: { page: number; limit: number; total: number; pages: number } }> => {
+  getSubchannels: async (
+    parentId: string,
+    page = 1,
+    limit = 20
+  ): Promise<{
+    items: Array<Channel & { counts: { approvers: number; pending: number; sent: number } }>;
+    pagination: { page: number; limit: number; total: number; pages: number };
+  }> => {
     return request(`${API_BASE}/channels/${parentId}/subchannels?page=${page}&limit=${limit}`);
   },
 
-  getChannelStats: async (id: string, range: '1h' | '24h' | '7d' | '1m' | 'all' = 'all'): Promise<{ delivered: number; read: number; unread: number; subscribers: number; approvers: number }> => {
+  getChannelStats: async (
+    id: string,
+    range: '1h' | '24h' | '7d' | '1m' | 'all' = 'all'
+  ): Promise<{
+    delivered: number;
+    read: number;
+    unread: number;
+    subscribers: number;
+    approvers: number;
+  }> => {
     return request(`${API_BASE}/channels/${id}/stats?range=${range}`);
   },
 
-  getChannelSubscribers: async (channelId: string, page = 1, limit = 20, q?: string): Promise<{ items: Array<{ id: string; user: User; subscribedAt: string }>; pagination: { page: number; limit: number; total: number; pages: number } }> => {
+  getChannelSubscribers: async (
+    channelId: string,
+    page = 1,
+    limit = 20,
+    q?: string
+  ): Promise<{
+    items: Array<{ id: string; user: User; subscribedAt: string }>;
+    pagination: { page: number; limit: number; total: number; pages: number };
+  }> => {
     const params = new URLSearchParams({ page: String(page), limit: String(limit) });
     if (q) params.append('q', q);
     return request(`${API_BASE}/channels/${channelId}/subscriptions?${params.toString()}`);
@@ -122,20 +180,39 @@ export const api = {
     if (filters?.priority) params.append('priority', filters.priority);
     if (filters?.emergency !== undefined) params.append('emergency', String(filters.emergency));
     if (filters?.expired !== undefined) params.append('expired', String(filters.expired));
-    if (filters?.hasApprovals !== undefined) params.append('hasApprovals', String(filters.hasApprovals));
+    if (filters?.hasApprovals !== undefined)
+      params.append('hasApprovals', String(filters.hasApprovals));
     if (filters?.start) params.append('start', filters.start);
-    return request<MessageListResponse>(`${API_BASE}/messages/channel/${channelId}?${params.toString()}`);
+    return request<MessageListResponse>(
+      `${API_BASE}/messages/channel/${channelId}?${params.toString()}`
+    );
   },
 
   getPendingApprovals: async (): Promise<Message[]> => {
     return request<Message[]>(`${API_BASE}/messages/pending/approval`);
   },
 
-  getChannelPendingApprovals: async (channelId: string, page = 1, limit = 20): Promise<MessageListResponse> => {
-    return request<MessageListResponse>(`${API_BASE}/messages/pending/approval/channel/${channelId}?page=${page}&limit=${limit}`);
+  getChannelPendingApprovals: async (
+    channelId: string,
+    page = 1,
+    limit = 20
+  ): Promise<MessageListResponse> => {
+    return request<MessageListResponse>(
+      `${API_BASE}/messages/pending/approval/channel/${channelId}?page=${page}&limit=${limit}`
+    );
   },
 
-  getMessageApprovals: async (messageId: string): Promise<Array<{ userId: string; user: User; status: 'APPROVED' | 'REJECTED' | 'PENDING'; decidedAt?: string; removed?: boolean }>> => {
+  getMessageApprovals: async (
+    messageId: string
+  ): Promise<
+    Array<{
+      userId: string;
+      user: User;
+      status: 'APPROVED' | 'REJECTED' | 'PENDING';
+      decidedAt?: string;
+      removed?: boolean;
+    }>
+  > => {
     return request(`${API_BASE}/messages/${messageId}/approvals`);
   },
 
@@ -151,11 +228,11 @@ export const api = {
     publishedAt?: string;
     eventAt?: string;
     expiresAt?: string;
-  }): Promise<{ message: string, data: Message }> => {
+  }): Promise<{ message: string; data: Message }> => {
     return request(`${API_BASE}/messages`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
+      body: JSON.stringify(payload),
     });
   },
 
@@ -163,7 +240,7 @@ export const api = {
     return request(`${API_BASE}/messages/${id}/approve`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ approverId: getCurrentUserId() })
+      body: JSON.stringify({ approverId: getCurrentUserId() }),
     });
   },
 
@@ -171,7 +248,7 @@ export const api = {
     return request(`${API_BASE}/messages/${id}/reject`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ approverId: getCurrentUserId() })
+      body: JSON.stringify({ approverId: getCurrentUserId() }),
     });
   },
 
@@ -179,7 +256,7 @@ export const api = {
     return request(`${API_BASE}/messages/${id}/cancel`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ requesterId: getCurrentUserId() })
+      body: JSON.stringify({ requesterId: getCurrentUserId() }),
     });
   },
 
@@ -187,7 +264,13 @@ export const api = {
     return request(`${API_BASE}/messages/${id}/view`, { method: 'POST' });
   },
 
-  getMessageViews: async (id: string): Promise<{ total: number; uniqueViewers: number; viewers: Array<{ id: string; username: string; fullName: string; count: number }> }> => {
+  getMessageViews: async (
+    id: string
+  ): Promise<{
+    total: number;
+    uniqueViewers: number;
+    viewers: Array<{ id: string; username: string; fullName: string; count: number }>;
+  }> => {
     return request(`${API_BASE}/messages/${id}/views`);
   },
 
@@ -204,17 +287,32 @@ export const api = {
     return request<User[]>(`${API_BASE}/users`);
   },
 
-  getUsersPaged: async (page = 1, limit = 20, q?: string): Promise<{ items: User[]; pagination: { page: number; limit: number; total: number; pages: number } }> => {
+  getUsersPaged: async (
+    page = 1,
+    limit = 20,
+    q?: string
+  ): Promise<{
+    items: User[];
+    pagination: { page: number; limit: number; total: number; pages: number };
+  }> => {
     const params = new URLSearchParams({ page: String(page), limit: String(limit) });
     if (q) params.append('q', q);
     return request(`${API_BASE}/users/paged?${params.toString()}`);
   },
 
-  createUser: async (payload: { email: string; username: string; fullName?: string; phoneNumber?: string; avatarUrl?: string; isAdmin?: boolean; password?: string }): Promise<User> => {
+  createUser: async (payload: {
+    email: string;
+    username: string;
+    fullName?: string;
+    phoneNumber?: string;
+    avatarUrl?: string;
+    isAdmin?: boolean;
+    password?: string;
+  }): Promise<User> => {
     return request<User>(`${API_BASE}/users`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
+      body: JSON.stringify(payload),
     });
   },
 
@@ -226,15 +324,30 @@ export const api = {
     return request<UserStats>(`${API_BASE}/users/${id}/stats`);
   },
 
-  getUserActivity: async (id: string, range: '1h'|'24h'|'7d'|'1m'|'all' = '24h'): Promise<{ sentInRange: number; deliveriesInRange: number; read: number; unread: number }> => {
+  getUserActivity: async (
+    id: string,
+    range: '1h' | '24h' | '7d' | '1m' | 'all' = '24h'
+  ): Promise<{ sentInRange: number; deliveriesInRange: number; read: number; unread: number }> => {
     return request(`${API_BASE}/users/${id}/activity?range=${range}`);
   },
 
-  getUserTopChannels: async (id: string, range: '1h'|'24h'|'7d'|'1m'|'all' = '24h'): Promise<{ items: Array<{ channel: { id: string; title: string; icon?: string; logoUrl?: string }, count: number }> }> => {
+  getUserTopChannels: async (
+    id: string,
+    range: '1h' | '24h' | '7d' | '1m' | 'all' = '24h'
+  ): Promise<{
+    items: Array<{
+      channel: { id: string; title: string; icon?: string; logoUrl?: string };
+      count: number;
+    }>;
+  }> => {
     return request(`${API_BASE}/users/${id}/top-channels?range=${range}`);
   },
 
-  getUserAuditLogs: async (id: string, page = 1, limit = 20): Promise<{ items: any[]; pagination: any }> => {
+  getUserAuditLogs: async (
+    id: string,
+    page = 1,
+    limit = 20
+  ): Promise<{ items: any[]; pagination: any }> => {
     return request(`${API_BASE}/users/${id}/audit-logs?page=${page}&limit=${limit}`);
   },
 
@@ -246,7 +359,7 @@ export const api = {
     return request(`${API_BASE}/subscriptions`, {
       method: 'DELETE',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ userId, channelId })
+      body: JSON.stringify({ userId, channelId }),
     });
   },
 
@@ -265,12 +378,16 @@ export const api = {
   },
 
   getUserPendingApprovals: async (id: string, windowHours = 24): Promise<Message[]> => {
-    return request<Message[]>(`${API_BASE}/users/${id}/pending-approvals?windowHours=${windowHours}`);
+    return request<Message[]>(
+      `${API_BASE}/users/${id}/pending-approvals?windowHours=${windowHours}`
+    );
   },
 
-  requestUserVerificationCode: async (id: string): Promise<{ id: string; verificationCode: string; verificationCodeExpiresAt: string }> => {
+  requestUserVerificationCode: async (
+    id: string
+  ): Promise<{ id: string; verificationCode: string; verificationCodeExpiresAt: string }> => {
     return request(`${API_BASE}/users/${id}/request-verification-code`, {
-      method: 'POST'
+      method: 'POST',
     });
   },
 
@@ -294,30 +411,33 @@ export const api = {
     return request<Channel>(`${API_BASE}/channels`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
+      body: JSON.stringify(payload),
     });
   },
 
-  createSubchannel: async (parentId: string, payload: {
-    title: string;
-    description?: string;
-    icon?: string;
-    logoUrl?: string;
-    ownerId: string;
-    organizationId: string;
-    isPublic?: boolean;
-    isHidden?: boolean;
-    searchExactOnly?: boolean;
-    password?: string;
-    referenceCode?: string;
-    approvalPolicy?: 'REQUIRED' | 'OPTIONAL' | 'DISABLED';
-    websiteUrl?: string;
-    socialLinks?: Record<string, string>;
-  }): Promise<Channel> => {
+  createSubchannel: async (
+    parentId: string,
+    payload: {
+      title: string;
+      description?: string;
+      icon?: string;
+      logoUrl?: string;
+      ownerId: string;
+      organizationId: string;
+      isPublic?: boolean;
+      isHidden?: boolean;
+      searchExactOnly?: boolean;
+      password?: string;
+      referenceCode?: string;
+      approvalPolicy?: 'REQUIRED' | 'OPTIONAL' | 'DISABLED';
+      websiteUrl?: string;
+      socialLinks?: Record<string, string>;
+    }
+  ): Promise<Channel> => {
     return request<Channel>(`${API_BASE}/channels/${parentId}/subchannels`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
+      body: JSON.stringify(payload),
     });
   },
 
@@ -325,16 +445,55 @@ export const api = {
     return request(`${API_BASE}/channels/${channelId}/approvers`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ userId })
+      body: JSON.stringify({ userId }),
     });
   },
 
   removeChannelApprover: async (channelId: string, userId: string): Promise<any> => {
     return request(`${API_BASE}/channels/${channelId}/approvers/${userId}`, {
-      method: 'DELETE'
+      method: 'DELETE',
     });
   },
 
+  // --- Forms ---
+  getForms: async (): Promise<any[]> => {
+    return request(`${API_BASE}/forms`);
+  },
+  getForm: async (id: string): Promise<any> => {
+    return request(`${API_BASE}/forms/${id}`);
+  },
+  createForm: async (data: any): Promise<any> => {
+    return request(`${API_BASE}/forms`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+  },
+  updateForm: async (id: string, data: any): Promise<any> => {
+    return request(`${API_BASE}/forms/${id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+  },
+  deleteForm: async (id: string): Promise<any> => {
+    return request(`${API_BASE}/forms/${id}`, { method: 'DELETE' });
+  },
+  getFormSubmissions: async (id: string): Promise<any[]> => {
+    return request(`${API_BASE}/forms/${id}/submissions`);
+  },
+  getPublicForm: async (slug: string): Promise<any> => {
+    return request(`${API_BASE}/forms/public/${slug}`);
+  },
+  submitForm: async (slug: string, data: any): Promise<any> => {
+    return request(`${API_BASE}/forms/public/${slug}/submit`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ data }),
+    });
+  },
+
+  // --- Auth ---
   authHasUsers: async (): Promise<{ hasUsers: boolean }> => {
     return request(`${API_BASE}/auth/has-users`);
   },
@@ -343,11 +502,18 @@ export const api = {
     return request(`${API_BASE}/auth/needs-bootstrap`);
   },
 
-  authBootstrapAdmin: async (payload: { email: string; username: string; fullName?: string; password: string; phoneNumber?: string; code: string }): Promise<User> => {
+  authBootstrapAdmin: async (payload: {
+    email: string;
+    username: string;
+    fullName?: string;
+    password: string;
+    phoneNumber?: string;
+    code: string;
+  }): Promise<User> => {
     const res = await request<{ token: string; user: User }>(`${API_BASE}/auth/bootstrap-admin`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
+      body: JSON.stringify(payload),
     });
     localStorage.setItem('tify_token', res.token);
     return res.user;
@@ -357,25 +523,31 @@ export const api = {
     const res = await request<{ token: string; user: User }>(`${API_BASE}/auth/login`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
+      body: JSON.stringify(payload),
     });
     localStorage.setItem('tify_token', res.token);
     return res.user;
   },
 
-  authRequestPasswordReset: async (payload: { identifier: string }): Promise<{ ok: boolean; message: string; requestedAt: string }> => {
+  authRequestPasswordReset: async (payload: {
+    identifier: string;
+  }): Promise<{ ok: boolean; message: string; requestedAt: string }> => {
     return request(`${API_BASE}/auth/request-password-reset`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
+      body: JSON.stringify(payload),
     });
   },
 
-  authResetPassword: async (payload: { identifier: string; code: string; newPassword: string }): Promise<User> => {
+  authResetPassword: async (payload: {
+    identifier: string;
+    code: string;
+    newPassword: string;
+  }): Promise<User> => {
     const res = await request<{ token: string; user: User }>(`${API_BASE}/auth/reset-password`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
+      body: JSON.stringify(payload),
     });
     localStorage.setItem('tify_token', res.token);
     return res.user;
@@ -383,5 +555,5 @@ export const api = {
 
   authMe: async (): Promise<User> => {
     return request<User>(`${API_BASE}/auth/me`);
-  }
+  },
 };

@@ -1,5 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { createMonitoringConnection, resetMonitoring, MonitoringSnapshot } from '../services/monitoringService';
+import {
+  createMonitoringConnection,
+  resetMonitoring,
+  MonitoringSnapshot,
+} from '../services/monitoringService';
 
 type Method = 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH' | 'OPTIONS' | 'HEAD';
 
@@ -9,7 +13,11 @@ export function useMonitoring(baseUrl = 'http://localhost:3334') {
   const [series, setSeries] = useState<Array<{ second: number; count: number }>>([]);
   const [requestsPerSecond, setRps] = useState(0);
   const [recentRequests, setRecent] = useState<MonitoringSnapshot['recentRequests']>([]);
-  const [stats, setStats] = useState<MonitoringSnapshot['stats']>({ total: 0, avgResponseTime: 0, statusCodes: {} });
+  const [stats, setStats] = useState<MonitoringSnapshot['stats']>({
+    total: 0,
+    avgResponseTime: 0,
+    statusCodes: {},
+  });
   const [topEndpoints, setTop] = useState<MonitoringSnapshot['topEndpoints']>([]);
 
   const [methodFilter, setMethodFilter] = useState<Method | 'ALL'>('ALL');
@@ -39,11 +47,15 @@ export function useMonitoring(baseUrl = 'http://localhost:3334') {
       const methodOk = methodFilter === 'ALL' ? true : r.method === methodFilter;
       const code = r.statusCode;
       const codeOk =
-        codeFilter === 'ALL' ? true :
-        codeFilter === '2xx' ? code >= 200 && code < 300 :
-        codeFilter === '3xx' ? code >= 300 && code < 400 :
-        codeFilter === '4xx' ? code >= 400 && code < 500 :
-        code >= 500;
+        codeFilter === 'ALL'
+          ? true
+          : codeFilter === '2xx'
+            ? code >= 200 && code < 300
+            : codeFilter === '3xx'
+              ? code >= 300 && code < 400
+              : codeFilter === '4xx'
+                ? code >= 400 && code < 500
+                : code >= 500;
       return methodOk && codeOk;
     });
   }, [recentRequests, methodFilter, codeFilter]);
@@ -56,15 +68,25 @@ export function useMonitoring(baseUrl = 'http://localhost:3334') {
     setRecent([]);
     setStats({ total: 0, avgResponseTime: 0, statusCodes: {} });
     setTop([]);
-    try { await resetMonitoring(baseUrl); } catch {}
+    try {
+      await resetMonitoring(baseUrl);
+    } catch {}
   };
 
   const exportCSV = () => {
     const rows = [['timestamp', 'method', 'endpoint', 'statusCode', 'responseTime']];
     for (const r of recentRequests) {
-      rows.push([String(r.timestamp), r.method, r.endpoint, String(r.statusCode), String(r.responseTime)]);
+      rows.push([
+        String(r.timestamp),
+        r.method,
+        r.endpoint,
+        String(r.statusCode),
+        String(r.responseTime),
+      ]);
     }
-    const csv = rows.map((row) => row.map((v) => `"${v.replace(/"/g, '""')}"`).join(',')).join('\n');
+    const csv = rows
+      .map((row) => row.map((v) => `"${v.replace(/"/g, '""')}"`).join(','))
+      .join('\n');
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');

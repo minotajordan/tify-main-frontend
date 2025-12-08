@@ -47,9 +47,7 @@ export default function StatsCards({ stats, topEndpoints }: Props) {
               <span className="font-mono">{e.count}</span>
             </li>
           ))}
-          {topEndpoints.length === 0 && (
-            <li className="text-gray-500">Sin datos</li>
-          )}
+          {topEndpoints.length === 0 && <li className="text-gray-500">Sin datos</li>}
         </ul>
       </div>
     </div>

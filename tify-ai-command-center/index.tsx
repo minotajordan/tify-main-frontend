@@ -5,7 +5,7 @@ import { I18nProvider } from './i18n';
 
 const rootElement = document.getElementById('root');
 if (!rootElement) {
-  throw new Error("Could not find root element to mount to");
+  throw new Error('Could not find root element to mount to');
 }
 
 const toastContainer = (() => {
@@ -33,7 +33,10 @@ window.addEventListener('tify:error', (e: any) => {
   t.style.transition = 'opacity .3s';
   t.innerHTML = `<div style="font-weight:600">${error || 'Error'}</div><div style="opacity:.8">${code || ''}${status ? ` · ${status}` : ''}</div>`;
   toastContainer.appendChild(t);
-  setTimeout(() => { t.style.opacity = '0'; setTimeout(() => toastContainer.removeChild(t), 300); }, 5000);
+  setTimeout(() => {
+    t.style.opacity = '0';
+    setTimeout(() => toastContainer.removeChild(t), 300);
+  }, 5000);
 });
 
 const root = ReactDOM.createRoot(rootElement);

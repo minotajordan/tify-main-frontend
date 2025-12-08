@@ -29,7 +29,9 @@ export default function MonitoringDashboard() {
   useEffect(() => {
     const last = recentRequests[0];
     if (last && last.responseTime > threshold) {
-      setAlert(`Alerta: respuesta alta (${last.responseTime} ms) en ${last.method} ${last.endpoint}`);
+      setAlert(
+        `Alerta: respuesta alta (${last.responseTime} ms) en ${last.method} ${last.endpoint}`
+      );
       const t = setTimeout(() => setAlert(null), 4000);
       return () => clearTimeout(t);
     }
@@ -39,24 +41,32 @@ export default function MonitoringDashboard() {
     <div className="p-4 space-y-4 bg-white">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <span className={`inline-block w-2 h-2 rounded-full ${connected ? 'bg-green-500' : 'bg-red-500'}`} />
+          <span
+            className={`inline-block w-2 h-2 rounded-full ${connected ? 'bg-green-500' : 'bg-red-500'}`}
+          />
           <span className="text-sm text-gray-600">{connected ? 'Conectado' : 'Desconectado'}</span>
           <span className="ml-4 text-sm">RPS: {requestsPerSecond}</span>
         </div>
         <div className="flex items-center gap-2">
           {paused ? (
-            <button className="px-3 py-1 bg-blue-600 text-white rounded" onClick={resume}>Reanudar</button>
+            <button className="px-3 py-1 bg-blue-600 text-white rounded" onClick={resume}>
+              Reanudar
+            </button>
           ) : (
-            <button className="px-3 py-1 bg-gray-700 text-white rounded" onClick={pause}>Pausar</button>
+            <button className="px-3 py-1 bg-gray-700 text-white rounded" onClick={pause}>
+              Pausar
+            </button>
           )}
-          <button className="px-3 py-1 bg-gray-200 rounded" onClick={clear}>Limpiar</button>
-          <button className="px-3 py-1 bg-gray-200 rounded" onClick={exportCSV}>Exportar CSV</button>
+          <button className="px-3 py-1 bg-gray-200 rounded" onClick={clear}>
+            Limpiar
+          </button>
+          <button className="px-3 py-1 bg-gray-200 rounded" onClick={exportCSV}>
+            Exportar CSV
+          </button>
         </div>
       </div>
 
-      {alert && (
-        <div className="p-2 bg-yellow-100 text-yellow-800 rounded">{alert}</div>
-      )}
+      {alert && <div className="p-2 bg-yellow-100 text-yellow-800 rounded">{alert}</div>}
 
       <RequestsChart series={series} />
 
@@ -71,7 +81,9 @@ export default function MonitoringDashboard() {
       />
 
       <div className="bg-white rounded-lg shadow p-4">
-        <div className="text-sm text-gray-600 mb-2">Umbral de alerta por tiempo de respuesta (ms)</div>
+        <div className="text-sm text-gray-600 mb-2">
+          Umbral de alerta por tiempo de respuesta (ms)
+        </div>
         <input
           type="number"
           className="px-2 py-1 border rounded"

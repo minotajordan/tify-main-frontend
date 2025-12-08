@@ -1,5 +1,13 @@
 import React from 'react';
-import { LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid, ResponsiveContainer } from 'recharts';
+import {
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  Tooltip,
+  CartesianGrid,
+  ResponsiveContainer,
+} from 'recharts';
 
 type Props = {
   series: Array<{ second: number; count: number }>;
@@ -20,7 +28,14 @@ export default function RequestsChart({ series }: Props) {
           <XAxis dataKey="time" hide />
           <YAxis allowDecimals={false} width={30} />
           <Tooltip />
-          <Line type="monotone" dataKey="count" stroke="#3b82f6" strokeWidth={2} dot={false} isAnimationActive={false} />
+          <Line
+            type="monotone"
+            dataKey="count"
+            stroke="#3b82f6"
+            strokeWidth={2}
+            dot={false}
+            isAnimationActive={false}
+          />
         </LineChart>
       </ResponsiveContainer>
     </div>

@@ -9,7 +9,8 @@
     "preview": "vite preview",
     "lint": "eslint . --ext .ts,.tsx --max-warnings=0",
     "lint:fix": "eslint . --ext .ts,.tsx --fix",
-    "format": "prettier --write ."
+    "format": "prettier --write .",
+    "deployment": "node generate-version.js && npm run build && echo 'Subiendo archivos a Host...' && scp -P 65002 -r dist/* u803886834@157.173.214.73:domains/tify.pro/public_html/board/"
   },
   "dependencies": {
     "react-dom": "^19.2.0",

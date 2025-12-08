@@ -113,42 +113,46 @@ const ApproverSpeedDial: React.FC<{ messageId: string; channelId: string }> = ({
           <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
           <div className="absolute right-0 mt-2 w-60 bg-white border border-gray-200 rounded-lg shadow-lg p-3 z-50">
             <div className="text-sm font-semibold text-gray-700 mb-2">Aprobadores</div>
-          <div className="max-h-48 overflow-y-auto">
-            {loading ? (
-              <div className="space-y-2">
-                {Array.from({ length: 5 }).map((_, i) => (
-                  <div key={i} className="flex items-center justify-between px-2 py-1">
-                    <div className="h-3 w-24 bg-gray-200 rounded animate-pulse" />
-                    <div className="h-5 w-16 bg-gray-200 rounded animate-pulse" />
-                  </div>
-                ))}
-              </div>
-            ) : list.length === 0 ? (
-              <div className="text-xs text-gray-400 py-2 text-center">Sin aprobadores</div>
-            ) : (
-              list.map((a) => (
-                <div key={a.userId} className="flex items-center justify-between px-2 py-1 text-xs">
-                  <span className="text-gray-700 truncate max-w-[9rem]">
-                    {a.user?.fullName || a.user?.username || a.userId}
-                  </span>
-                  {a.status === 'APPROVED' ? (
-                    <span className="inline-flex items-center gap-1 text-emerald-700 bg-emerald-50 border border-emerald-200 px-1.5 py-0.5 rounded">
-                      <CheckIcon size={12} /> Aprobado
-                    </span>
-                  ) : a.status === 'REJECTED' ? (
-                    <span className="inline-flex items-center gap-1 text-red-700 bg-red-50 border border-red-200 px-1.5 py-0.5 rounded">
-                      <X size={12} /> Rechazado
-                    </span>
-                  ) : (
-                    <span className="inline-flex items-center gap-1 text-gray-700 bg-gray-100 border border-gray-200 px-1.5 py-0.5 rounded">
-                      <Clock size={12} /> Pendiente
-                    </span>
-                  )}
+            <div className="max-h-48 overflow-y-auto">
+              {loading ? (
+                <div className="space-y-2">
+                  {Array.from({ length: 5 }).map((_, i) => (
+                    <div key={i} className="flex items-center justify-between px-2 py-1">
+                      <div className="h-3 w-24 bg-gray-200 rounded animate-pulse" />
+                      <div className="h-5 w-16 bg-gray-200 rounded animate-pulse" />
+                    </div>
+                  ))}
                 </div>
-              ))
-            )}
+              ) : list.length === 0 ? (
+                <div className="text-xs text-gray-400 py-2 text-center">Sin aprobadores</div>
+              ) : (
+                list.map((a) => (
+                  <div
+                    key={a.userId}
+                    className="flex items-center justify-between px-2 py-1 text-xs"
+                  >
+                    <span className="text-gray-700 truncate max-w-[9rem]">
+                      {a.user?.fullName || a.user?.username || a.userId}
+                    </span>
+                    {a.status === 'APPROVED' ? (
+                      <span className="inline-flex items-center gap-1 text-emerald-700 bg-emerald-50 border border-emerald-200 px-1.5 py-0.5 rounded">
+                        <CheckIcon size={12} /> Aprobado
+                      </span>
+                    ) : a.status === 'REJECTED' ? (
+                      <span className="inline-flex items-center gap-1 text-red-700 bg-red-50 border border-red-200 px-1.5 py-0.5 rounded">
+                        <X size={12} /> Rechazado
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1 text-gray-700 bg-gray-100 border border-gray-200 px-1.5 py-0.5 rounded">
+                        <Clock size={12} /> Pendiente
+                      </span>
+                    )}
+                  </div>
+                ))
+              )}
+            </div>
           </div>
-        </div></>
+        </>
       )}
     </div>
   );
@@ -528,7 +532,10 @@ const ChannelManager: React.FC = () => {
             : statsRange === '1m'
               ? new Date(Date.now() - 30 * 86400000)
               : null;
-    const q = messagesSearchDebounced && messagesSearchDebounced.trim().length >= 2 ? messagesSearchDebounced : undefined;
+    const q =
+      messagesSearchDebounced && messagesSearchDebounced.trim().length >= 2
+        ? messagesSearchDebounced
+        : undefined;
     api
       .getChannelMessages(subId as string, messagesPage, messagesLimit, {
         q,
@@ -545,7 +552,18 @@ const ChannelManager: React.FC = () => {
         setMessagesLoading(false);
       })
       .catch(() => setMessagesLoading(false));
-  }, [messagesModalOpen, messagesForSub, selectedChannel?.id, selectedChannel?.parentId, messagesPage, messagesLimit, messagesSearchDebounced, messagesQuick, messagesFilter, statsRange]);
+  }, [
+    messagesModalOpen,
+    messagesForSub,
+    selectedChannel?.id,
+    selectedChannel?.parentId,
+    messagesPage,
+    messagesLimit,
+    messagesSearchDebounced,
+    messagesQuick,
+    messagesFilter,
+    statsRange,
+  ]);
 
   const loadApproverEligible = async (subId: string, q: string) => {
     if (!q || q.trim().length < 2) {
@@ -1039,7 +1057,7 @@ const ChannelManager: React.FC = () => {
           </span>
         );
       default:
-        return ( <></> );
+        return <></>;
     }
   };
 
@@ -1505,9 +1523,7 @@ const ChannelManager: React.FC = () => {
                     )}
                     <div className="flex items-center gap-3">
                       <h2 className="text-2xl font-bold text-gray-900">{selectedChannel.title}</h2>
-                      <div className="flex items-center gap-1 text-xs text-gray-400">
-                        
-                      </div>
+                      <div className="flex items-center gap-1 text-xs text-gray-400"></div>
                       <StatusBadge status={selectedChannel.verificationStatus} />
                     </div>
                   </div>
@@ -1582,39 +1598,47 @@ const ChannelManager: React.FC = () => {
                     </button>
                     {configTipOpen && (
                       <>
-                        <div className="fixed inset-0 z-40" onClick={() => setConfigTipOpen(false)} />
+                        <div
+                          className="fixed inset-0 z-40"
+                          onClick={() => setConfigTipOpen(false)}
+                        />
                         <div className="absolute right-0 mt-2 w-56 bg-white border border-gray-200 rounded-lg shadow-lg p-3 z-50">
                           <div className="space-y-2">
-                          {composeIsEmergency && (
-                            <>
-                              <span className="pointer-events-none absolute -top-6 -left-6 h-32 w-32 rounded-full bg-red-300 opacity-30 animate-ping"></span>
-                              <span className="pointer-events-none absolute -bottom-4 -right-4 h-24 w-24 rounded-full bg-red-300 opacity-30 animate-ping"></span>
-                            </>
-                          )}
-                          <div className="flex items-center justify-between">
-                            <div className="text-xs text-gray-500">{t('channels.visibility')}</div>
-                            <div className="text-sm font-medium text-gray-900">
-                              {selectedChannel.isPublic
-                                ? t('channels.public')
-                                : t('channels.private')}
+                            {composeIsEmergency && (
+                              <>
+                                <span className="pointer-events-none absolute -top-6 -left-6 h-32 w-32 rounded-full bg-red-300 opacity-30 animate-ping"></span>
+                                <span className="pointer-events-none absolute -bottom-4 -right-4 h-24 w-24 rounded-full bg-red-300 opacity-30 animate-ping"></span>
+                              </>
+                            )}
+                            <div className="flex items-center justify-between">
+                              <div className="text-xs text-gray-500">
+                                {t('channels.visibility')}
+                              </div>
+                              <div className="text-sm font-medium text-gray-900">
+                                {selectedChannel.isPublic
+                                  ? t('channels.public')
+                                  : t('channels.private')}
+                              </div>
                             </div>
-                          </div>
-                          <div className="flex items-center justify-between">
-                            <div className="text-xs text-gray-500">{t('channels.searchable')}</div>
-                            <div className="text-sm font-medium text-gray-900">
-                              {selectedChannel.isHidden
-                                ? t('channels.searchable_no')
-                                : t('channels.searchable_yes')}
+                            <div className="flex items-center justify-between">
+                              <div className="text-xs text-gray-500">
+                                {t('channels.searchable')}
+                              </div>
+                              <div className="text-sm font-medium text-gray-900">
+                                {selectedChannel.isHidden
+                                  ? t('channels.searchable_no')
+                                  : t('channels.searchable_yes')}
+                              </div>
                             </div>
-                          </div>
-                          <div className="flex items-center justify-between">
-                            <div className="text-xs text-gray-500">{t('channels.refCode')}</div>
-                            <div className="text-sm font-mono bg-gray-100 px-2 py-0.5 rounded">
-                              {selectedChannel.referenceCode || 'N/A'}
+                            <div className="flex items-center justify-between">
+                              <div className="text-xs text-gray-500">{t('channels.refCode')}</div>
+                              <div className="text-sm font-mono bg-gray-100 px-2 py-0.5 rounded">
+                                {selectedChannel.referenceCode || 'N/A'}
+                              </div>
                             </div>
                           </div>
                         </div>
-                      </div></>
+                      </>
                     )}
                   </div>
                   <div className="relative">
@@ -1626,7 +1650,10 @@ const ChannelManager: React.FC = () => {
                     </button>
                     {speedDialOpen && (
                       <>
-                        <div className="fixed inset-0 z-40" onClick={() => setSpeedDialOpen(false)} />
+                        <div
+                          className="fixed inset-0 z-40"
+                          onClick={() => setSpeedDialOpen(false)}
+                        />
                         <div className="absolute right-0 mt-2 w-48 bg-white border border-gray-200 rounded-lg shadow-lg p-2 z-50">
                           <button
                             onClick={copyShare}
@@ -1681,7 +1708,9 @@ const ChannelManager: React.FC = () => {
 
               {infoTipOpen && (
                 <div className="px-3">
-                  <div className={`${selectedChannel?.parentId && inlineStatsHidden ? 'hidden' : ''} relative w-full bg-white border border-gray-200 rounded-lg shadow-sm p-4`}>
+                  <div
+                    className={`${selectedChannel?.parentId && inlineStatsHidden ? 'hidden' : ''} relative w-full bg-white border border-gray-200 rounded-lg shadow-sm p-4`}
+                  >
                     {(!selectedChannel?.parentId || !inlineStatsHidden) && (
                       <div className="absolute -top-7 left-1/2 -translate-x-1/2 inline-flex items-center gap-1 border border-gray-200 rounded-full p-1 bg-white shadow-sm">
                         {(['1h', '24h', '7d', '1m', 'all'] as const).map((key) => (
@@ -1713,7 +1742,9 @@ const ChannelManager: React.FC = () => {
               <div className="p-3 flex-1 overflow-y-auto">
                 <div className="mb-2"></div>
                 <div className="">
-                  <div className={`${selectedChannel?.parentId ? 'hidden' : ''} bg-white rounded-lg border border-gray-100 overflow-hidden`}>
+                  <div
+                    className={`${selectedChannel?.parentId ? 'hidden' : ''} bg-white rounded-lg border border-gray-100 overflow-hidden`}
+                  >
                     <table className="w-full text-sm">
                       <thead className="bg-slate-50">
                         <tr className="text-left text-gray-600">
@@ -1826,7 +1857,9 @@ const ChannelManager: React.FC = () => {
                                               : statsRange === '7d'
                                                 ? new Date(Date.now() - 7 * 86400000).toISOString()
                                                 : statsRange === '1m'
-                                                  ? new Date(Date.now() - 30 * 86400000).toISOString()
+                                                  ? new Date(
+                                                      Date.now() - 30 * 86400000
+                                                    ).toISOString()
                                                   : undefined,
                                       })
                                       .then((res) => {
@@ -1854,90 +1887,90 @@ const ChannelManager: React.FC = () => {
                   </div>
 
                   {!selectedChannel?.parentId && (
-                  <div className="pt-3 flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <button
-                        disabled={subPage <= 1}
-                        onClick={() => setSubPage((p) => p - 1)}
-                        className={`px-3 py-1.5 text-sm rounded border ${subPage <= 1 ? 'text-gray-400 border-gray-200' : 'text-gray-700 border-gray-300 hover:bg-gray-50'}`}
-                      >
-                        Anterior
-                      </button>
-                      <span className="text-xs text-gray-500">
-                        Página {subPage} de {subPages}
-                      </span>
-                      <button
-                        disabled={subPage >= subPages}
-                        onClick={() => setSubPage((p) => p + 1)}
-                        className={`px-3 py-1.5 text-sm rounded border ${subPage >= subPages ? 'text-gray-400 border-gray-200' : 'text-gray-700 border-gray-300 hover:bg-gray-50'}`}
-                      >
-                        Siguiente
-                      </button>
-                    </div>
-                    {!showSubCreate ? (
-                      <button
-                        onClick={() => {
-                          setShowSubCreate(true);
-                          setSubTitle('');
-                          setSubDesc('');
-                          setSubIcon('');
-                        }}
-                        className="px-3 py-1.5 text-sm bg-indigo-600 text-white rounded"
-                      >
-                        {t('channels.createSubchannel')}
-                      </button>
-                    ) : (
-                      <div className="grid grid-cols-3 gap-2 w-full">
-                        <input
-                          value={subTitle}
-                          onChange={(e) => setSubTitle(e.target.value)}
-                          placeholder="Título del subcanal"
-                          className="px-2 py-1 text-sm border border-gray-300 rounded col-span-3"
-                        />
-                        <input
-                          value={subDesc}
-                          onChange={(e) => setSubDesc(e.target.value)}
-                          placeholder="Descripción"
-                          className="px-2 py-1 text-sm border border-gray-300 rounded col-span-3"
-                        />
-                        <input
-                          value={subIcon}
-                          onChange={(e) => setSubIcon(e.target.value)}
-                          placeholder="Icono (SF Symbol)"
-                          className="px-2 py-1 text-sm border border-gray-300 rounded col-span-3"
-                        />
-                        <div className="max-h-24 overflow-y-auto border border-gray-200 rounded col-span-3">
-                          {SF_SYMBOLS.filter((s) => s.includes(subIcon))
-                            .slice(0, 25)
-                            .map((name) => (
-                              <button
-                                key={name}
-                                onClick={() => setSubIcon(name)}
-                                className={`w-full text-left px-2 py-1 text-xs flex items-center gap-2 ${subIcon === name ? 'bg-indigo-100' : 'hover:bg-gray-100'}`}
-                              >
-                                <IconView name={name} size={14} />
-                                <span>{name}</span>
-                              </button>
-                            ))}
-                        </div>
-                        <div className="col-span-3 flex items-center gap-2 justify-end">
-                          <button
-                            onClick={() => setShowSubCreate(false)}
-                            className="px-3 py-1.5 text-sm border border-gray-300 rounded"
-                          >
-                            Cancelar
-                          </button>
-                          <button
-                            onClick={handleCreateSubInline}
-                            disabled={!subTitle}
-                            className={`px-3 py-1.5 text-sm rounded ${!subTitle ? 'bg-gray-300 text-white cursor-not-allowed' : 'bg-indigo-600 text-white'}`}
-                          >
-                            {t('channels.createSubchannel')}
-                          </button>
-                        </div>
+                    <div className="pt-3 flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <button
+                          disabled={subPage <= 1}
+                          onClick={() => setSubPage((p) => p - 1)}
+                          className={`px-3 py-1.5 text-sm rounded border ${subPage <= 1 ? 'text-gray-400 border-gray-200' : 'text-gray-700 border-gray-300 hover:bg-gray-50'}`}
+                        >
+                          Anterior
+                        </button>
+                        <span className="text-xs text-gray-500">
+                          Página {subPage} de {subPages}
+                        </span>
+                        <button
+                          disabled={subPage >= subPages}
+                          onClick={() => setSubPage((p) => p + 1)}
+                          className={`px-3 py-1.5 text-sm rounded border ${subPage >= subPages ? 'text-gray-400 border-gray-200' : 'text-gray-700 border-gray-300 hover:bg-gray-50'}`}
+                        >
+                          Siguiente
+                        </button>
                       </div>
-                    )}
-                  </div>
+                      {!showSubCreate ? (
+                        <button
+                          onClick={() => {
+                            setShowSubCreate(true);
+                            setSubTitle('');
+                            setSubDesc('');
+                            setSubIcon('');
+                          }}
+                          className="px-3 py-1.5 text-sm bg-indigo-600 text-white rounded"
+                        >
+                          {t('channels.createSubchannel')}
+                        </button>
+                      ) : (
+                        <div className="grid grid-cols-3 gap-2 w-full">
+                          <input
+                            value={subTitle}
+                            onChange={(e) => setSubTitle(e.target.value)}
+                            placeholder="Título del subcanal"
+                            className="px-2 py-1 text-sm border border-gray-300 rounded col-span-3"
+                          />
+                          <input
+                            value={subDesc}
+                            onChange={(e) => setSubDesc(e.target.value)}
+                            placeholder="Descripción"
+                            className="px-2 py-1 text-sm border border-gray-300 rounded col-span-3"
+                          />
+                          <input
+                            value={subIcon}
+                            onChange={(e) => setSubIcon(e.target.value)}
+                            placeholder="Icono (SF Symbol)"
+                            className="px-2 py-1 text-sm border border-gray-300 rounded col-span-3"
+                          />
+                          <div className="max-h-24 overflow-y-auto border border-gray-200 rounded col-span-3">
+                            {SF_SYMBOLS.filter((s) => s.includes(subIcon))
+                              .slice(0, 25)
+                              .map((name) => (
+                                <button
+                                  key={name}
+                                  onClick={() => setSubIcon(name)}
+                                  className={`w-full text-left px-2 py-1 text-xs flex items-center gap-2 ${subIcon === name ? 'bg-indigo-100' : 'hover:bg-gray-100'}`}
+                                >
+                                  <IconView name={name} size={14} />
+                                  <span>{name}</span>
+                                </button>
+                              ))}
+                          </div>
+                          <div className="col-span-3 flex items-center gap-2 justify-end">
+                            <button
+                              onClick={() => setShowSubCreate(false)}
+                              className="px-3 py-1.5 text-sm border border-gray-300 rounded"
+                            >
+                              Cancelar
+                            </button>
+                            <button
+                              onClick={handleCreateSubInline}
+                              disabled={!subTitle}
+                              className={`px-3 py-1.5 text-sm rounded ${!subTitle ? 'bg-gray-300 text-white cursor-not-allowed' : 'bg-indigo-600 text-white'}`}
+                            >
+                              {t('channels.createSubchannel')}
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
                   )}
 
                   {approverModalOpen && (
@@ -1976,7 +2009,10 @@ const ChannelManager: React.FC = () => {
                             loading={approverEligibleLoading}
                             noOptionsText="Escribe para buscar inscritos"
                             options={approverEligible
-                              .filter((opt) => !(approverTipList || []).some((a) => a.userId === opt.user?.id))
+                              .filter(
+                                (opt) =>
+                                  !(approverTipList || []).some((a) => a.userId === opt.user?.id)
+                              )
                               .filter((opt) =>
                                 approverAddSearch
                                   ? (opt.user?.fullName || '')
@@ -2078,7 +2114,9 @@ const ChannelManager: React.FC = () => {
                                       <div className="relative">
                                         <button
                                           onClick={(e) => {
-                                            setApproverRemoveAnchorEl(e.currentTarget as HTMLElement);
+                                            setApproverRemoveAnchorEl(
+                                              e.currentTarget as HTMLElement
+                                            );
                                             setApproverRemoveId(a.userId);
                                           }}
                                           className="p-1.5 bg-white border border-gray-300 text-gray-700 hover:bg-gray-50 rounded inline-flex items-center justify-center"
@@ -2089,11 +2127,23 @@ const ChannelManager: React.FC = () => {
                                         </button>
                                         {approverRemoveId === a.userId && (
                                           <>
-                                            <div className="fixed inset-0 z-[900] bg-black/30 transition-opacity duration-200" onClick={() => !approverRemoveLoading && setApproverRemoveId(null)} />
-                                            <Popper open placement="bottom-end" anchorEl={approverRemoveAnchorEl} style={{ zIndex: 1000 }}>
+                                            <div
+                                              className="fixed inset-0 z-[900] bg-black/30 transition-opacity duration-200"
+                                              onClick={() =>
+                                                !approverRemoveLoading && setApproverRemoveId(null)
+                                              }
+                                            />
+                                            <Popper
+                                              open
+                                              placement="bottom-end"
+                                              anchorEl={approverRemoveAnchorEl}
+                                              style={{ zIndex: 1000 }}
+                                            >
                                               <div className="relative bg-white border border-gray-200 rounded shadow-lg p-2">
                                                 <div className="absolute -top-1 right-3 w-2 h-2 bg-white border-t border-l border-gray-200 rotate-45"></div>
-                                                <div className="text-xs text-gray-700 mb-2">¿Eliminar aprobador?</div>
+                                                <div className="text-xs text-gray-700 mb-2">
+                                                  ¿Eliminar aprobador?
+                                                </div>
                                                 <div className="flex items-center gap-2">
                                                   <button
                                                     onClick={() => setApproverRemoveId(null)}
@@ -2104,7 +2154,8 @@ const ChannelManager: React.FC = () => {
                                                   </button>
                                                   <button
                                                     onClick={async () => {
-                                                      if (!approverTipSub || !approverRemoveId) return;
+                                                      if (!approverTipSub || !approverRemoveId)
+                                                        return;
                                                       setApproverRemoveLoading(true);
                                                       try {
                                                         await api.removeChannelApprover(
@@ -2115,7 +2166,10 @@ const ChannelManager: React.FC = () => {
                                                           approverTipSub.id
                                                         );
                                                         setApproverTipList(fresh.approvers || []);
-                                                        if (selectedChannel && !selectedChannel.parentId) {
+                                                        if (
+                                                          selectedChannel &&
+                                                          !selectedChannel.parentId
+                                                        ) {
                                                           try {
                                                             const res = await api.getSubchannels(
                                                               selectedChannel.id,
@@ -2134,7 +2188,10 @@ const ChannelManager: React.FC = () => {
                                                     disabled={approverRemoveLoading}
                                                     className="px-2 py-1 text-xs bg-red-600 text-white rounded inline-flex items-center gap-1"
                                                   >
-                                                    {approverRemoveLoading ? <Loader2 size={14} className="animate-spin" /> : null} Confirmar
+                                                    {approverRemoveLoading ? (
+                                                      <Loader2 size={14} className="animate-spin" />
+                                                    ) : null}{' '}
+                                                    Confirmar
                                                   </button>
                                                 </div>
                                               </div>
@@ -2156,7 +2213,9 @@ const ChannelManager: React.FC = () => {
                                   <div className="fixed inset-0 z-50">
                                     <div
                                       className="absolute inset-0 bg-black/20"
-                                      onClick={() => !approverAddLoading && setApproverAuthorizeOpen(false)}
+                                      onClick={() =>
+                                        !approverAddLoading && setApproverAuthorizeOpen(false)
+                                      }
                                     />
                                     <div className="absolute left-1/2 -translate-x-1/2 top-1/3 bg-white rounded-lg shadow-lg border border-gray-200 w-[420px] p-4">
                                       <div className="text-sm text-gray-800 mb-3">
@@ -2172,7 +2231,9 @@ const ChannelManager: React.FC = () => {
                                       </div>
                                       <div className="flex items-center justify-end gap-2">
                                         <button
-                                          onClick={() => !approverAddLoading && setApproverAuthorizeOpen(false)}
+                                          onClick={() =>
+                                            !approverAddLoading && setApproverAuthorizeOpen(false)
+                                          }
                                           disabled={approverAddLoading}
                                           className="px-3 py-1.5 text-xs border border-gray-300 rounded"
                                         >
@@ -2222,7 +2283,10 @@ const ChannelManager: React.FC = () => {
                                           disabled={approverAddLoading}
                                           className="px-3 py-1.5 text-xs bg-indigo-600 text-white rounded inline-flex items-center gap-1"
                                         >
-                                          {approverAddLoading ? <Loader2 size={14} className="animate-spin" /> : null} Confirmar
+                                          {approverAddLoading ? (
+                                            <Loader2 size={14} className="animate-spin" />
+                                          ) : null}{' '}
+                                          Confirmar
                                         </button>
                                       </div>
                                     </div>
@@ -2230,12 +2294,17 @@ const ChannelManager: React.FC = () => {
                                 )}
                                 {approverProfileOpen && (
                                   <div className="fixed inset-0 z-50">
-                                    <div className="absolute inset-0 bg-black/30" onClick={() => setApproverProfileOpen(false)} />
+                                    <div
+                                      className="absolute inset-0 bg-black/30"
+                                      onClick={() => setApproverProfileOpen(false)}
+                                    />
                                     <div className="absolute right-0 top-0 h-full w-full max-w-md bg-white border-l border-gray-200 shadow-2xl">
                                       <div className="p-4 border-b border-gray-100 flex items-center justify-between">
                                         <div className="flex items-center gap-2">
                                           <Users size={18} className="text-indigo-600" />
-                                          <span className="text-sm font-semibold text-gray-900">Perfil</span>
+                                          <span className="text-sm font-semibold text-gray-900">
+                                            Perfil
+                                          </span>
                                         </div>
                                         <button
                                           onClick={() => setApproverProfileOpen(false)}
@@ -2264,54 +2333,99 @@ const ChannelManager: React.FC = () => {
                                                 <Users size={18} />
                                               </div>
                                               <div>
-                                                <div className="text-sm font-semibold text-gray-900">{approverProfile.fullName || approverProfile.username}</div>
-                                                <div className="text-xs text-gray-500">@{approverProfile.username}</div>
+                                                <div className="text-sm font-semibold text-gray-900">
+                                                  {approverProfile.fullName ||
+                                                    approverProfile.username}
+                                                </div>
+                                                <div className="text-xs text-gray-500">
+                                                  @{approverProfile.username}
+                                                </div>
                                               </div>
                                             </div>
                                             <div className="grid grid-cols-2 gap-2 mb-4">
                                               <div className="p-2 rounded border bg-white">
-                                                <div className="text-[11px] text-gray-500">Suscripciones</div>
-                                                <div className="text-sm font-semibold text-gray-900">{approverProfile.subscribedChannelsCount?.toLocaleString?.() || 0}</div>
+                                                <div className="text-[11px] text-gray-500">
+                                                  Suscripciones
+                                                </div>
+                                                <div className="text-sm font-semibold text-gray-900">
+                                                  {approverProfile.subscribedChannelsCount?.toLocaleString?.() ||
+                                                    0}
+                                                </div>
                                               </div>
                                               <div className="p-2 rounded border bg-white">
-                                                <div className="text-[11px] text-gray-500">Canales propios</div>
-                                                <div className="text-sm font-semibold text-gray-900">{approverProfile.ownedChannelsCount?.toLocaleString?.() || 0}</div>
+                                                <div className="text-[11px] text-gray-500">
+                                                  Canales propios
+                                                </div>
+                                                <div className="text-sm font-semibold text-gray-900">
+                                                  {approverProfile.ownedChannelsCount?.toLocaleString?.() ||
+                                                    0}
+                                                </div>
                                               </div>
                                             </div>
-                                            <div className="mb-3 text-xs font-semibold text-gray-700">Asignaciones como aprobador</div>
+                                            <div className="mb-3 text-xs font-semibold text-gray-700">
+                                              Asignaciones como aprobador
+                                            </div>
                                             <div className="space-y-2 mb-4">
                                               {approverProfileApprovers.length === 0 ? (
-                                                <div className="text-xs text-gray-400">Sin asignaciones</div>
+                                                <div className="text-xs text-gray-400">
+                                                  Sin asignaciones
+                                                </div>
                                               ) : (
                                                 approverProfileApprovers.map((ap) => (
-                                                  <div key={ap.id} className="p-2 rounded border bg-white flex items-center justify-between">
+                                                  <div
+                                                    key={ap.id}
+                                                    className="p-2 rounded border bg-white flex items-center justify-between"
+                                                  >
                                                     <div className="flex items-center gap-2">
-                                                      <IconView name={ap.channel?.icon} size={14} className="text-gray-500" />
-                                                      <div className="text-sm text-gray-800">{ap.channel?.title}</div>
+                                                      <IconView
+                                                        name={ap.channel?.icon}
+                                                        size={14}
+                                                        className="text-gray-500"
+                                                      />
+                                                      <div className="text-sm text-gray-800">
+                                                        {ap.channel?.title}
+                                                      </div>
                                                     </div>
                                                     {ap.channel?.parentId ? (
-                                                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-indigo-100 text-indigo-700 border border-indigo-200 inline-flex items-center">Subcanal</span>
+                                                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-indigo-100 text-indigo-700 border border-indigo-200 inline-flex items-center">
+                                                        Subcanal
+                                                      </span>
                                                     ) : null}
                                                   </div>
                                                 ))
                                               )}
                                             </div>
-                                            <div className="mb-3 text-xs font-semibold text-gray-700">Suscripciones</div>
+                                            <div className="mb-3 text-xs font-semibold text-gray-700">
+                                              Suscripciones
+                                            </div>
                                             <div className="space-y-2">
                                               {approverProfileSubs.length === 0 ? (
-                                                <div className="text-xs text-gray-400">Sin suscripciones activas</div>
+                                                <div className="text-xs text-gray-400">
+                                                  Sin suscripciones activas
+                                                </div>
                                               ) : (
                                                 approverProfileSubs.map((s) => (
-                                                  <div key={s.id} className="p-2 rounded border bg-white flex items-center gap-2">
-                                                    <IconView name={s.channel?.icon} size={14} className="text-gray-500" />
-                                                    <div className="text-sm text-gray-800">{s.channel?.title}</div>
+                                                  <div
+                                                    key={s.id}
+                                                    className="p-2 rounded border bg-white flex items-center gap-2"
+                                                  >
+                                                    <IconView
+                                                      name={s.channel?.icon}
+                                                      size={14}
+                                                      className="text-gray-500"
+                                                    />
+                                                    <div className="text-sm text-gray-800">
+                                                      {s.channel?.title}
+                                                    </div>
                                                   </div>
                                                 ))
                                               )}
                                             </div>
                                           </>
                                         ) : (
-                                          <div className="text-xs text-gray-400">No se pudo cargar el perfil</div>
+                                          <div className="text-xs text-gray-400">
+                                            No se pudo cargar el perfil
+                                          </div>
                                         )}
                                       </div>
                                     </div>
@@ -2366,7 +2480,6 @@ const ChannelManager: React.FC = () => {
                                     </span>
                                   </div>
                                   <div className="text-xs text-gray-500">
-                                    
                                     <Clock size={12} className="inline-block mr-1 text-gray-400" />
                                     {`hace ${relativeFrom(s.subscribedAt)}`}
                                     <div className="absolute left-1/2 -translate-x-1/2 top-full mt-1 bg-gray-900 text-white text-[10px] rounded px-2 py-1 opacity-0 group-hover:opacity-100 whitespace-nowrap">
@@ -2532,8 +2645,12 @@ const ChannelManager: React.FC = () => {
                     </div>
                   )}
                   {(messagesModalOpen || selectedChannel?.parentId) && (
-                    <div className={`${selectedChannel?.parentId ? 'static bg-transparent z-auto' : 'fixed inset-0 bg-black/40 z-50'} flex items-center justify-center`}>
-                      <div className={`bg-white w-full ${selectedChannel?.parentId ? '' : 'max-w-3xl'} rounded-xl shadow-lg border border-gray-200`}>
+                    <div
+                      className={`${selectedChannel?.parentId ? 'static bg-transparent z-auto' : 'fixed inset-0 bg-black/40 z-50'} flex items-center justify-center`}
+                    >
+                      <div
+                        className={`bg-white w-full ${selectedChannel?.parentId ? '' : 'max-w-3xl'} rounded-xl shadow-lg border border-gray-200`}
+                      >
                         <div className="p-4 border-b border-gray-100 flex items-center justify-between">
                           <div className="flex items-center gap-3">
                             <div className="flex flex-col">
@@ -2541,7 +2658,10 @@ const ChannelManager: React.FC = () => {
                               <div className="text-xs text-gray-500 flex items-center gap-1">
                                 <span>Rango</span>
                                 <button
-                                  onClick={(e) => { setRangeMenuOpen((v) => !v); setRangeMenuAnchorEl(e.currentTarget as HTMLElement); }}
+                                  onClick={(e) => {
+                                    setRangeMenuOpen((v) => !v);
+                                    setRangeMenuAnchorEl(e.currentTarget as HTMLElement);
+                                  }}
                                   className="px-1.5 py-0.5 rounded border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 inline-flex items-center gap-1"
                                 >
                                   {statsRange === '1h'
@@ -2556,13 +2676,58 @@ const ChannelManager: React.FC = () => {
                                   <ChevronDown size={12} className="text-gray-500" />
                                 </button>
                                 {rangeMenuOpen && (
-                                  <Popper open placement="bottom-start" anchorEl={rangeMenuAnchorEl} style={{ zIndex: 1000 }}>
+                                  <Popper
+                                    open
+                                    placement="bottom-start"
+                                    anchorEl={rangeMenuAnchorEl}
+                                    style={{ zIndex: 1000 }}
+                                  >
                                     <div className="bg-white border border-gray-200 rounded shadow p-1 text-xs">
-                                      <button onClick={() => { setStatsRange('1h'); setRangeMenuOpen(false); }} className="block w-full text-left px-2 py-1 rounded hover:bg-gray-50">1H</button>
-                                      <button onClick={() => { setStatsRange('24h'); setRangeMenuOpen(false); }} className="block w-full text-left px-2 py-1 rounded hover:bg-gray-50">24H</button>
-                                      <button onClick={() => { setStatsRange('7d'); setRangeMenuOpen(false); }} className="block w-full text-left px-2 py-1 rounded hover:bg-gray-50">1 Semana</button>
-                                      <button onClick={() => { setStatsRange('1m'); setRangeMenuOpen(false); }} className="block w-full text-left px-2 py-1 rounded hover:bg-gray-50">1 Mes</button>
-                                      <button onClick={() => { setStatsRange('all'); setRangeMenuOpen(false); }} className="block w-full text-left px-2 py-1 rounded hover:bg-gray-50">Histórico</button>
+                                      <button
+                                        onClick={() => {
+                                          setStatsRange('1h');
+                                          setRangeMenuOpen(false);
+                                        }}
+                                        className="block w-full text-left px-2 py-1 rounded hover:bg-gray-50"
+                                      >
+                                        1H
+                                      </button>
+                                      <button
+                                        onClick={() => {
+                                          setStatsRange('24h');
+                                          setRangeMenuOpen(false);
+                                        }}
+                                        className="block w-full text-left px-2 py-1 rounded hover:bg-gray-50"
+                                      >
+                                        24H
+                                      </button>
+                                      <button
+                                        onClick={() => {
+                                          setStatsRange('7d');
+                                          setRangeMenuOpen(false);
+                                        }}
+                                        className="block w-full text-left px-2 py-1 rounded hover:bg-gray-50"
+                                      >
+                                        1 Semana
+                                      </button>
+                                      <button
+                                        onClick={() => {
+                                          setStatsRange('1m');
+                                          setRangeMenuOpen(false);
+                                        }}
+                                        className="block w-full text-left px-2 py-1 rounded hover:bg-gray-50"
+                                      >
+                                        1 Mes
+                                      </button>
+                                      <button
+                                        onClick={() => {
+                                          setStatsRange('all');
+                                          setRangeMenuOpen(false);
+                                        }}
+                                        className="block w-full text-left px-2 py-1 rounded hover:bg-gray-50"
+                                      >
+                                        Histórico
+                                      </button>
                                     </div>
                                   </Popper>
                                 )}
@@ -2572,7 +2737,7 @@ const ChannelManager: React.FC = () => {
                             <h3 className="text-lg font-semibold text-gray-900">
                               Mensajes{selectedChannel?.title}
                             </h3>
-                        </div>
+                          </div>
                           {selectedChannel?.parentId ? (
                             <button
                               onClick={() => setInlineStatsHidden((v) => !v)}
@@ -2622,8 +2787,15 @@ const ChannelManager: React.FC = () => {
                                 aria-label="Todos"
                                 title="Todos"
                               >
-                                <MessagesSquare size={16} className={messagesQuick === 'all' ? 'text-white' : 'text-slate-600'} />
-                                <div className="absolute left-1/2 -translate-x-1/2 top-full mt-1 bg-gray-900 text-white text-xs rounded px-2 py-1 opacity-0 group-hover:opacity-100 pointer-events-none whitespace-nowrap">Todos</div>
+                                <MessagesSquare
+                                  size={16}
+                                  className={
+                                    messagesQuick === 'all' ? 'text-white' : 'text-slate-600'
+                                  }
+                                />
+                                <div className="absolute left-1/2 -translate-x-1/2 top-full mt-1 bg-gray-900 text-white text-xs rounded px-2 py-1 opacity-0 group-hover:opacity-100 pointer-events-none whitespace-nowrap">
+                                  Todos
+                                </div>
                               </button>
                               <button
                                 className={`group relative p-2 rounded border ${messagesQuick === 'emergency' ? 'bg-slate-800 text-white border-slate-800' : 'text-gray-700 border-gray-300 hover:bg-gray-50'}`}
@@ -2631,8 +2803,15 @@ const ChannelManager: React.FC = () => {
                                 aria-label="Emergentes"
                                 title="Emergentes"
                               >
-                                <AlertTriangle size={16} className={messagesQuick === 'emergency' ? 'text-white' : 'text-red-600'} />
-                                <div className="absolute left-1/2 -translate-x-1/2 top-full mt-1 bg-gray-900 text-white text-xs rounded px-2 py-1 opacity-0 group-hover:opacity-100 pointer-events-none whitespace-nowrap">Emergentes</div>
+                                <AlertTriangle
+                                  size={16}
+                                  className={
+                                    messagesQuick === 'emergency' ? 'text-white' : 'text-red-600'
+                                  }
+                                />
+                                <div className="absolute left-1/2 -translate-x-1/2 top-full mt-1 bg-gray-900 text-white text-xs rounded px-2 py-1 opacity-0 group-hover:opacity-100 pointer-events-none whitespace-nowrap">
+                                  Emergentes
+                                </div>
                               </button>
                               <button
                                 className={`group relative p-2 rounded border ${messagesQuick === 'high' ? 'bg-slate-800 text-white border-slate-800' : 'text-gray-700 border-gray-300 hover:bg-gray-50'}`}
@@ -2640,8 +2819,15 @@ const ChannelManager: React.FC = () => {
                                 aria-label="Alta"
                                 title="Alta"
                               >
-                                <Zap size={16} className={messagesQuick === 'high' ? 'text-white' : 'text-slate-600'} />
-                                <div className="absolute left-1/2 -translate-x-1/2 top-full mt-1 bg-gray-900 text-white text-xs rounded px-2 py-1 opacity-0 group-hover:opacity-100 pointer-events-none whitespace-nowrap">Alta</div>
+                                <Zap
+                                  size={16}
+                                  className={
+                                    messagesQuick === 'high' ? 'text-white' : 'text-slate-600'
+                                  }
+                                />
+                                <div className="absolute left-1/2 -translate-x-1/2 top-full mt-1 bg-gray-900 text-white text-xs rounded px-2 py-1 opacity-0 group-hover:opacity-100 pointer-events-none whitespace-nowrap">
+                                  Alta
+                                </div>
                               </button>
                               <button
                                 className={`group relative p-2 rounded border ${messagesQuick === 'vigent' ? 'bg-slate-800 text-white border-slate-800' : 'text-gray-700 border-gray-300 hover:bg-gray-50'}`}
@@ -2649,8 +2835,15 @@ const ChannelManager: React.FC = () => {
                                 aria-label="Vigentes"
                                 title="Vigentes"
                               >
-                                <Clock size={16} className={messagesQuick === 'vigent' ? 'text-white' : 'text-emerald-600'} />
-                                <div className="absolute left-1/2 -translate-x-1/2 top-full mt-1 bg-gray-900 text-white text-xs rounded px-2 py-1 opacity-0 group-hover:opacity-100 pointer-events-none whitespace-nowrap">Vigentes</div>
+                                <Clock
+                                  size={16}
+                                  className={
+                                    messagesQuick === 'vigent' ? 'text-white' : 'text-emerald-600'
+                                  }
+                                />
+                                <div className="absolute left-1/2 -translate-x-1/2 top-full mt-1 bg-gray-900 text-white text-xs rounded px-2 py-1 opacity-0 group-hover:opacity-100 pointer-events-none whitespace-nowrap">
+                                  Vigentes
+                                </div>
                               </button>
                               <button
                                 className={`group relative p-2 rounded border ${messagesQuick === 'expired' ? 'bg-slate-800 text-white border-slate-800' : 'text-gray-700 border-gray-300 hover:bg-gray-50'}`}
@@ -2658,8 +2851,15 @@ const ChannelManager: React.FC = () => {
                                 aria-label="Vencidos"
                                 title="Vencidos"
                               >
-                                <Hourglass size={16} className={messagesQuick === 'expired' ? 'text-white' : 'text-slate-600'} />
-                                <div className="absolute left-1/2 -translate-x-1/2 top-full mt-1 bg-gray-900 text-white text-xs rounded px-2 py-1 opacity-0 group-hover:opacity-100 pointer-events-none whitespace-nowrap">Vencidos</div>
+                                <Hourglass
+                                  size={16}
+                                  className={
+                                    messagesQuick === 'expired' ? 'text-white' : 'text-slate-600'
+                                  }
+                                />
+                                <div className="absolute left-1/2 -translate-x-1/2 top-full mt-1 bg-gray-900 text-white text-xs rounded px-2 py-1 opacity-0 group-hover:opacity-100 pointer-events-none whitespace-nowrap">
+                                  Vencidos
+                                </div>
                               </button>
                               <button
                                 className={`group relative p-2 rounded border ${messagesQuick === 'hasApprovals' ? 'bg-slate-800 text-white border-slate-800' : 'text-gray-700 border-gray-300 hover:bg-gray-50'}`}
@@ -2667,8 +2867,17 @@ const ChannelManager: React.FC = () => {
                                 aria-label="Con aprob."
                                 title="Con aprob."
                               >
-                                <CheckCircle size={16} className={messagesQuick === 'hasApprovals' ? 'text-white' : 'text-slate-600'} />
-                                <div className="absolute left-1/2 -translate-x-1/2 top-full mt-1 bg-gray-900 text-white text-xs rounded px-2 py-1 opacity-0 group-hover:opacity-100 pointer-events-none whitespace-nowrap">Con aprob.</div>
+                                <CheckCircle
+                                  size={16}
+                                  className={
+                                    messagesQuick === 'hasApprovals'
+                                      ? 'text-white'
+                                      : 'text-slate-600'
+                                  }
+                                />
+                                <div className="absolute left-1/2 -translate-x-1/2 top-full mt-1 bg-gray-900 text-white text-xs rounded px-2 py-1 opacity-0 group-hover:opacity-100 pointer-events-none whitespace-nowrap">
+                                  Con aprob.
+                                </div>
                               </button>
                               <button
                                 className={`group relative p-2 rounded border ${messagesQuick === 'noApprovals' ? 'bg-slate-800 text-white border-slate-800' : 'text-gray-700 border-gray-300 hover:bg-gray-50'}`}
@@ -2676,8 +2885,17 @@ const ChannelManager: React.FC = () => {
                                 aria-label="Sin aprob."
                                 title="Sin aprob."
                               >
-                                <Clock size={16} className={messagesQuick === 'noApprovals' ? 'text-white' : 'text-slate-600'} />
-                                <div className="absolute left-1/2 -translate-x-1/2 top-full mt-1 bg-gray-900 text-white text-xs rounded px-2 py-1 opacity-0 group-hover:opacity-100 pointer-events-none whitespace-nowrap">Sin aprob.</div>
+                                <Clock
+                                  size={16}
+                                  className={
+                                    messagesQuick === 'noApprovals'
+                                      ? 'text-white'
+                                      : 'text-slate-600'
+                                  }
+                                />
+                                <div className="absolute left-1/2 -translate-x-1/2 top-full mt-1 bg-gray-900 text-white text-xs rounded px-2 py-1 opacity-0 group-hover:opacity-100 pointer-events-none whitespace-nowrap">
+                                  Sin aprob.
+                                </div>
                               </button>
                               <button
                                 className={`group relative p-2 rounded border ml-2 ${messagesFilterOpen ? 'bg-slate-800 text-white border-slate-800' : 'text-gray-700 border-gray-300 hover:bg-gray-50'}`}
@@ -2685,8 +2903,13 @@ const ChannelManager: React.FC = () => {
                                 aria-label="Filtro avanzado"
                                 title="Filtro avanzado"
                               >
-                                <Settings size={16} className={messagesFilterOpen ? 'text-white' : 'text-slate-600'} />
-                                <div className="absolute left-1/2 -translate-x-1/2 top-full mt-1 bg-gray-900 text-white text-xs rounded px-2 py-1 opacity-0 group-hover:opacity-100 pointer-events-none whitespace-nowrap">Filtro avanzado</div>
+                                <Settings
+                                  size={16}
+                                  className={messagesFilterOpen ? 'text-white' : 'text-slate-600'}
+                                />
+                                <div className="absolute left-1/2 -translate-x-1/2 top-full mt-1 bg-gray-900 text-white text-xs rounded px-2 py-1 opacity-0 group-hover:opacity-100 pointer-events-none whitespace-nowrap">
+                                  Filtro avanzado
+                                </div>
                               </button>
                             </div>
                           </div>
@@ -2793,125 +3016,159 @@ const ChannelManager: React.FC = () => {
                           ) : (
                             <div className="max-h-[50vh] overflow-y-auto space-y-3">
                               {messagesItems.map((m) => (
-                                  <div
-                                    key={m.id}
-                                    className={`relative overflow-hidden p-4 rounded-lg border ${m.isEmergency ? 'bg-gradient-to-br from-red-50 via-white to-rose-100 border-red-200' : new Date(m.expiresAt) > new Date() ? 'bg-emerald-50 border-emerald-200' : 'bg-gray-50 border-gray-200'}`}
-                                    onMouseEnter={() => { try { api.viewMessage(m.id); } catch {} }}
-                                  >
-                                    {m.isEmergency && (
-                                      <span className="pointer-events-none absolute inset-0 rounded-lg bg-red-300/10 animate-pulse"></span>
-                                    )}
-                                    <div className="absolute top-2 right-2 flex items-center gap-2 text-xs">
-                                      <span className="text-[10px] text-gray-500">Vistas: {m.viewsCount ?? (m._count?.views || 0)}</span>
-                                      {m.eventAt && (
-                                        <span className="relative inline-flex items-center gap-1">
-                                          <button
-                                            type="button"
-                                            onClick={() =>
-                                              setEventTipId(eventTipId === m.id ? null : m.id)
-                                            }
-                                            className="p-1 rounded hover:bg-gray-100 cursor-pointer"
-                                            aria-label="Ver fecha exacta"
-                                          >
-                                            <Calendar
-                                              size={12}
-                                              className={
-                                                new Date(m.eventAt) <= new Date()
-                                                  ? 'text-red-600'
-                                                  : 'text-indigo-600'
-                                              }
-                                            />
-                                          </button>
-                                          <span
+                                <div
+                                  key={m.id}
+                                  className={`relative overflow-hidden p-4 rounded-lg border ${m.isEmergency ? 'bg-gradient-to-br from-red-50 via-white to-rose-100 border-red-200' : new Date(m.expiresAt) > new Date() ? 'bg-emerald-50 border-emerald-200' : 'bg-gray-50 border-gray-200'}`}
+                                  onMouseEnter={() => {
+                                    try {
+                                      api.viewMessage(m.id);
+                                    } catch {}
+                                  }}
+                                >
+                                  {m.isEmergency && (
+                                    <span className="pointer-events-none absolute inset-0 rounded-lg bg-red-300/10 animate-pulse"></span>
+                                  )}
+                                  <div className="absolute top-2 right-2 flex items-center gap-2 text-xs">
+                                    <span className="text-[10px] text-gray-500">
+                                      Vistas: {m.viewsCount ?? (m._count?.views || 0)}
+                                    </span>
+                                    {m.eventAt && (
+                                      <span className="relative inline-flex items-center gap-1">
+                                        <button
+                                          type="button"
+                                          onClick={() =>
+                                            setEventTipId(eventTipId === m.id ? null : m.id)
+                                          }
+                                          className="p-1 rounded hover:bg-gray-100 cursor-pointer"
+                                          aria-label="Ver fecha exacta"
+                                        >
+                                          <Calendar
+                                            size={12}
                                             className={
                                               new Date(m.eventAt) <= new Date()
                                                 ? 'text-red-600'
-                                                : 'text-gray-500'
+                                                : 'text-indigo-600'
                                             }
-                                          >
-                                            {new Date(m.eventAt) <= new Date()
-                                              ? `hace: ${(relativeFrom(m.eventAt) || '')
-                                                  .replace(/\b(en|hace)\b\s*/, '')
-                                                  .replace(/segundos?/, 's')
-                                                  .replace(/minutos?/, 'min')
-                                                  .replace(/horas?/, 'h')
-                                                  .replace(/días?/, 'd')
-                                                  .replace(/mes(es)?/, 'm')
-                                                  .replace(/años?/, 'a')}`
-                                              : `en: ${(relativeIn(m.eventAt) || '')
-                                                  .replace(/segundos?/, 's')
-                                                  .replace(/minutos?/, 'min')
-                                                  .replace(/horas?/, 'h')
-                                                  .replace(/días?/, 'd')
-                                                  .replace(/mes(es)?/, 'm')
-                                                  .replace(/años?/, 'a')}`}
-                                          </span>
-                                          {eventTipId === m.id && (
-                                            <>
-                                              <div
-                                                className="fixed inset-0 z-40"
-                                                onClick={() => setEventTipId(null)}
-                                              />
-                                              <div className="absolute right-0 top-full z-50 bg-white rounded-lg shadow-lg border border-gray-200 px-2 py-1 text-xs text-gray-700 whitespace-nowrap">
-                                                <span className="font-semibold">Evento:</span>{' '}
-                                                {formatLocal(m.eventAt)}
-                                              </div>
-                                            </>
-                                          )}
+                                          />
+                                        </button>
+                                        <span
+                                          className={
+                                            new Date(m.eventAt) <= new Date()
+                                              ? 'text-red-600'
+                                              : 'text-gray-500'
+                                          }
+                                        >
+                                          {new Date(m.eventAt) <= new Date()
+                                            ? `hace: ${(relativeFrom(m.eventAt) || '')
+                                                .replace(/\b(en|hace)\b\s*/, '')
+                                                .replace(/segundos?/, 's')
+                                                .replace(/minutos?/, 'min')
+                                                .replace(/horas?/, 'h')
+                                                .replace(/días?/, 'd')
+                                                .replace(/mes(es)?/, 'm')
+                                                .replace(/años?/, 'a')}`
+                                            : `en: ${(relativeIn(m.eventAt) || '')
+                                                .replace(/segundos?/, 's')
+                                                .replace(/minutos?/, 'min')
+                                                .replace(/horas?/, 'h')
+                                                .replace(/días?/, 'd')
+                                                .replace(/mes(es)?/, 'm')
+                                                .replace(/años?/, 'a')}`}
+                                        </span>
+                                        {eventTipId === m.id && (
+                                          <>
+                                            <div
+                                              className="fixed inset-0 z-40"
+                                              onClick={() => setEventTipId(null)}
+                                            />
+                                            <div className="absolute right-0 top-full z-50 bg-white rounded-lg shadow-lg border border-gray-200 px-2 py-1 text-xs text-gray-700 whitespace-nowrap">
+                                              <span className="font-semibold">Evento:</span>{' '}
+                                              {formatLocal(m.eventAt)}
+                                            </div>
+                                          </>
+                                        )}
+                                      </span>
+                                    )}
+                                    {(!m.state || m.state === 'ACTIVE') &&
+                                      m.expiresAt &&
+                                      new Date(m.expiresAt) > new Date() &&
+                                      (m.sender?.id || m.senderId) === api.getCurrentUserId() && (
+                                        <button
+                                          onClick={async () => {
+                                            try {
+                                              await api.cancelMessage(m.id);
+                                              setMessagesItems((prev) =>
+                                                prev.map((x) =>
+                                                  x.id === m.id
+                                                    ? {
+                                                        ...x,
+                                                        state: 'CANCELLED',
+                                                        expiresAt: new Date().toISOString(),
+                                                      }
+                                                    : x
+                                                )
+                                              );
+                                            } catch {}
+                                          }}
+                                          className="px-2 py-1 rounded border text-xs text-red-600 border-red-300 hover:bg-red-50"
+                                        >
+                                          Cancelar
+                                        </button>
+                                      )}
+                                  </div>
+                                  <div className="flex items-center justify-between">
+                                    <div className="flex items-center gap-2">
+                                      <div className="text-sm text-gray-900 font-bold">
+                                        {m.channel?.title || 'Canal'}
+                                      </div>
+                                      <span
+                                        className={`text-[10px] px-1.5 py-0.5 rounded border ${m.isEmergency ? 'bg-red-50 text-red-700 border-red-200' : m.priority === 'HIGH' ? 'bg-indigo-50 text-indigo-700 border-indigo-200' : m.priority === 'MEDIUM' ? 'bg-sky-50 text-sky-700 border-sky-200' : 'bg-gray-100 text-gray-700 border-gray-200'}`}
+                                      >
+                                        {m.isEmergency
+                                          ? 'Emergente'
+                                          : m.priority === 'HIGH'
+                                            ? 'Alta'
+                                            : m.priority === 'MEDIUM'
+                                              ? 'Media'
+                                              : 'Baja'}
+                                      </span>
+                                      {m.state === 'CANCELLED' && (
+                                        <span className="text-[10px] px-1.5 py-0.5 rounded border bg-gray-100 text-gray-700 border-gray-200">
+                                          Cancelado
                                         </span>
                                       )}
-                                      {(!m.state || m.state === 'ACTIVE') &&
-                                        m.expiresAt &&
-                                        new Date(m.expiresAt) > new Date() &&
-                                        (m.sender?.id || m.senderId) === api.getCurrentUserId() && (
-                                          <button
-                                            onClick={async () => {
-                                              try {
-                                                await api.cancelMessage(m.id);
-                                                setMessagesItems((prev) =>
-                                                  prev.map((x) =>
-                                                    x.id === m.id
-                                                      ? {
-                                                          ...x,
-                                                          state: 'CANCELLED',
-                                                          expiresAt: new Date().toISOString(),
-                                                        }
-                                                      : x
-                                                  )
-                                                );
-                                              } catch {}
-                                            }}
-                                            className="px-2 py-1 rounded border text-xs text-red-600 border-red-300 hover:bg-red-50"
-                                          >
-                                            Cancelar
-                                          </button>
-                                        )}
+                                      <span className="text-xs text-gray-500">
+                                        hace:{' '}
+                                        {(relativeFrom(m.createdAt) || '')
+                                          .replace(/\b(en|hace)\b\s*/, '')
+                                          .replace(/segundos?/, 's')
+                                          .replace(/minutos?/, 'min')
+                                          .replace(/horas?/, 'h')
+                                          .replace(/días?/, 'd')
+                                          .replace(/mes(es)?/, 'm')
+                                          .replace(/años?/, 'a')}
+                                      </span>
                                     </div>
-                                    <div className="flex items-center justify-between">
-                                      <div className="flex items-center gap-2">
-                                        <div className="text-sm text-gray-900 font-bold">
-                                          {m.channel?.title || 'Canal'}
-                                        </div>
-                                        <span
-                                          className={`text-[10px] px-1.5 py-0.5 rounded border ${m.isEmergency ? 'bg-red-50 text-red-700 border-red-200' : m.priority === 'HIGH' ? 'bg-indigo-50 text-indigo-700 border-indigo-200' : m.priority === 'MEDIUM' ? 'bg-sky-50 text-sky-700 border-sky-200' : 'bg-gray-100 text-gray-700 border-gray-200'}`}
+                                    <div />
+                                  </div>
+
+                                  <div className="mt-2 text-sm text-gray-800">{m.content}</div>
+                                  <div className="mt-3 flex items-center gap-2">
+                                    {m.expiresAt && (
+                                      <span className="relative inline-flex items-center gap-1">
+                                        <button
+                                          type="button"
+                                          onClick={() =>
+                                            setExpiresTipId(expiresTipId === m.id ? null : m.id)
+                                          }
+                                          className="p-1 rounded hover:bg-gray-100 cursor-pointer"
+                                          aria-label="Ver fecha exacta"
                                         >
-                                          {m.isEmergency
-                                            ? 'Emergente'
-                                            : m.priority === 'HIGH'
-                                              ? 'Alta'
-                                              : m.priority === 'MEDIUM'
-                                                ? 'Media'
-                                                : 'Baja'}
-                                        </span>
-                                        {m.state === 'CANCELLED' && (
-                                          <span className="text-[10px] px-1.5 py-0.5 rounded border bg-gray-100 text-gray-700 border-gray-200">
-                                            Cancelado
-                                          </span>
-                                        )}
-                                        <span className="text-xs text-gray-500">
-                                          hace:{' '}
-                                          {(relativeFrom(m.createdAt) || '')
-                                            .replace(/\b(en|hace)\b\s*/, '')
+                                          <Hourglass size={12} className="text-amber-600" />
+                                        </button>
+                                        <span className="text-xs font-semibold text-gray-900">
+                                          {(relativeIn(m.expiresAt) || '')
+                                            .replace(/en:\s*/, '')
                                             .replace(/segundos?/, 's')
                                             .replace(/minutos?/, 'min')
                                             .replace(/horas?/, 'h')
@@ -2919,189 +3176,227 @@ const ChannelManager: React.FC = () => {
                                             .replace(/mes(es)?/, 'm')
                                             .replace(/años?/, 'a')}
                                         </span>
-                                      </div>
-                                      <div />
-                                    </div>
-
-                                    <div className="mt-2 text-sm text-gray-800">{m.content}</div>
-                                    <div className="mt-3 flex items-center gap-2">
-                                      {m.expiresAt && (
-                                        <span className="relative inline-flex items-center gap-1">
+                                        {expiresTipId === m.id && (
+                                          <>
+                                            <div
+                                              className="fixed inset-0 z-40"
+                                              onClick={() => setExpiresTipId(null)}
+                                            />
+                                            <div className="absolute left-0 top-full z-50 bg-white rounded-lg shadow-lg border border-gray-200 px-2 py-1 text-xs text-gray-700 whitespace-nowrap">
+                                              <span className="font-semibold">Expira:</span>{' '}
+                                              {formatLocal(m.expiresAt)}
+                                            </div>
+                                          </>
+                                        )}
+                                      </span>
+                                    )}
+                                    {(m.approvals || []).map((a) =>
+                                      a.status === 'APPROVED' ? (
+                                        <span
+                                          key={a.userId}
+                                          className="inline-flex items-center gap-1 text-[11px] text-green-700 bg-white border border-green-200 px-1.5 py-0.5 rounded"
+                                        >
+                                          <CheckIcon size={12} className="text-green-700" />{' '}
                                           <button
-                                            type="button"
-                                            onClick={() =>
-                                              setExpiresTipId(expiresTipId === m.id ? null : m.id)
-                                            }
-                                            className="p-1 rounded hover:bg-gray-100 cursor-pointer"
-                                            aria-label="Ver fecha exacta"
+                                            className="hover:underline"
+                                            onMouseEnter={(e) => {
+                                              setApproverHoverUserId(a.user?.id || a.approverId);
+                                              setApproverHoverAnchorEl(
+                                                e.currentTarget as HTMLElement
+                                              );
+                                            }}
+                                            onMouseLeave={() => {
+                                              setApproverHoverUserId(null);
+                                              setApproverHoverAnchorEl(null);
+                                            }}
                                           >
-                                            <Hourglass size={12} className="text-amber-600" />
+                                            {a.approver?.fullName ||
+                                              a.user?.fullName ||
+                                              a.approver?.username ||
+                                              a.user?.username ||
+                                              a.approverId}
                                           </button>
-                                          <span className="text-xs font-semibold text-gray-900">
-                                            {(relativeIn(m.expiresAt) || '')
-                                              .replace(/en:\s*/, '')
-                                              .replace(/segundos?/, 's')
-                                              .replace(/minutos?/, 'min')
-                                              .replace(/horas?/, 'h')
-                                              .replace(/días?/, 'd')
-                                              .replace(/mes(es)?/, 'm')
-                                              .replace(/años?/, 'a')}
-                                          </span>
-                                          {expiresTipId === m.id && (
-                                            <>
-                                              <div
-                                                className="fixed inset-0 z-40"
-                                                onClick={() => setExpiresTipId(null)}
-                                              />
-                                              <div className="absolute left-0 top-full z-50 bg-white rounded-lg shadow-lg border border-gray-200 px-2 py-1 text-xs text-gray-700 whitespace-nowrap">
-                                                <span className="font-semibold">Expira:</span>{' '}
-                                                {formatLocal(m.expiresAt)}
+                                          {approverHoverUserId === (a.user?.id || a.approverId) && (
+                                            <Popper
+                                              open
+                                              placement="top"
+                                              anchorEl={approverHoverAnchorEl}
+                                              style={{ zIndex: 1000 }}
+                                            >
+                                              <div className="text-[10px] px-2 py-1 rounded bg-gray-900 text-white shadow">
+                                                @{a.approver?.username || a.user?.username || ''}
                                               </div>
-                                            </>
+                                            </Popper>
+                                          )}
+                                          {a.removed && (
+                                            <span className="text-[10px] text-gray-500">
+                                              (removido)
+                                            </span>
                                           )}
                                         </span>
-                                      )}
-                                      {(m.approvals || []).map((a) =>
-                                        a.status === 'APPROVED' ? (
-                                          <span
-                                            key={a.userId}
-                                            className="inline-flex items-center gap-1 text-[11px] text-green-700 bg-white border border-green-200 px-1.5 py-0.5 rounded"
+                                      ) : a.status === 'REJECTED' ? (
+                                        <span
+                                          key={a.userId}
+                                          className="inline-flex items-center gap-1 text-[11px] text-red-700 bg-white border border-red-200 px-1.5 py-0.5 rounded"
+                                        >
+                                          <X size={12} className="text-red-700" />{' '}
+                                          <button
+                                            className="hover:underline"
+                                            onMouseEnter={(e) => {
+                                              setApproverHoverUserId(a.user?.id || a.approverId);
+                                              setApproverHoverAnchorEl(
+                                                e.currentTarget as HTMLElement
+                                              );
+                                            }}
+                                            onMouseLeave={() => {
+                                              setApproverHoverUserId(null);
+                                              setApproverHoverAnchorEl(null);
+                                            }}
                                           >
-                                            <CheckIcon size={12} className="text-green-700" />{' '}
-                                            <button
-                                              className="hover:underline"
-                                              onMouseEnter={(e) => { setApproverHoverUserId(a.user?.id || a.approverId); setApproverHoverAnchorEl(e.currentTarget as HTMLElement); }}
-                                              onMouseLeave={() => { setApproverHoverUserId(null); setApproverHoverAnchorEl(null); }}
+                                            {a.approver?.fullName ||
+                                              a.user?.fullName ||
+                                              a.approver?.username ||
+                                              a.user?.username ||
+                                              a.approverId}
+                                          </button>
+                                          {approverHoverUserId === (a.user?.id || a.approverId) && (
+                                            <Popper
+                                              open
+                                              placement="top"
+                                              anchorEl={approverHoverAnchorEl}
+                                              style={{ zIndex: 1000 }}
                                             >
-                                              {a.approver?.fullName || a.user?.fullName || a.approver?.username || a.user?.username || a.approverId}
-                                            </button>
-                                            {approverHoverUserId === (a.user?.id || a.approverId) && (
-                                              <Popper open placement="top" anchorEl={approverHoverAnchorEl} style={{ zIndex: 1000 }}>
-                                                <div className="text-[10px] px-2 py-1 rounded bg-gray-900 text-white shadow">
-                                                  @{a.approver?.username || a.user?.username || ''}
-                                                </div>
-                                              </Popper>
-                                            )}
-                                            {a.removed && (
-                                              <span className="text-[10px] text-gray-500">
-                                                (removido)
-                                              </span>
-                                            )}
-                                          </span>
-                                        ) : a.status === 'REJECTED' ? (
-                                          <span
-                                            key={a.userId}
-                                            className="inline-flex items-center gap-1 text-[11px] text-red-700 bg-white border border-red-200 px-1.5 py-0.5 rounded"
-                                          >
-                                            <X size={12} className="text-red-700" />{' '}
-                                            <button
-                                              className="hover:underline"
-                                              onMouseEnter={(e) => { setApproverHoverUserId(a.user?.id || a.approverId); setApproverHoverAnchorEl(e.currentTarget as HTMLElement); }}
-                                              onMouseLeave={() => { setApproverHoverUserId(null); setApproverHoverAnchorEl(null); }}
-                                            >
-                                              {a.approver?.fullName || a.user?.fullName || a.approver?.username || a.user?.username || a.approverId}
-                                            </button>
-                                            {approverHoverUserId === (a.user?.id || a.approverId) && (
-                                              <Popper open placement="top" anchorEl={approverHoverAnchorEl} style={{ zIndex: 1000 }}>
-                                                <div className="text-[10px] px-2 py-1 rounded bg-gray-900 text-white shadow">
-                                                  @{a.approver?.username || a.user?.username || ''}
-                                                </div>
-                                              </Popper>
-                                            )}
-                                            {a.removed && (
-                                              <span className="text-[10px] text-gray-500">
-                                                (removido)
-                                              </span>
-                                            )}
-                                          </span>
-                                        ) : m.expiresAt && new Date(m.expiresAt) <= new Date() ? (
-                                          <span
-                                            key={a.userId}
-                                            className="inline-flex items-center gap-1 text-[11px] text-gray-700 bg-white border border-gray-200 px-1.5 py-0.5 rounded"
-                                          >
-                                            <Hourglass size={12} className="text-red-600" />{' '}
-                                            <button
-                                              className="hover:underline"
-                                              onMouseEnter={(e) => { setApproverHoverUserId(a.user?.id || a.approverId); setApproverHoverAnchorEl(e.currentTarget as HTMLElement); }}
-                                              onMouseLeave={() => { setApproverHoverUserId(null); setApproverHoverAnchorEl(null); }}
-                                            >
-                                              {a.approver?.fullName || a.user?.fullName || a.approver?.username || a.user?.username || a.approverId}
-                                            </button>
-                                            {approverHoverUserId === (a.user?.id || a.approverId) && (
-                                              <Popper open placement="top" anchorEl={approverHoverAnchorEl} style={{ zIndex: 1000 }}>
-                                                <div className="text-[10px] px-2 py-1 rounded bg-gray-900 text-white shadow">
-                                                  @{a.approver?.username || a.user?.username || ''}
-                                                </div>
-                                              </Popper>
-                                            )}
-                                            {a.removed && (
-                                              <span className="text-[10px] text-gray-500">
-                                                (removido)
-                                              </span>
-                                            )}
-                                          </span>
-                                        ) : (
-                                          <span
-                                            key={a.userId}
-                                            className="relative inline-flex items-center gap-1 text-[11px] text-gray-700 bg-white border border-gray-200 px-1.5 py-0.5 rounded group"
-                                          >
-                                            <Clock
-                                              size={12}
-                                              className="text-gray-700 cursor-help"
-                                            />{' '}
-                                            <button
-                                              className="hover:underline"
-                                              onMouseEnter={(e) => { setApproverHoverUserId(a.user?.id || a.approverId); setApproverHoverAnchorEl(e.currentTarget as HTMLElement); }}
-                                              onMouseLeave={() => { setApproverHoverUserId(null); setApproverHoverAnchorEl(null); }}
-                                            >
-                                              {a.approver?.fullName || a.user?.fullName || a.approver?.username || a.user?.username || a.approverId}
-                                            </button>
-                                            {approverHoverUserId === (a.user?.id || a.approverId) && (
-                                              <Popper open placement="top" anchorEl={approverHoverAnchorEl} style={{ zIndex: 1000 }}>
-                                                <div className="text-[10px] px-2 py-1 rounded bg-gray-900 text-white shadow">
-                                                  @{a.approver?.username || a.user?.username || ''}
-                                                </div>
-                                              </Popper>
-                                            )}
-                                            {a.removed && (
-                                              <span className="text-[10px] text-gray-500">
-                                                (removido)
-                                              </span>
-                                            )}
-                                            { m.expiresAt && (
-                                              <div className=" hidden absolute left-0 top-full mt-1 bg-gray-900 text-white text-[10px] rounded px-2 py-1 opacity-0 group-hover:opacity-100 whitespace-nowrap">
-                                                Aún tiene{' '}
-                                                {(relativeIn(m.expiresAt) || '')
-                                                  .replace(/en:\s*/, '')
-                                                  .replace(/segundos?/, 's')
-                                                  .replace(/minutos?/, 'min')
-                                                  .replace(/horas?/, 'h')
-                                                  .replace(/días?/, 'd')
-                                                  .replace(/mes(es)?/, 'm')
-                                                  .replace(/años?/, 'a')}{' '}
-                                                para aprobarlo
+                                              <div className="text-[10px] px-2 py-1 rounded bg-gray-900 text-white shadow">
+                                                @{a.approver?.username || a.user?.username || ''}
                                               </div>
-                                            )}
-                                          </span>
-                                        )
-                                      )}
-                                    </div>
+                                            </Popper>
+                                          )}
+                                          {a.removed && (
+                                            <span className="text-[10px] text-gray-500">
+                                              (removido)
+                                            </span>
+                                          )}
+                                        </span>
+                                      ) : m.expiresAt && new Date(m.expiresAt) <= new Date() ? (
+                                        <span
+                                          key={a.userId}
+                                          className="inline-flex items-center gap-1 text-[11px] text-gray-700 bg-white border border-gray-200 px-1.5 py-0.5 rounded"
+                                        >
+                                          <Hourglass size={12} className="text-red-600" />{' '}
+                                          <button
+                                            className="hover:underline"
+                                            onMouseEnter={(e) => {
+                                              setApproverHoverUserId(a.user?.id || a.approverId);
+                                              setApproverHoverAnchorEl(
+                                                e.currentTarget as HTMLElement
+                                              );
+                                            }}
+                                            onMouseLeave={() => {
+                                              setApproverHoverUserId(null);
+                                              setApproverHoverAnchorEl(null);
+                                            }}
+                                          >
+                                            {a.approver?.fullName ||
+                                              a.user?.fullName ||
+                                              a.approver?.username ||
+                                              a.user?.username ||
+                                              a.approverId}
+                                          </button>
+                                          {approverHoverUserId === (a.user?.id || a.approverId) && (
+                                            <Popper
+                                              open
+                                              placement="top"
+                                              anchorEl={approverHoverAnchorEl}
+                                              style={{ zIndex: 1000 }}
+                                            >
+                                              <div className="text-[10px] px-2 py-1 rounded bg-gray-900 text-white shadow">
+                                                @{a.approver?.username || a.user?.username || ''}
+                                              </div>
+                                            </Popper>
+                                          )}
+                                          {a.removed && (
+                                            <span className="text-[10px] text-gray-500">
+                                              (removido)
+                                            </span>
+                                          )}
+                                        </span>
+                                      ) : (
+                                        <span
+                                          key={a.userId}
+                                          className="relative inline-flex items-center gap-1 text-[11px] text-gray-700 bg-white border border-gray-200 px-1.5 py-0.5 rounded group"
+                                        >
+                                          <Clock size={12} className="text-gray-700 cursor-help" />{' '}
+                                          <button
+                                            className="hover:underline"
+                                            onMouseEnter={(e) => {
+                                              setApproverHoverUserId(a.user?.id || a.approverId);
+                                              setApproverHoverAnchorEl(
+                                                e.currentTarget as HTMLElement
+                                              );
+                                            }}
+                                            onMouseLeave={() => {
+                                              setApproverHoverUserId(null);
+                                              setApproverHoverAnchorEl(null);
+                                            }}
+                                          >
+                                            {a.approver?.fullName ||
+                                              a.user?.fullName ||
+                                              a.approver?.username ||
+                                              a.user?.username ||
+                                              a.approverId}
+                                          </button>
+                                          {approverHoverUserId === (a.user?.id || a.approverId) && (
+                                            <Popper
+                                              open
+                                              placement="top"
+                                              anchorEl={approverHoverAnchorEl}
+                                              style={{ zIndex: 1000 }}
+                                            >
+                                              <div className="text-[10px] px-2 py-1 rounded bg-gray-900 text-white shadow">
+                                                @{a.approver?.username || a.user?.username || ''}
+                                              </div>
+                                            </Popper>
+                                          )}
+                                          {a.removed && (
+                                            <span className="text-[10px] text-gray-500">
+                                              (removido)
+                                            </span>
+                                          )}
+                                          {m.expiresAt && (
+                                            <div className=" hidden absolute left-0 top-full mt-1 bg-gray-900 text-white text-[10px] rounded px-2 py-1 opacity-0 group-hover:opacity-100 whitespace-nowrap">
+                                              Aún tiene{' '}
+                                              {(relativeIn(m.expiresAt) || '')
+                                                .replace(/en:\s*/, '')
+                                                .replace(/segundos?/, 's')
+                                                .replace(/minutos?/, 'min')
+                                                .replace(/horas?/, 'h')
+                                                .replace(/días?/, 'd')
+                                                .replace(/mes(es)?/, 'm')
+                                                .replace(/años?/, 'a')}{' '}
+                                              para aprobarlo
+                                            </div>
+                                          )}
+                                        </span>
+                                      )
+                                    )}
                                   </div>
-                                ))}
+                                </div>
+                              ))}
                               {messagesItems.length === 0 && (
                                 <div className="py-8 text-center text-gray-500">
                                   <div className="w-12 h-12 mx-auto mb-3 flex items-center justify-center rounded-full">
                                     <MessagesSquare size={42} className="text-gray-300" />
                                   </div>
                                   <div className="text-sm">
-                                    <span className="font-semibold">Aún no encontramos mensajes con este filtro</span>
+                                    <span className="font-semibold">
+                                      Aún no encontramos mensajes con este filtro
+                                    </span>
                                   </div>
-                                  <div className="text-sm mt-1 mb-10 ">
-                                    Intenta con otro filtro</div>
+                                  <div className="text-sm mt-1 mb-10 ">Intenta con otro filtro</div>
 
                                   <div className="text-sm mt-5 ">
-                                    Si consideras que esto fue un error haznoslo saber 
-                                      aquí, con un solo click
+                                    Si consideras que esto fue un error haznoslo saber aquí, con un
+                                    solo click
                                   </div>
                                 </div>
                               )}

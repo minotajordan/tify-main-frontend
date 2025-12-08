@@ -33,17 +33,39 @@ const codes: Array<{ label: string; value: string }> = [
   { label: '5xx', value: '5xx' },
 ];
 
-export default function RequestsList({ requests, methodFilter, setMethodFilter, codeFilter, setCodeFilter }: Props) {
+export default function RequestsList({
+  requests,
+  methodFilter,
+  setMethodFilter,
+  codeFilter,
+  setCodeFilter,
+}: Props) {
   return (
     <div className="w-full bg-white rounded-lg shadow p-4">
       <div className="flex items-center justify-between mb-3">
         <div className="text-sm text-gray-600">Peticiones recientes</div>
         <div className="flex gap-2">
-          <select className="px-2 py-1 border rounded" value={methodFilter} onChange={(e) => setMethodFilter(e.target.value)}>
-            {methods.map((m) => <option key={m.value} value={m.value}>{m.label}</option>)}
+          <select
+            className="px-2 py-1 border rounded"
+            value={methodFilter}
+            onChange={(e) => setMethodFilter(e.target.value)}
+          >
+            {methods.map((m) => (
+              <option key={m.value} value={m.value}>
+                {m.label}
+              </option>
+            ))}
           </select>
-          <select className="px-2 py-1 border rounded" value={codeFilter} onChange={(e) => setCodeFilter(e.target.value)}>
-            {codes.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
+          <select
+            className="px-2 py-1 border rounded"
+            value={codeFilter}
+            onChange={(e) => setCodeFilter(e.target.value)}
+          >
+            {codes.map((c) => (
+              <option key={c.value} value={c.value}>
+                {c.label}
+              </option>
+            ))}
           </select>
         </div>
       </div>
@@ -61,7 +83,9 @@ export default function RequestsList({ requests, methodFilter, setMethodFilter, 
           <tbody>
             {requests.map((r, i) => (
               <tr key={i} className="border-t border-gray-100">
-                <td className="py-1 pr-2 text-gray-700">{new Date(r.timestamp).toLocaleTimeString()}</td>
+                <td className="py-1 pr-2 text-gray-700">
+                  {new Date(r.timestamp).toLocaleTimeString()}
+                </td>
                 <td className="py-1 pr-2 font-mono">{r.method}</td>
                 <td className="py-1 pr-2 text-gray-700">{r.endpoint}</td>
                 <td className="py-1 pr-2">{r.statusCode}</td>

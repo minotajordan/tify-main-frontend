@@ -25,7 +25,9 @@ export type MonitoringConnection = {
   onError: (fn: (e: Event) => void) => void;
 };
 
-export function createMonitoringConnection(url = 'http://localhost:3334/stream'): MonitoringConnection {
+export function createMonitoringConnection(
+  url = 'http://localhost:3334/stream'
+): MonitoringConnection {
   let es: EventSource | null = null;
   let onMsg: ((d: MonitoringSnapshot) => void) | null = null;
   let onOpenCb: (() => void) | null = null;
@@ -34,8 +36,12 @@ export function createMonitoringConnection(url = 'http://localhost:3334/stream')
   const start = () => {
     if (es) return;
     es = new EventSource(url);
-    es.onopen = () => { if (onOpenCb) onOpenCb(); };
-    es.onerror = (e) => { if (onErrCb) onErrCb(e); };
+    es.onopen = () => {
+      if (onOpenCb) onOpenCb();
+    };
+    es.onerror = (e) => {
+      if (onErrCb) onErrCb(e);
+    };
     es.onmessage = (ev) => {
       try {
         const data = JSON.parse(ev.data) as MonitoringSnapshot;
@@ -53,9 +59,15 @@ export function createMonitoringConnection(url = 'http://localhost:3334/stream')
   return {
     start,
     stop,
-    onMessage: (fn) => { onMsg = fn; },
-    onOpen: (fn) => { onOpenCb = fn; },
-    onError: (fn) => { onErrCb = fn; },
+    onMessage: (fn) => {
+      onMsg = fn;
+    },
+    onOpen: (fn) => {
+      onOpenCb = fn;
+    },
+    onError: (fn) => {
+      onErrCb = fn;
+    },
   };
 }
 
