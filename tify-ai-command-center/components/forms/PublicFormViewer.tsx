@@ -46,7 +46,7 @@ const PublicFormViewer: React.FC<{ slug: string }> = ({ slug }) => {
       const errorData = err.response?.data || {};
       setError({
         message: errorData.message || err.message || t('forms.public.notFound'),
-        status: errorData.status || (err.response?.status === 403 ? 'paused' : err.response?.status === 410 ? 'deleted' : 'error')
+        status: errorData.status || (err.response?.status === 403 ? 'paused' : err.response?.status === 410 ? 'deleted' : err.response?.status === 404 ? 'notFound' : 'error')
       });
     } finally {
       setLoading(false);
@@ -361,6 +361,7 @@ const PublicFormViewer: React.FC<{ slug: string }> = ({ slug }) => {
   if (error) {
     const isDeleted = error.status === 'deleted';
     const isPaused = error.status === 'paused';
+    const isNotFound = error.status === 'notFound';
 
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50 p-4">
@@ -368,12 +369,15 @@ const PublicFormViewer: React.FC<{ slug: string }> = ({ slug }) => {
           <div className={`w-20 h-20 rounded-full flex items-center justify-center mx-auto ${
             isDeleted ? 'bg-red-100 text-red-600' : 
             isPaused ? 'bg-amber-100 text-amber-600' : 
-            'bg-gray-100 text-gray-600'
+            isNotFound ? 'bg-gray-100 text-gray-600' :
+            'bg-red-50 text-red-500'
           }`}>
             {isDeleted ? (
               <svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
             ) : isPaused ? (
               <svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>
+            ) : isNotFound ? (
+              <svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
             ) : (
               <svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
             )}
@@ -383,11 +387,13 @@ const PublicFormViewer: React.FC<{ slug: string }> = ({ slug }) => {
             <h2 className="text-2xl font-bold text-gray-900">
               {isDeleted ? t('forms.public.deletedTitle') : 
                isPaused ? t('forms.public.pausedTitle') : 
+               isNotFound ? t('forms.public.notFoundTitle') :
                t('forms.public.errorTitle')}
             </h2>
             <p className="text-gray-500 text-lg leading-relaxed">
               {isDeleted ? t('forms.public.deletedMessage') : 
                isPaused ? t('forms.public.pausedMessage') : 
+               isNotFound ? t('forms.public.notFoundMessage') :
                error.message || t('forms.public.notFound')}
             </p>
           </div>
