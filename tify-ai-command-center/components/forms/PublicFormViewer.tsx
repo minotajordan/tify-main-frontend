@@ -5,6 +5,20 @@ import { CheckCircle, Calendar, ChevronRight, ChevronLeft, Upload } from 'lucide
 import dayjs from 'dayjs';
 import { useI18n } from '../../i18n';
 
+const getDeviceInfo = () => {
+  if (typeof window === 'undefined') return {};
+  return {
+    userAgent: navigator.userAgent,
+    language: navigator.language,
+    platform: navigator.platform,
+    screenResolution: `${window.screen.width}x${window.screen.height}`,
+    windowSize: `${window.innerWidth}x${window.innerHeight}`,
+    timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+    cookiesEnabled: navigator.cookieEnabled,
+    referrer: document.referrer,
+  };
+};
+
 const PublicFormViewer: React.FC<{ slug: string }> = ({ slug }) => {
   const { t } = useI18n();
   const qrRef = useRef<HTMLDivElement>(null);
@@ -75,7 +89,8 @@ const PublicFormViewer: React.FC<{ slug: string }> = ({ slug }) => {
 
     setSubmitting(true);
     try {
-      const res = await api.submitForm(slug, answers);
+      const deviceInfo = getDeviceInfo();
+      const res = await api.submitForm(slug, answers, { deviceInfo });
       setSubmissionId(res.id);
       setSubmitted(true);
     } catch (err) {

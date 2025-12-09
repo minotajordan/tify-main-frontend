@@ -56,6 +56,8 @@ const FormEditor: React.FC<FormEditorProps> = ({ formId, onClose, onSave }) => {
   const [activeFieldId, setActiveFieldId] = useState<string | null>(null);
   const [showAdvancedAppearance, setShowAdvancedAppearance] = useState(false);
   const [restoreModalOpen, setRestoreModalOpen] = useState(false);
+  const [showPublishModal, setShowPublishModal] = useState(false);
+  const [isUpdatingStatus, setIsUpdatingStatus] = useState(false);
   const [draftToRestore, setDraftToRestore] = useState<any>(null);
   const [formData, setFormData] = useState({
     title: '',
@@ -67,6 +69,7 @@ const FormEditor: React.FC<FormEditorProps> = ({ formId, onClose, onSave }) => {
     isPublished: false,
     wasPublished: false,
     isWizard: false,
+    collectUserInfo: false,
     expiresAt: null as string | null,
     fields: [] as FormField[],
   });
@@ -130,6 +133,13 @@ const FormEditor: React.FC<FormEditorProps> = ({ formId, onClose, onSave }) => {
     return () => window.removeEventListener('beforeunload', handleBeforeUnload);
   }, [formData, formId]);
 
+  const generateId = () => {
+    if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+      return crypto.randomUUID();
+    }
+    return Date.now().toString(36) + Math.random().toString(36).substr(2);
+  };
+
   const loadForm = async (id: string) => {
     setLoading(true);
     try {
@@ -157,8 +167,9 @@ const FormEditor: React.FC<FormEditorProps> = ({ formId, onClose, onSave }) => {
         isPublished: data.isPublished || false,
         wasPublished: data.wasPublished || data.isPublished || false,
         isWizard: data.isWizard || false,
+        collectUserInfo: data.collectUserInfo || false,
         expiresAt: data.expiresAt || null,
-        fields: (data.fields || []).map((f: any) => ({ ...f, id: f.id || crypto.randomUUID() })),
+        fields: (data.fields || []).map((f: any) => ({ ...f, id: f.id || generateId() })),
       });
 
       // Check for draft
@@ -181,12 +192,75 @@ const FormEditor: React.FC<FormEditorProps> = ({ formId, onClose, onSave }) => {
     }
   };
 
-  const handleSave = async () => {
+  const executeStatusChange = async (newStatus: { isActive?: boolean; isPublished?: boolean }) => {
+    if (!formData.title) return alert(t('forms.error.titleRequired'));
+    setIsUpdatingStatus(true);
+    
+    try {
+      if (formId === 'new') {
+        // For new forms, we MUST save everything to create it
+        let dataToSave = { ...formData, ...newStatus };
+        if (newStatus.isPublished && !formData.wasPublished) {
+          dataToSave.wasPublished = true;
+        }
+        
+        // Apply defaults if needed
+        if (!showAdvancedAppearance) {
+          dataToSave.headerContent = getDefaultHeader(formData.title);
+          dataToSave.footerContent = getDefaultFooter();
+          dataToSave.successMessage = t('forms.defaultSuccessMessage');
+        }
+
+        await api.createForm(dataToSave);
+        localStorage.removeItem(`tify_form_draft_${formId}`);
+        onSave(); // We must close/refresh for new forms as we need the ID
+      } else {
+        // For existing forms, ONLY update the status fields
+        const payload: any = { ...newStatus };
+        
+        // Handle wasPublished logic
+        if (newStatus.isPublished && !formData.wasPublished) {
+          payload.wasPublished = true;
+        }
+
+        await api.updateForm(formId, payload);
+        
+        // Update local state to reflect status change
+        setFormData(prev => ({ 
+          ...prev, 
+          ...newStatus, 
+          wasPublished: payload.wasPublished || prev.wasPublished 
+        }));
+      }
+    } catch (err) {
+      console.error(err);
+      alert(t('forms.error.save'));
+    } finally {
+      setIsUpdatingStatus(false);
+      setShowPublishModal(false);
+    }
+  };
+
+  const executeSave = async (forcePublish?: boolean) => {
     if (!formData.title) return alert(t('forms.error.titleRequired'));
     setIsSaving(true);
     
+    // Prepare full data to save
+    let dataToSave = { ...formData };
+
+    // Update publish state if requested via modal
+    if (forcePublish === true) {
+      dataToSave.isPublished = true;
+      dataToSave.isActive = true;
+      dataToSave.wasPublished = true;
+    } else if (forcePublish === false) {
+      // Ensure it stays as draft if explicitly requested (Publish Later)
+      if (!formData.wasPublished) {
+        dataToSave.isPublished = false;
+      }
+    }
+
     // Prepare data with defaults if advanced is hidden
-    const dataToSave = { ...formData };
     if (!showAdvancedAppearance) {
       dataToSave.headerContent = getDefaultHeader(formData.title);
       dataToSave.footerContent = getDefaultFooter();
@@ -199,13 +273,24 @@ const FormEditor: React.FC<FormEditorProps> = ({ formId, onClose, onSave }) => {
       } else {
         await api.updateForm(formId, dataToSave);
       }
+      
       localStorage.removeItem(`tify_form_draft_${formId}`);
-      onSave();
+      onSave(); // Close editor and return to list
     } catch (err) {
       console.error(err);
       alert(t('forms.error.save'));
     } finally {
       setIsSaving(false);
+      setShowPublishModal(false);
+    }
+  };
+
+  const handleSaveClick = () => {
+    // If form is a draft (never published), ask user
+    if (!formData.isPublished && !formData.wasPublished) {
+      setShowPublishModal(true);
+    } else {
+      executeSave();
     }
   };
 
@@ -230,7 +315,7 @@ const FormEditor: React.FC<FormEditorProps> = ({ formId, onClose, onSave }) => {
       initialRequired = true;
     }
 
-    const newId = crypto.randomUUID();
+    const newId = generateId();
     setFormData({
       ...formData,
       fields: [
@@ -327,9 +412,9 @@ const FormEditor: React.FC<FormEditorProps> = ({ formId, onClose, onSave }) => {
   }
 
   return (
-    <div className="bg-white h-full flex flex-col">
+    <div className="bg-white h-full flex flex-col relative">
       {/* Header */}
-      <div className="border-b border-gray-200 px-4 py-3 md:px-6 md:py-4 flex justify-between items-center bg-white sticky top-0 z-10">
+      <div className="relative border-b border-gray-200 px-4 py-3 md:px-6 md:py-4 flex justify-between items-center bg-white sticky top-0 z-30">
         <div className="flex items-center gap-4">
           <button onClick={onClose} className="text-gray-500 hover:text-gray-700">
             <ArrowLeft size={20} />
@@ -341,46 +426,125 @@ const FormEditor: React.FC<FormEditorProps> = ({ formId, onClose, onSave }) => {
         <div className="flex gap-2">
           {formId !== 'new' && (
             <>
-              <button
-                onClick={() => setFormData(prev => ({ 
-                  ...prev, 
-                  isPublished: !prev.isPublished,
-                  wasPublished: !prev.isPublished ? true : prev.wasPublished
-                }))}
-                className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-colors ${
-                  formData.isPublished 
-                    ? 'bg-amber-100 text-amber-700 hover:bg-amber-200' 
-                    : 'bg-green-100 text-green-700 hover:bg-green-200'
-                }`}
-              >
-                {formData.isPublished ? <PauseCircle size={18} /> : <Play size={18} />}
-                <span className="hidden sm:inline">
-                  {formData.isPublished ? t('forms.editor.pause') : t('forms.editor.publish')}
-                </span>
-              </button>
+              {!formData.isPublished && (
+                  <button
+                      onClick={() => executeStatusChange({ isPublished: true, isActive: true })}
+                      disabled={isUpdatingStatus}
+                      className="flex items-center gap-2 bg-green-100 text-green-700 px-4 py-2 rounded-lg hover:bg-green-200 transition-colors disabled:opacity-50"
+                  >
+                    <Play size={18} />
+                    <span className="hidden sm:inline">{t('forms.editor.publish')}</span>
+                  </button>
+              )}
+              
               <button
                 onClick={handleDeleteForm}
-                className="flex items-center gap-2 bg-red-100 text-red-700 px-4 py-2 rounded-lg hover:bg-red-200 transition-colors"
+                className="text-red-500 hover:text-red-700 transition-colors p-2"
                 title={t('forms.editor.delete')}
               >
-                <Trash2 size={18} />
+                <Trash2 size={20} />
               </button>
             </>
           )}
           <button
-            onClick={handleSave}
+            onClick={handleSaveClick}
             disabled={loading || isSaving}
-            className="flex items-center gap-2 bg-indigo-600 text-white px-4 py-2 md:px-6 md:py-2 rounded-lg hover:bg-indigo-700 disabled:opacity-50 transition-colors"
+            className="text-indigo-600 hover:text-indigo-800 transition-colors disabled:opacity-50 p-2"
+            title={t('forms.editor.save')}
           >
-            <Save size={18} />
-            <span className="hidden sm:inline">{t('forms.editor.save')}</span>
+            <Save size={20} />
           </button>
+        </div>
+      
+        {/* Status Banner */}
+        <div className="absolute top-full left-0 z-20 pointer-events-none">
+            <div className={`px-6 py-2 text-sm font-medium flex items-center gap-2 rounded-br-2xl shadow-sm pointer-events-auto ${
+                !formData.isPublished
+                    ? 'bg-gray-50 text-gray-600 border border-gray-200 border-t-0 border-l-0'
+                    : formData.isActive
+                        ? 'bg-green-50 text-green-700 border border-green-100 border-t-0 border-l-0'
+                        : 'bg-amber-50 text-amber-700 border border-amber-100 border-t-0 border-l-0'
+            }`}>
+            {!formData.isPublished ? (
+                <><Type size={16} /> {t('forms.editor.status.draft')}</>
+            ) : formData.isActive ? (
+                <>
+                    <span className="relative flex h-2.5 w-2.5 mr-1">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-green-500"></span>
+                    </span>
+                    {t('forms.editor.status.active')}
+                    <button
+                        onClick={() => executeStatusChange({ isActive: false })}
+                        disabled={isUpdatingStatus}
+                        className="ml-2 text-green-700 hover:text-green-900 focus:outline-none disabled:opacity-50"
+                        title={t('forms.editor.pause')}
+                    >
+                    <PauseCircle size={18} />
+                    </button>
+                </>
+            ) : (
+                <>
+                    <span className="relative flex h-2.5 w-2.5 mr-1">
+                    <span className="animate-pulse absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-amber-500"></span>
+                    </span>
+                    {t('forms.editor.status.paused')}
+                    <button
+                        onClick={() => executeStatusChange({ isActive: true })}
+                        disabled={isUpdatingStatus}
+                        className="ml-2 text-amber-700 hover:text-amber-900 focus:outline-none disabled:opacity-50"
+                        title={t('forms.editor.activate')}
+                    >
+                    <Play size={18} />
+                    </button>
+                </>
+            )}
+            </div>
         </div>
       </div>
 
+      {/* Processing Overlay */}
+      {isUpdatingStatus && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-sm">
+          <div className="bg-white rounded-xl shadow-lg p-6 flex items-center gap-4 animate-in fade-in zoom-in duration-200">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600"></div>
+            <div className="text-gray-900 font-medium">{t('forms.editor.processing')}</div>
+          </div>
+        </div>
+      )}
+
+      {/* Publish Confirmation Modal */}
+      {showPublishModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+            <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-6 space-y-4 animate-in fade-in zoom-in duration-200">
+              <div className="w-12 h-12 bg-indigo-100 rounded-full flex items-center justify-center mx-auto text-indigo-600 mb-2">
+                <Play size={24} />
+              </div>
+              <h3 className="text-xl font-bold text-gray-900 text-center">{t('forms.editor.publishConfirmTitle')}</h3>
+              <p className="text-gray-600 text-center">{t('forms.editor.publishConfirmMessage')}</p>
+              <div className="flex flex-col gap-3 pt-4">
+                <button
+                    onClick={() => executeSave(true)}
+                    className="w-full py-3 bg-indigo-600 text-white rounded-lg font-medium hover:bg-indigo-700 transition-colors flex items-center justify-center gap-2"
+                >
+                  <Play size={18} />
+                  {t('forms.editor.publishNow')}
+                </button>
+                <button
+                    onClick={() => executeSave(false)}
+                    className="w-full py-3 bg-white border border-gray-300 text-gray-700 rounded-lg font-medium hover:bg-gray-50 transition-colors"
+                >
+                  {t('forms.editor.publishLater')}
+                </button>
+              </div>
+            </div>
+          </div>
+      )}
+
       <div className="flex-1 overflow-auto bg-gray-50 relative">
         {/* Main Canvas */}
-        <div className="p-4 md:p-8 max-w-5xl mx-auto">
+        <div className="p-4 md:p-8 max-w-5xl mx-auto pt-16">
           <div className="max-w-3xl mx-auto space-y-4 md:space-y-6">
             {/* General Settings Card */}
             <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-3 md:p-6">
@@ -460,6 +624,18 @@ const FormEditor: React.FC<FormEditorProps> = ({ formId, onClose, onSave }) => {
                     />
                     <label htmlFor="isWizard" className="text-sm font-medium text-gray-700">
                       {t('forms.editor.isWizard')}
+                    </label>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      id="collectUserInfo"
+                      checked={formData.collectUserInfo}
+                      onChange={(e) => setFormData({ ...formData, collectUserInfo: e.target.checked })}
+                      className="rounded text-indigo-600 focus:ring-indigo-500"
+                    />
+                    <label htmlFor="collectUserInfo" className="text-sm font-medium text-gray-700">
+                      {t('forms.editor.collectUserInfo') || 'Recopilar info del usuario (IP, Dispositivo)'}
                     </label>
                   </div>
                 </div>
@@ -792,14 +968,14 @@ const FormEditor: React.FC<FormEditorProps> = ({ formId, onClose, onSave }) => {
 
       <button
         onClick={() => setIsFieldModalOpen(true)}
-        className="fixed bottom-8 right-8 bg-indigo-600 hover:bg-indigo-700 text-white p-4 rounded-full shadow-lg transition-all hover:scale-110 z-20"
+        className="fixed bottom-8 right-8 bg-indigo-600 hover:bg-indigo-700 text-white p-4 rounded-full shadow-lg transition-all hover:scale-110 z-40"
         title={t('forms.editor.addFields')}
       >
         <Plus size={24} />
       </button>
 
       {isFieldModalOpen && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[60] p-4">
           <div className="bg-white w-full max-w-2xl max-h-[90vh] flex flex-col rounded-2xl shadow-xl overflow-hidden animate-in fade-in zoom-in duration-200">
             <div className="p-4 border-b border-gray-100 flex justify-between items-center bg-gray-50/50 flex-shrink-0">
               <h3 className="font-semibold text-gray-900">{t('forms.editor.addFields')}</h3>
@@ -834,7 +1010,7 @@ const FormEditor: React.FC<FormEditorProps> = ({ formId, onClose, onSave }) => {
       )}
 
       {restoreModalOpen && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4 backdrop-blur-sm">
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[60] p-4 backdrop-blur-sm">
           <div className="bg-white w-full max-w-md rounded-2xl shadow-xl overflow-hidden animate-in fade-in zoom-in duration-200">
             <div className="p-6">
               <div className="w-12 h-12 bg-amber-100 rounded-full flex items-center justify-center mb-4 text-amber-600 mx-auto">
@@ -863,7 +1039,7 @@ const FormEditor: React.FC<FormEditorProps> = ({ formId, onClose, onSave }) => {
                     if (draftToRestore) {
                       setFormData({
                         ...draftToRestore,
-                        fields: (draftToRestore.fields || []).map((f: any) => ({ ...f, id: f.id || crypto.randomUUID() }))
+                        fields: (draftToRestore.fields || []).map((f: any) => ({ ...f, id: f.id || generateId() }))
                       });
                       const defHeader = getDefaultHeader(draftToRestore.title);
                       const defFooter = getDefaultFooter();

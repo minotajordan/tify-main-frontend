@@ -485,11 +485,11 @@ export const api = {
   getPublicForm: async (slug: string): Promise<any> => {
     return request(`${API_BASE}/forms/public/${slug}`);
   },
-  submitForm: async (slug: string, data: any): Promise<any> => {
+  submitForm: async (slug: string, data: any, extra?: { deviceInfo?: any; country?: string; city?: string }): Promise<any> => {
     return request(`${API_BASE}/forms/public/${slug}/submit`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ data }),
+      body: JSON.stringify({ data, ...extra }),
     });
   },
 
