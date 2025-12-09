@@ -13,7 +13,7 @@ try {
 }
 
 // Helper to build context dynamically from API
-const buildSystemContext = async (): Promise<string> => {
+const buildSystemContext = async (language: string = 'en'): Promise<string> => {
   try {
     const uid = api.getCurrentUserId();
     const [channels, stats] = await Promise.all([
@@ -51,11 +51,12 @@ Your capabilities:
 3. Explain platform rules (e.g., "Emergency messages bypass approval if set to Immediate").
 4. Summarize pending approvals.
 
+IMPORTANT: You must ALWAYS respond in the following language: ${language}.
 Response style: Professional, concise, and helpful.
 `;
   } catch (error) {
     console.warn('Could not fetch real-time context for AI', error);
-    return 'You are Tify Brain. System data is currently unavailable, answer generally.';
+    return `You are Tify Brain. System data is currently unavailable, answer generally. Please respond in ${language}.`;
   }
 };
 
@@ -81,11 +82,11 @@ export const generateMessageDraft = async (
   }
 };
 
-export const askTifyBrain = async (userQuery: string): Promise<string> => {
+export const askTifyBrain = async (userQuery: string, language: string = 'en'): Promise<string> => {
   if (!ai) return 'AI Service not initialized (Missing API Key).';
 
   try {
-    const systemContext = await buildSystemContext();
+    const systemContext = await buildSystemContext(language);
 
     const response = await ai.models.generateContent({
       model: 'gemini-2.5-flash',

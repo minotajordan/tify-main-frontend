@@ -496,7 +496,7 @@ const UsersModule: React.FC = () => {
   };
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-12 gap-6 h-screen">
+    <div className="grid grid-cols-1 md:grid-cols-12 gap-6 h-screen  p-4 md:p-8">
       {!selected && (
         <aside
           className={`md:col-span-12 bg-white border border-gray-200 rounded-xl p-4 flex flex-col h-screen transition-all duration-300`}

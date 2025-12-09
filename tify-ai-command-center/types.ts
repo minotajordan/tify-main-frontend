@@ -82,6 +82,8 @@ export interface Channel {
   createdAt: string;
   owner: UserProfileShort;
   subchannels?: Channel[];
+  websiteUrl?: string;
+  socialLinks?: Record<string, string>;
   approvers?: { id: string; userId: string; user: UserProfileShort }[];
   _count?: {
     subscriptions: number;
@@ -96,49 +98,125 @@ export interface Message {
   channelId: string;
   senderId: string;
   categoryId: string;
-  content: string;
-  durationSeconds?: number;
-  expiresAt?: string;
-  isEmergency: boolean;
-  isImmediate: boolean;
   priority: MessagePriority;
+  content: string;
+  isImmediate: boolean;
+  isEmergency: boolean;
   deliveryMethod: DeliveryMethod;
-  eventAt?: string;
+  status: string; // 'DRAFT' | 'PENDING_APPROVAL' | 'APPROVED' | 'REJECTED' | 'SENT'
+  rejectionReason?: string;
   publishedAt?: string;
-  state?: 'ACTIVE' | 'CANCELLED';
-  createdAt?: string; // Optional depending on endpoint
+  eventAt?: string;
+  expiresAt?: string;
+  createdAt: string;
   sender: UserProfileShort;
-  channel?: {
-    title: string;
-    icon: string;
+  channel: { title: string; icon: string };
+  category?: { name: string; color: string };
+  approvals?: {
+    id: string;
+    approverId: string;
+    status: string;
+    createdAt: string;
+    approver: UserProfileShort;
+  }[];
+  attachments?: {
+    id: string;
+    url: string;
+    type: string;
+    name: string;
+    size: number;
+  }[];
+  readCount?: number;
+  deliveryStats?: {
+    total: number;
+    delivered: number;
+    read: number;
+    failed: number;
   };
-  status?: 'APPROVED' | 'PENDING' | 'REJECTED'; // Derived for UI
-  approvalOverride?: string;
-}
-
-export interface Pagination {
-  page: number;
-  limit: number;
-  total: number;
-  pages: number;
 }
 
 export interface MessageListResponse {
   messages: Message[];
-  pagination: Pagination;
+  pagination: {
+    total: number;
+    page: number;
+    limit: number;
+    pages: number;
+  };
 }
 
 export interface UserStats {
-  subscribedChannelsCount: number;
-  messagesCount: number;
-  ownedChannelsCount: number;
-  pendingApprovalsCount: number;
-  recentActivity: any[];
+  totalMessages: number;
+  totalChannels: number;
+  pendingApprovals: number;
+  unreadMessages: number;
 }
 
-export interface StatMetric {
-  label: string;
-  value: string | number;
-  change?: number;
-  icon: any;
+// --- EVENTS MODULE TYPES ---
+
+export enum EventStatus {
+  DRAFT = 'DRAFT',
+  PUBLISHED = 'PUBLISHED',
+  CANCELLED = 'CANCELLED',
+  ENDED = 'ENDED',
+}
+
+export enum SeatStatus {
+  AVAILABLE = 'AVAILABLE',
+  RESERVED = 'RESERVED',
+  SOLD = 'SOLD',
+  BLOCKED = 'BLOCKED',
+  CHECKED_IN = 'CHECKED_IN',
+}
+
+export interface EventZone {
+  id: string;
+  eventId: string;
+  name: string;
+  color: string;
+  price: number;
+  rows: number;
+  cols: number;
+  capacity?: number;
+  type: 'SALE' | 'INFO' | 'STAGE';
+  layout?: { x: number; y: number; width?: number; height?: number };
+  seatGap?: number;
+  startNumber?: number;
+  numberingDirection?: 'LTR' | 'RTL';
+  seats?: EventSeat[];
+  _count?: { tickets: number };
+}
+
+export interface EventSeat {
+  id: string;
+  zoneId: string;
+  rowLabel: string;
+  colLabel: string; // number or letter
+  status: SeatStatus;
+  holderName?: string;
+  ticketCode?: string;
+  type: 'REGULAR' | 'VIP' | 'ACCESSIBLE';
+  price?: number;
+  x?: number | null;
+  y?: number | null;
+  gridRow?: number;
+  gridCol?: number;
+}
+
+export interface TifyEvent {
+  id: string;
+  title: string;
+  description: string;
+  startDate: string;
+  endDate: string;
+  location: string;
+  imageUrl?: string;
+  status: EventStatus;
+  categories: string[];
+  paymentInfo?: string;
+  zones: EventZone[];
+  seats: EventSeat[];
+  createdAt: string;
+  updatedAt: string;
+  organizerId: string;
 }

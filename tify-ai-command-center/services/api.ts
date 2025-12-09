@@ -6,7 +6,13 @@ import {
   UserStats,
   MessagePriority,
   DeliveryMethod,
+  TifyEvent,
+  EventStatus,
+  EventZone,
+  EventSeat,
 } from '../types';
+
+let MOCK_EVENTS: TifyEvent[] = [];
 
 export const API_BASE = (() => {
   if (typeof window !== 'undefined') {
@@ -22,8 +28,8 @@ export const API_BASE = (() => {
   ) {
     return (process as any).env.TIFY_API_BASE;
   }
-  return 'https://tify-main-backend.vercel.app/api';
-  // return 'http://localhost:3333/api';
+  // return 'https://tify-main-backend.vercel.app/api';
+  return 'http://localhost:3333/api';
 })();
 export function getAuthToken(): string | null {
   return typeof localStorage !== 'undefined' ? localStorage.getItem('tify_token') : null;
@@ -555,5 +561,111 @@ export const api = {
 
   authMe: async (): Promise<User> => {
     return request<User>(`${API_BASE}/auth/me`);
+  },
+
+  // --- EVENTS API ---
+  getEvents: async (): Promise<TifyEvent[]> => {
+    try {
+      const events = await request<any[]>(`${API_BASE}/events`);
+      return events.map(e => ({
+        ...e,
+        zones: e.zones || [],
+        seats: e.seats || Array(e._count?.seats || 0).fill({} as any),
+      }));
+    } catch (e) {
+      console.warn('Using mock events due to API error');
+      return MOCK_EVENTS;
+    }
+  },
+
+  getEvent: async (id: string): Promise<TifyEvent> => {
+    try {
+      return await request<TifyEvent>(`${API_BASE}/events/${id}`);
+    } catch (e) {
+      const evt = MOCK_EVENTS.find((e) => e.id === id);
+      if (!evt) throw new Error('Event not found');
+      return evt;
+    }
+  },
+
+  createEvent: async (data: Partial<TifyEvent>): Promise<TifyEvent> => {
+    try {
+      const event = await request<TifyEvent>(`${API_BASE}/events`, {
+        method: 'POST',
+        body: JSON.stringify(data),
+        headers: { 'Content-Type': 'application/json' },
+      });
+      return {
+        ...event,
+        zones: event.zones || [],
+        seats: event.seats || []
+      };
+    } catch (e) {
+      const newEvent: TifyEvent = {
+        id: Math.random().toString(36).substr(2, 9),
+        title: data.title || 'Untitled Event',
+        description: data.description || '',
+        startDate: data.startDate || new Date().toISOString(),
+        endDate: data.endDate || new Date().toISOString(),
+        location: data.location || 'TBD',
+        status: EventStatus.DRAFT,
+        categories: data.categories || [],
+        zones: data.zones || [],
+        seats: data.seats || [],
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        organizerId: 'current-user',
+        ...data,
+      } as TifyEvent;
+      MOCK_EVENTS.push(newEvent);
+      return newEvent;
+    }
+  },
+
+  updateEvent: async (id: string, data: Partial<TifyEvent>): Promise<TifyEvent> => {
+    try {
+      return await request<TifyEvent>(`${API_BASE}/events/${id}`, {
+        method: 'PUT',
+        body: JSON.stringify(data),
+        headers: { 'Content-Type': 'application/json' },
+      });
+    } catch (e) {
+      const idx = MOCK_EVENTS.findIndex((e) => e.id === id);
+      if (idx === -1) throw new Error('Event not found');
+      MOCK_EVENTS[idx] = { ...MOCK_EVENTS[idx], ...data, updatedAt: new Date().toISOString() };
+      return MOCK_EVENTS[idx];
+    }
+  },
+
+  updateEventLayout: async (
+    id: string,
+    zones: EventZone[],
+    seats: EventSeat[]
+  ): Promise<TifyEvent> => {
+    try {
+      return await request<TifyEvent>(`${API_BASE}/events/${id}/layout`, {
+        method: 'PUT',
+        body: JSON.stringify({ zones, seats }),
+        headers: { 'Content-Type': 'application/json' },
+      });
+    } catch (e) {
+      const idx = MOCK_EVENTS.findIndex((e) => e.id === id);
+      if (idx === -1) throw new Error('Event not found');
+      MOCK_EVENTS[idx] = { ...MOCK_EVENTS[idx], zones, seats };
+      return MOCK_EVENTS[idx];
+    }
+  },
+
+  deleteEvent: async (id: string): Promise<void> => {
+    try {
+      await request(`${API_BASE}/events/${id}`, {
+        method: 'DELETE',
+      });
+    } catch (e) {
+      const idx = MOCK_EVENTS.findIndex((e) => e.id === id);
+      if (idx !== -1) {
+        MOCK_EVENTS.splice(idx, 1);
+      }
+    }
   },
 };

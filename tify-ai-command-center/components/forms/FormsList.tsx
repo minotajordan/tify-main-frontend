@@ -14,8 +14,11 @@ import {
   Download,
   Share2,
   Clock,
+  Search,
+  Sparkles,
 } from 'lucide-react';
 import { api } from '../../services/api';
+import AIChat from '../AIChat';
 import { useI18n } from '../../i18n';
 import QRCodeStyling from 'qr-code-styling';
 import dayjs from 'dayjs';
@@ -48,6 +51,7 @@ interface Form {
   description: string;
   slug: string;
   isActive: boolean;
+  isPublished: boolean;
   _count?: { submissions: number };
   createdAt: string;
   expiresAt?: string | null;
@@ -59,7 +63,9 @@ const FormsList: React.FC<{
 }> = ({ onEdit, onViewSubmissions }) => {
   const { t } = useI18n();
   const [forms, setForms] = useState<Form[]>([]);
+  const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(true);
+  const [showAIChat, setShowAIChat] = useState(false);
   const [qrModalForm, setQrModalForm] = useState<Form | null>(null);
   const qrRef = React.useRef<HTMLDivElement>(null);
   const qrCodeRef = React.useRef<QRCodeStyling | null>(null);
@@ -158,6 +164,43 @@ const FormsList: React.FC<{
     }
   };
 
+  const handleAIChatComplete = () => {
+    const pendingForm = localStorage.getItem('tify_pending_ai_form');
+    if (pendingForm) {
+      try {
+        const form = JSON.parse(pendingForm);
+        // Transform to FormEditor structure
+        const editorDraft = {
+          title: form.title,
+          description: form.description,
+          fields: form.fields,
+          headerContent: `<div style="text-align: center; padding: 20px 0;"><h1 class="text-3xl font-bold text-indigo-600">${form.title}</h1></div>`,
+          footerContent: `<div style="text-align: center; padding: 20px; color: #6b7280; font-size: 0.875rem;"><p>&copy; ${new Date().getFullYear()} Tify. All rights reserved.</p></div>`,
+          successMessage: 'Gracias por tu respuesta.',
+          isActive: true,
+          isPublished: false,
+          collectUserInfo: false,
+        };
+        
+        localStorage.setItem('tify_form_draft_new', JSON.stringify(editorDraft));
+        localStorage.removeItem('tify_pending_ai_form');
+        
+        setShowAIChat(false);
+        onEdit('new');
+      } catch (e) {
+        console.error('Error parsing AI draft', e);
+        setShowAIChat(false);
+      }
+    } else {
+      setShowAIChat(false);
+    }
+  };
+
+  const filteredForms = forms.filter(form =>  
+    form.title.toLowerCase().includes(searchQuery.toLowerCase()) || 
+    form.description?.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
   if (loading) {
     return (
       <div className="h-full flex flex-col bg-white">
@@ -251,24 +294,46 @@ const FormsList: React.FC<{
 
   return (
     <div className="h-full flex flex-col bg-white">
-      <div className="border-b border-gray-200 px-6 py-4 flex justify-between items-center bg-white sticky top-0 z-10">
+      <div className="border-b border-gray-200 px-6 py-4 flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white sticky top-0 z-10">
         <div>
           <h2 className="text-xl font-semibold text-gray-900">{t('forms.manager.title')}</h2>
           <p className="text-sm text-gray-500 hidden sm:block">{t('forms.manager.subtitle')}</p>
         </div>
-        <button
-          onClick={() => onEdit('new')}
-          className="flex items-center gap-2 bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700 transition-colors shadow-sm"
-        >
-          <Plus size={18} />
-          <span className="hidden sm:inline">{t('forms.create')}</span>
-        </button>
+        
+        <div className="flex items-center gap-3 flex-1 md:justify-end">
+          {/* Search Bar */}
+          <div className="relative w-full md:w-64">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
+            <input 
+                type="text"
+                placeholder={t('forms.searchPlaceholder')}
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all"
+            />
+          </div>
+
+          <button
+            onClick={() => setShowAIChat(true)}
+            className="flex items-center gap-2 bg-gradient-to-r from-purple-600 to-indigo-600 text-white px-4 py-2 rounded-lg hover:from-purple-700 hover:to-indigo-700 transition-colors shadow-sm whitespace-nowrap"
+            title="Crear con IA"
+          >
+            <Sparkles size={18} />
+          </button>
+
+          <button
+            onClick={() => onEdit('new')}
+            className="flex items-center gap-2 bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700 transition-colors shadow-sm whitespace-nowrap"
+          >
+            <Plus size={18} />
+          </button>
+        </div>
       </div>
 
       <div className="flex-1 overflow-auto bg-gray-50 p-4 md:p-6">
         {/* Mobile View: Cards */}
         <div className="block md:hidden space-y-4">
-        {forms.map((form) => (
+        {filteredForms.map((form) => (
           <div key={form.id} className="bg-white rounded-xl border border-gray-200 shadow-sm p-4">
             <div className="flex justify-between items-start mb-2">
               <div>
@@ -276,11 +341,31 @@ const FormsList: React.FC<{
                 <p className="text-xs text-gray-500 mt-1 line-clamp-2">{form.description}</p>
               </div>
               <span
-                className={`px-2 py-0.5 text-[10px] uppercase font-bold tracking-wide rounded-full ${
-                  form.isActive ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'
+                className={`px-2 py-0.5 text-[10px] uppercase font-bold tracking-wide rounded-full flex items-center gap-1.5 ${
+                  !form.isPublished 
+                    ? 'bg-gray-100 text-gray-600' 
+                    : form.isActive 
+                      ? 'bg-green-100 text-green-800' 
+                      : 'bg-amber-100 text-amber-800'
                 }`}
               >
-                {form.isActive ? t('forms.status.active') : t('forms.status.inactive')}
+                {form.isPublished && form.isActive && (
+                  <span className="relative flex h-2 w-2">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span>
+                  </span>
+                )}
+                {form.isPublished && !form.isActive && (
+                  <span className="relative flex h-2 w-2">
+                    <span className="animate-pulse absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-500"></span>
+                  </span>
+                )}
+                {!form.isPublished 
+                  ? t('forms.status.draft') 
+                  : form.isActive 
+                    ? t('forms.status.active') 
+                    : t('forms.status.paused')}
               </span>
             </div>
 
@@ -348,7 +433,7 @@ const FormsList: React.FC<{
       </div>
 
       {/* Desktop View: Table */}
-      <div className="hidden md:block overflow-x-auto">
+      <div className="hidden md:block overflow-x-auto bg-white rounded-lg border border-gray-200 shadow-sm">
         <table className="w-full">
           <thead className="bg-gray-50">
             <tr>
@@ -369,9 +454,13 @@ const FormsList: React.FC<{
               </th>
             </tr>
           </thead>
-          <tbody className="bg-white divide-y divide-gray-200">
-            {forms.map((form) => (
-              <tr key={form.id} className="hover:bg-gray-50">
+          <tbody className="divide-y divide-gray-200">
+            {filteredForms.map((form) => (
+              <tr 
+                key={form.id} 
+                className="hover:bg-indigo-50 transition-colors cursor-pointer"
+                onClick={() => onViewSubmissions(form.id)}
+              >
                 <td className="px-6 py-4 whitespace-nowrap">
                   <div className="font-medium text-gray-900">{form.title}</div>
                   <div className="text-sm text-gray-500 truncate max-w-xs" title={form.description}>
@@ -380,11 +469,31 @@ const FormsList: React.FC<{
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap">
                   <span
-                    className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
-                      form.isActive ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'
+                    className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full items-center gap-1.5 ${
+                      !form.isPublished 
+                        ? 'bg-gray-100 text-gray-600' 
+                        : form.isActive 
+                          ? 'bg-green-100 text-green-800' 
+                          : 'bg-amber-100 text-amber-800'
                     }`}
                   >
-                    {form.isActive ? t('forms.status.active') : t('forms.status.inactive')}
+                    {form.isPublished && form.isActive && (
+                      <span className="relative flex h-2 w-2">
+                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
+                        <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span>
+                      </span>
+                    )}
+                    {form.isPublished && !form.isActive && (
+                      <span className="relative flex h-2 w-2">
+                        <span className="animate-pulse absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
+                        <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-500"></span>
+                      </span>
+                    )}
+                    {!form.isPublished 
+                      ? t('forms.status.draft') 
+                      : form.isActive 
+                        ? t('forms.status.active') 
+                        : t('forms.status.paused')}
                   </span>
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
@@ -396,35 +505,28 @@ const FormsList: React.FC<{
                 <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                   <div className="flex justify-end gap-2">
                     <button
-                      onClick={() => window.open(`/forms/${form.slug}`, '_blank')}
+                      onClick={(e) => { e.stopPropagation(); window.open(`/forms/${form.slug}`, '_blank'); }}
                       className="text-gray-400 hover:text-indigo-600"
                       title={t('forms.action.viewPublic')}
                     >
                       <ExternalLink size={18} />
                     </button>
                     <button
-                      onClick={() => handleOpenQR(form)}
+                      onClick={(e) => { e.stopPropagation(); handleOpenQR(form); }}
                       className="text-gray-400 hover:text-indigo-600"
                       title={t('forms.action.qrCode')}
                     >
                       <QrCode size={18} />
                     </button>
                     <button
-                      onClick={() => onViewSubmissions(form.id)}
-                      className="text-gray-400 hover:text-indigo-600"
-                      title={t('forms.action.viewSubmissions')}
-                    >
-                      <Eye size={18} />
-                    </button>
-                    <button
-                      onClick={() => onEdit(form.id)}
+                      onClick={(e) => { e.stopPropagation(); onEdit(form.id); }}
                       className="text-indigo-600 hover:text-indigo-900"
                       title={t('forms.action.edit')}
                     >
                       <Edit2 size={18} />
                     </button>
                     <button
-                      onClick={() => handleDelete(form.id)}
+                      onClick={(e) => { e.stopPropagation(); handleDelete(form.id); }}
                       className="text-red-600 hover:text-red-900"
                       title={t('forms.action.delete')}
                     >
@@ -511,6 +613,27 @@ const FormsList: React.FC<{
               <p className="text-xs text-gray-500">
                 {t('forms.modal.scanToAccess')}
               </p>
+            </div>
+          </div>
+        </div>
+      )}
+      {showAIChat && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-2xl h-[600px] flex flex-col overflow-hidden animate-in fade-in zoom-in duration-200">
+            <div className="p-4 border-b border-gray-100 flex justify-between items-center bg-gray-50/50">
+              <div className="flex items-center gap-2 text-indigo-600">
+                <Sparkles size={20} />
+                <h3 className="font-semibold">Asistente de Creación</h3>
+              </div>
+              <button 
+                onClick={() => setShowAIChat(false)}
+                className="p-1 hover:bg-gray-200 rounded-full transition-colors text-gray-500"
+              >
+                <X size={20} />
+              </button>
+            </div>
+            <div className="flex-1 overflow-hidden relative">
+              <AIChat onNavigateToForms={handleAIChatComplete} variant="embedded" />
             </div>
           </div>
         </div>

@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import {
   ChevronRight,
   ChevronDown,
+  ArrowLeft,
   ShieldCheck,
   Lock,
   Globe,
@@ -45,6 +46,11 @@ import {
   Hourglass,
   LucideEye,
   Trash,
+  Table,
+  LayoutList,
+  Info,
+  BarChart2,
+  ListTree,
 } from 'lucide-react';
 import { api } from '../services/api';
 import { generateMessageDraft } from '../services/geminiService';
@@ -152,16 +158,16 @@ const ApproverSpeedDial: React.FC<{ messageId: string; channelId: string }> = ({
               )}
             </div>
           </div>
-        </>
+</>
       )}
     </div>
   );
 };
 
 function ChannelStatsPanel({
-  channelId,
-  range,
-}: {
+                             channelId,
+                             range,
+                           }: {
   channelId: string;
   range: '1h' | '24h' | '7d' | '1m' | 'all';
 }) {
@@ -280,10 +286,10 @@ const ICON_MAP: Record<string, any> = {
 };
 
 const IconView: React.FC<{ name?: string; size?: number; className?: string }> = ({
-  name,
-  size = 14,
-  className,
-}) => {
+                                                                                    name,
+                                                                                    size = 14,
+                                                                                    className,
+                                                                                  }) => {
   const Comp = (name && ICON_MAP[name]) || MessagesSquare;
   return <Comp size={size} className={className} />;
 };
@@ -291,6 +297,8 @@ const IconView: React.FC<{ name?: string; size?: number; className?: string }> =
 const ChannelManager: React.FC = () => {
   const { t } = useI18n();
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
+  const [subchannelModalOpen, setSubchannelModalOpen] = useState(false);
+  const [currentSubchannelParent, setCurrentSubchannelParent] = useState<Channel | null>(null);
   const [selectedChannel, setSelectedChannel] = useState<Channel | null>(null);
   const [channels, setChannels] = useState<Channel[]>([]);
   const [loading, setLoading] = useState(true);
@@ -351,6 +359,7 @@ const ChannelManager: React.FC = () => {
   const expiresAnchorRef = useRef<HTMLButtonElement | null>(null);
   const sendButtonRef = useRef<HTMLButtonElement | null>(null);
   const [composeIsGenerating, setComposeIsGenerating] = useState(false);
+  const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
 
   const [previewSub, setPreviewSub] = useState<Channel | null>(null);
   const [previewApprovers, setPreviewApprovers] = useState<any[]>([]);
@@ -390,6 +399,48 @@ const ChannelManager: React.FC = () => {
   const [inlineStatsHidden, setInlineStatsHidden] = useState(false);
   const [rangeMenuOpen, setRangeMenuOpen] = useState(false);
   const [rangeMenuAnchorEl, setRangeMenuAnchorEl] = useState<HTMLElement | null>(null);
+
+  const [filterText, setFilterText] = useState('');
+  const [viewMode, setViewMode] = useState<'table' | 'cards'>('table');
+  const [activeTab, setActiveTab] = useState<'details' | 'stats' | 'content' | 'messages'>('details');
+
+  useEffect(() => {
+    const handleResize = () => {
+      if (window.innerWidth < 768) {
+        setViewMode('cards');
+      } else {
+        setViewMode('table');
+      }
+    };
+    handleResize();
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
+  useEffect(() => {
+    if (selectedChannel) {
+      setActiveTab('messages');
+    }
+  }, [selectedChannel?.id]);
+
+
+  const filteredChannels = React.useMemo(() => {
+    if (!filterText) return channels;
+    const lower = filterText.toLowerCase();
+    const filterTree = (nodes: Channel[]): Channel[] => {
+      return nodes
+        .map((node) => {
+          const matchSelf = node.title.toLowerCase().includes(lower);
+          const filteredSubs = node.subchannels ? filterTree(node.subchannels) : [];
+          if (matchSelf || filteredSubs.length > 0) {
+            return { ...node, subchannels: filteredSubs };
+          }
+          return null;
+        })
+        .filter((n) => n !== null) as Channel[];
+    };
+    return filterTree(channels);
+  }, [channels, filterText]);
 
   useEffect(() => {
     const load = async () => {
@@ -454,7 +505,7 @@ const ChannelManager: React.FC = () => {
   >('all');
   const [messagesFilterOpen, setMessagesFilterOpen] = useState(false);
   const [messagesFilter, setMessagesFilter] = useState<{
-    priority?: 'HIGH' | 'MEDIUM' | 'LOW';
+    priority?: MessagePriority;
     emergency?: boolean;
     expired?: boolean;
     hasApprovals?: boolean;
@@ -518,8 +569,16 @@ const ChannelManager: React.FC = () => {
   }, [messagesSearch]);
 
   useEffect(() => {
-    const inlineActive = !!(selectedChannel && selectedChannel.parentId);
-    const subId = messagesModalOpen ? messagesForSub : inlineActive ? selectedChannel?.id : null;
+    const inlineActive = !!(selectedChannel && selectedChannel.parentId && activeTab === 'messages');
+    const parentMessagesTabActive = activeTab === 'messages' && selectedChannel && !selectedChannel.parentId;
+    const subId = messagesModalOpen
+      ? messagesForSub
+      : inlineActive
+        ? selectedChannel?.id
+        : parentMessagesTabActive
+          ? selectedChannel?.subchannels?.[0]?.id
+          : null;
+
     if (!subId) return;
     setMessagesLoading(true);
     const start =
@@ -557,6 +616,8 @@ const ChannelManager: React.FC = () => {
     messagesForSub,
     selectedChannel?.id,
     selectedChannel?.parentId,
+    selectedChannel?.subchannels,
+    activeTab,
     messagesPage,
     messagesLimit,
     messagesSearchDebounced,
@@ -675,7 +736,8 @@ const ChannelManager: React.FC = () => {
       .then((data) => {
         const topLevel = data.filter((c: any) => !c.parentId);
         setChannels(topLevel);
-        if (topLevel.length > 0) setSelectedChannel(topLevel[0]);
+        // Do not auto-select first channel to show list by default
+        // if (topLevel.length > 0) setSelectedChannel(topLevel[0]);
       })
       .catch(console.error)
       .finally(() => setLoading(false));
@@ -784,6 +846,89 @@ const ChannelManager: React.FC = () => {
   const toggleExpand = (id: string) => {
     setExpanded((prev) => ({ ...prev, [id]: !prev[id] }));
   };
+
+  const flattenVisible = (
+    nodes: Channel[],
+    parents: string[] = []
+  ): { channel: Channel; parents: string[] }[] => {
+    return nodes.flatMap((node) => {
+      const current = { channel: node, parents };
+      const showChildren = expanded[node.id] || filterText;
+      const children =
+        showChildren && node.subchannels
+          ? flattenVisible(node.subchannels, [...parents, node.title])
+          : [];
+      return [current, ...children];
+    });
+  };
+
+  const renderCards = (list: Channel[]) => {
+    const flatList = flattenVisible(list);
+    return (
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        {flatList.map(({ channel, parents }) => (
+          <div
+            key={channel.id}
+            onClick={() => setSelectedChannel(channel)}
+            className={`p-3 rounded-lg border cursor-pointer transition-all ${
+              selectedChannel?.id === channel.id
+                ? 'bg-indigo-50 border-indigo-200 shadow-sm'
+                : 'bg-white border-gray-200 hover:border-indigo-200 hover:shadow-sm'
+            }`}
+          >
+            <div className="flex items-start justify-between mb-2">
+              <div className="flex items-center gap-2 overflow-hidden">
+                <div className="p-1.5 bg-gray-100 rounded-lg text-gray-500 shrink-0">
+                  <IconView name={channel.icon} size={16} />
+                </div>
+                <div className="overflow-hidden">
+                  <div className="text-sm font-semibold text-gray-900 truncate">{channel.title}</div>
+                  {parents.length > 0 && (
+                    <div className="text-xs text-gray-500 flex items-center gap-1 truncate">
+                      {parents.map((p, i) => (
+                        <span key={i} className="flex items-center">
+                          {p} <ChevronRight size={10} className="mx-0.5" />
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+              <div className="flex items-center gap-1 shrink-0">
+                {channel.isHidden && <EyeOff size={14} className="text-gray-400" />}
+                {!channel.isPublic && <Lock size={14} className="text-amber-500" />}
+              </div>
+            </div>
+
+            {channel.description && (
+              <div className="text-xs text-gray-500 line-clamp-2 mb-2 pl-9">
+                {channel.description}
+              </div>
+            )}
+
+            {channel.subchannels && channel.subchannels.length > 0 && (
+              <div className="flex items-center justify-between pl-9 mt-2 pt-2 border-t border-gray-100">
+                <span className="text-xs text-gray-400">
+                  {channel.subchannels.length} subcanales
+                </span>
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setCurrentSubchannelParent(channel);
+                    setSubchannelModalOpen(true);
+                  }}
+                  className="p-1 text-indigo-600 hover:bg-indigo-50 rounded text-xs font-medium flex items-center gap-1"
+                >
+                  <ChevronRight size={14} /> Ver subcanales
+                </button>
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+    );
+  };
+
 
   const handleCreate = async () => {
     const social: Record<string, string> = {};
@@ -1195,7 +1340,7 @@ const ChannelManager: React.FC = () => {
       <div key={channel.id} className="select-none">
         <div
           onClick={() => setSelectedChannel(channel)}
-          className={`flex items-center gap-2 py-2 px-3 cursor-pointer transition-colors rounded-md ${
+          className={`flex items-center gap-2 py-3 px-3 cursor-pointer transition-colors rounded-md ${
             selectedChannel?.id === channel.id
               ? 'bg-indigo-50 text-indigo-700'
               : 'hover:bg-gray-50 text-gray-700'
@@ -1208,28 +1353,34 @@ const ChannelManager: React.FC = () => {
                 e.stopPropagation();
                 toggleExpand(channel.id);
               }}
-              className="p-0.5 hover:bg-indigo-100 rounded"
+              className="p-1.5 hover:bg-indigo-100 rounded touch-manipulation"
             >
-              {expanded[channel.id] ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+              {expanded[channel.id] || filterText ? (
+                <ChevronDown size={16} />
+              ) : (
+                <ChevronRight size={16} />
+              )}
             </button>
           ) : (
-            <span className="w-4" />
+            <span className="w-7" />
           )}
 
           <div className="relative">
             {channel.isHidden ? (
-              <EyeOff size={14} className="text-gray-400" />
+              <EyeOff size={16} className="text-gray-400" />
             ) : (
-              <Globe size={14} className="text-gray-400" />
+              <Globe size={16} className="text-gray-400" />
             )}
             {channel.isPublic ? null : (
-              <Lock size={10} className="absolute -top-1 -right-1 text-amber-500" />
+              <Lock size={12} className="absolute -top-1 -right-1 text-amber-500" />
             )}
           </div>
-          <span className="text-sm font-medium truncate">{channel.title}</span>
+          <span className="text-base md:text-sm font-medium truncate flex-1">
+            {channel.title}
+          </span>
         </div>
 
-        {channel.subchannels && expanded[channel.id] && (
+        {channel.subchannels && (expanded[channel.id] || filterText) && (
           <div className="border-l border-gray-200 ml-6">
             {renderTree(channel.subchannels, level + 1)}
           </div>
@@ -1240,8 +1391,8 @@ const ChannelManager: React.FC = () => {
 
   if (loading)
     return (
-      <div className="h-[calc(100vh-140px)] flex flex-col md:flex-row gap-6">
-        <div className="w-full md:w-1/3 bg-white rounded-xl shadow-sm border border-gray-100 p-4">
+      <div className="h-[calc(100vh-140px)] flex flex-col md:p-8">
+        <div className="w-full h-full bg-white rounded-xl shadow-sm border border-gray-100 p-4">
           <div className="animate-pulse">
             <div className="flex items-center justify-between mb-3">
               <div className="h-5 w-28 bg-gray-200 rounded" />
@@ -1251,47 +1402,13 @@ const ChannelManager: React.FC = () => {
               <div className="h-8 w-full bg-gray-100 rounded-lg" />
             </div>
             <div className="space-y-2">
-              {Array.from({ length: 5 }).map((_, i) => (
+              {Array.from({ length: 15 }).map((_, i) => (
                 <div key={i} className="flex items-center gap-2 px-2 py-2 rounded">
                   <div className="h-4 w-4 bg-gray-200 rounded" />
                   <div className="h-4 w-4 bg-gray-200 rounded-full" />
                   <div className="h-4 w-44 bg-gray-200 rounded" />
                 </div>
               ))}
-              <div className="ml-6 border-l border-gray-200 pl-3 space-y-2">
-                {Array.from({ length: 3 }).map((_, j) => (
-                  <div key={j} className="flex items-center gap-2 px-2 py-2 rounded">
-                    <div className="h-3 w-3 bg-gray-200 rounded" />
-                    <div className="h-3 w-36 bg-gray-200 rounded" />
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-        </div>
-        <div className="flex-1 bg-white rounded-xl shadow-sm border border-gray-100 p-6">
-          <div className="animate-pulse space-y-4">
-            <div className="flex items-center gap-4">
-              <div className="w-10 h-10 rounded-full bg-gray-200" />
-              <div className="h-6 w-48 bg-gray-200 rounded" />
-            </div>
-            <div className="h-4 w-3/5 bg-gray-200 rounded" />
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              {Array.from({ length: 3 }).map((_, i) => (
-                <div key={i} className="bg-gray-50 p-4 rounded-lg border border-gray-100">
-                  <div className="h-3 w-24 bg-gray-200 rounded mb-3" />
-                  <div className="space-y-2">
-                    <div className="h-3 w-full bg-gray-200 rounded" />
-                    <div className="h-3 w-3/4 bg-gray-200 rounded" />
-                    <div className="h-3 w-1/2 bg-gray-200 rounded" />
-                  </div>
-                </div>
-              ))}
-            </div>
-            <div className="h-4 w-32 bg-gray-200 rounded" />
-            <div className="grid grid-cols-3 gap-2">
-              <div className="h-9 bg-gray-200 rounded col-span-3" />
-              <div className="h-9 bg-gray-200 rounded col-span-3" />
             </div>
           </div>
         </div>
@@ -1299,85 +1416,115 @@ const ChannelManager: React.FC = () => {
     );
 
   return (
-    <div className="h-[calc(100vh-140px)] flex flex-col md:flex-row gap-6">
+    <div className="h-[calc(100vh-140px)] flex flex-col relative">
       {/* Tree Sidebar */}
-      <div className="w-full md:w-1/3 bg-white rounded-xl shadow-sm border border-gray-100 flex flex-col">
-        <div className="p-4 border-b border-gray-100 flex items-center justify-between">
-          <h3 className="font-semibold text-gray-900">{t('channels.title')}</h3>
-          <button
-            onClick={() => setShowCreate((prev) => !prev)}
-            className="p-1.5 text-gray-500 hover:bg-gray-100 rounded-lg transition-colors"
-          >
-            <Plus size={18} />
-          </button>
-        </div>
-        <div className="p-2">
-          <div className="relative mb-2">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={14} />
+      <div className={`w-full h-full bg-white rounded-xl shadow-sm flex flex-col ${selectedChannel ? 'hidden' : 'flex'}`}>
+        <div className="p-4 border-b border-gray-100 flex flex-col gap-4 sticky top-0 z-10 bg-white rounded-t-xl">
+          <div className="flex items-center justify-between">
+            <h3 className="font-semibold text-gray-900">{t('channels.title')}</h3>
+            <div className="flex items-center gap-1">
+              <div className="flex items-center bg-gray-100 rounded-lg p-1 mr-1">
+                <button
+                  onClick={() => setViewMode('table')}
+                  className={`p-1 rounded-md transition-all ${
+                    viewMode === 'table'
+                      ? 'bg-white shadow-sm text-indigo-600'
+                      : 'text-gray-500 hover:text-gray-700'
+                  }`}
+                  title="Vista de lista"
+                >
+                  <Table size={16} />
+                </button>
+                <button
+                  onClick={() => setViewMode('cards')}
+                  className={`p-1 rounded-md transition-all ${
+                    viewMode === 'cards'
+                      ? 'bg-white shadow-sm text-indigo-600'
+                      : 'text-gray-500 hover:text-gray-700'
+                  }`}
+                  title="Vista de tarjetas"
+                >
+                  <LayoutList size={16} />
+                </button>
+              </div>
+              <button
+                onClick={() => setShowCreate((prev) => !prev)}
+                className="p-1.5 text-gray-500 hover:bg-gray-100 rounded-lg transition-colors"
+              >
+                <Plus size={18} />
+              </button>
+            </div>
+          </div>
+          <div className="relative w-full">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
             <input
               type="text"
+              value={filterText}
+              onChange={(e) => setFilterText(e.target.value)}
               placeholder={t('channels.filterPlaceholder')}
-              className="w-full pl-9 pr-3 py-1.5 text-sm bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:border-indigo-500"
+              className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all"
             />
           </div>
+        </div>
+        <div className="p-0 md:p-1">
           {showCreate && (
             <div className="bg-gray-50 border border-gray-200 rounded-lg p-3 space-y-2">
               <input
                 value={form.title}
                 onChange={(e) => setForm({ ...form, title: e.target.value })}
                 placeholder="Title"
-                className="w-full px-2 py-1 text-sm border border-gray-300 rounded"
+                className="w-full px-2 py-1 text-base md:text-sm border border-gray-300 rounded"
               />
               <textarea
                 value={form.description}
                 onChange={(e) => setForm({ ...form, description: e.target.value })}
                 placeholder="Description"
-                className="w-full px-2 py-1 text-sm border border-gray-300 rounded"
+                className="w-full px-2 py-1 text-base md:text-sm border border-gray-300 rounded"
               />
               <input
                 value={form.websiteUrl}
                 onChange={(e) => setForm({ ...form, websiteUrl: e.target.value })}
                 placeholder="Website URL"
-                className="w-full px-2 py-1 text-sm border border-gray-300 rounded"
+                className="w-full px-2 py-1 text-base md:text-sm border border-gray-300 rounded"
               />
               <div className="grid grid-cols-2 gap-2">
                 <input
                   value={form.instagram}
                   onChange={(e) => setForm({ ...form, instagram: e.target.value })}
                   placeholder="Instagram URL"
-                  className="px-2 py-1 text-sm border border-gray-300 rounded"
+                  className="px-2 py-1 text-base md:text-sm border border-gray-300 rounded"
                 />
                 <input
                   value={form.facebook}
                   onChange={(e) => setForm({ ...form, facebook: e.target.value })}
                   placeholder="Facebook URL"
-                  className="px-2 py-1 text-sm border border-gray-300 rounded"
+                  className="px-2 py-1 text-base md:text-sm border border-gray-300 rounded"
                 />
                 <input
                   value={form.twitter}
                   onChange={(e) => setForm({ ...form, twitter: e.target.value })}
                   placeholder="Twitter URL"
-                  className="px-2 py-1 text-sm border border-gray-300 rounded"
+                  className="px-2 py-1 text-base md:text-sm border border-gray-300 rounded"
                 />
                 <input
                   value={form.tiktok}
                   onChange={(e) => setForm({ ...form, tiktok: e.target.value })}
                   placeholder="TikTok URL"
-                  className="px-2 py-1 text-sm border border-gray-300 rounded"
+                  className="px-2 py-1 text-base md:text-sm border border-gray-300 rounded"
                 />
               </div>
               <input
                 value={form.logoUrl}
                 onChange={(e) => setForm({ ...form, logoUrl: e.target.value })}
                 placeholder="Logo image URL"
-                className="w-full px-2 py-1 text-sm border border-gray-300 rounded"
+                className="w-full px-2 py-1 text-base md:text-sm border border-gray-300 rounded"
               />
               <div className="space-y-2">
                 <input
                   value={form.icon}
                   onChange={(e) => setForm({ ...form, icon: e.target.value })}
                   placeholder="Icon (SF Symbol)"
-                  className="w-full px-2 py-1 text-sm border border-gray-300 rounded"
+                  className="w-full px-2 py-1 text-base md:text-sm border border-gray-300 rounded"
                 />
                 <div className="max-h-32 overflow-y-auto border border-gray-200 rounded">
                   {SF_SYMBOLS.filter((s) => s.includes(form.icon)).map((name) => (
@@ -1397,7 +1544,7 @@ const ChannelManager: React.FC = () => {
                 <select
                   value={ownerId}
                   onChange={(e) => setOwnerId(e.target.value)}
-                  className="w-full px-2 py-1 text-sm border border-gray-300 rounded"
+                  className="w-full px-2 py-1 text-base md:text-sm border border-gray-300 rounded"
                 >
                   <option value="">Selecciona un propietario</option>
                   {owners.map((u) => (
@@ -1412,13 +1559,13 @@ const ChannelManager: React.FC = () => {
                   value={orgName}
                   onChange={(e) => setOrgName(e.target.value)}
                   placeholder="Nombre de organización"
-                  className="px-2 py-1 text-sm border border-gray-300 rounded col-span-2"
+                  className="px-2 py-1 text-base md:text-sm border border-gray-300 rounded col-span-2"
                 />
                 <input
                   value={orgNit}
                   onChange={(e) => setOrgNit(e.target.value)}
                   placeholder="NIT"
-                  className="px-2 py-1 text-sm border border-gray-300 rounded"
+                  className="px-2 py-1 text-base md:text-sm border border-gray-300 rounded"
                 />
               </div>
               <div className="text-[11px] text-gray-500">
@@ -1460,2356 +1607,2559 @@ const ChannelManager: React.FC = () => {
             </div>
           )}
         </div>
-        <div className="flex-1 overflow-y-auto p-2 space-y-1 custom-scrollbar">
-          {renderTree(channels)}
+        <div className="flex-1 h-full overflow-y-auto p-2 space-y-1 custom-scrollbar md:m-6 ">
+          {
+            // viewMode === 'table' ? renderTree(filteredChannels) : 
+            renderCards(filteredChannels) 
+          }
         </div>
       </div>
 
-      {/* Details Panel */}
-      <div className="flex-1 bg-white rounded-xl shadow-sm border border-gray-100 flex flex-col">
+      {/* Details Panel  --  w-full*/}
+      <div className={` h-full md:m-8 bg-white rounded-xl shadow-sm border border-gray-100 flex flex-col ${selectedChannel ? 'flex' : 'hidden'}`}>
         {selectedChannel ? (
-          detailsLoading ? (
-            <div className="p-6 flex-1 overflow-y-auto animate-pulse space-y-4">
-              <div className="flex items-center gap-4">
-                <div className="w-10 h-10 rounded-full bg-gray-200" />
-                <div className="h-6 w-48 bg-gray-200 rounded" />
-              </div>
-              <div className="h-4 w-3/5 bg-gray-200 rounded" />
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                {Array.from({ length: 3 }).map((_, i) => (
-                  <div key={i} className="bg-gray-50 p-4 rounded-lg border border-gray-100">
-                    <div className="h-3 w-24 bg-gray-200 rounded mb-3" />
-                    <div className="space-y-2">
-                      <div className="h-3 w-full bg-gray-200 rounded" />
-                      <div className="h-3 w-3/4 bg-gray-200 rounded" />
-                      <div className="h-3 w-1/2 bg-gray-200 rounded" />
-                    </div>
-                  </div>
-                ))}
-              </div>
-              <div className="h-4 w-32 bg-gray-200 rounded" />
-              <div className="grid grid-cols-3 gap-2">
-                <div className="h-9 bg-gray-200 rounded col-span-3" />
-                <div className="h-9 bg-gray-200 rounded col-span-3" />
-              </div>
+  detailsLoading ? (
+    <div className="p-6 flex-1 overflow-y-auto animate-pulse space-y-4">
+      <div className="flex items-center gap-4">
+        <div className="w-10 h-10 rounded-full bg-gray-200" />
+        <div className="h-6 w-48 bg-gray-200 rounded" />
+      </div>
+      <div className="h-4 w-3/5 bg-gray-200 rounded" />
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        {Array.from({ length: 3 }).map((_, i) => (
+          <div key={i} className="bg-gray-50 p-4 rounded-lg border border-gray-100">
+            <div className="h-3 w-24 bg-gray-200 rounded mb-3" />
+            <div className="space-y-2">
+              <div className="h-3 w-full bg-gray-200 rounded" />
+              <div className="h-3 w-3/4 bg-gray-200 rounded" />
+              <div className="h-3 w-1/2 bg-gray-200 rounded" />
             </div>
-          ) : (
-            <>
-              <div className="p-6 border-b border-gray-100 flex items-start justify-between">
-                <div>
-                  {parentChannel && (
-                    <div className="text-xs text-gray-500 mb-1 flex items-center gap-1">
-                      <button
-                        onClick={() => setSelectedChannel(parentChannel)}
-                        className="hover:underline text-gray-700"
-                      >
-                        {parentChannel.title}
-                      </button>
-                      <ChevronRight size={12} className="text-gray-400" />
-                      <span className="text-gray-900">{selectedChannel.title}</span>
-                    </div>
-                  )}
-                  <div className="flex items-center gap-3 mb-2">
-                    {selectedChannel.logoUrl ? (
-                      <img
-                        src={selectedChannel.logoUrl}
-                        alt={selectedChannel.title}
-                        className="w-10 h-10 rounded-full border"
-                      />
-                    ) : (
-                      <div className="w-10 h-10 rounded-full bg-gray-200 flex items-center justify-center text-xs text-gray-500">
-                        Logo
-                      </div>
-                    )}
-                    <div className="flex items-center gap-3">
-                      <h2 className="text-2xl font-bold text-gray-900">{selectedChannel.title}</h2>
-                      <div className="flex items-center gap-1 text-xs text-gray-400"></div>
-                      <StatusBadge status={selectedChannel.verificationStatus} />
-                    </div>
-                  </div>
-                  <p className="text-gray-500">
-                    {selectedChannel.description || 'No description provided.'}
-                  </p>
-                  {!selectedChannel.parentId && selectedChannel.subchannels?.length ? (
-                    <>
-                      <div className="text-xs text-gray-500 mt-1 flex items-center gap-2">
-                        Destino por defecto:{' '}
-                        <span className="text-gray-900">
-                          {selectedChannel.subchannels[0].title}
-                        </span>{' '}
-                        <Target size={14} className="text-indigo-600" />
-                      </div>
-                      {selectedChannel.websiteUrl ? (
-                        <div className="text-xs text-gray-500 mt-1 flex items-center gap-2">
-                          <Globe size={14} className="text-indigo-600" />
-                          <span>{t('channels.website')}:</span>
-                          <a
-                            href={selectedChannel.websiteUrl}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="text-indigo-600 hover:underline truncate max-w-[16rem]"
-                          >
-                            {selectedChannel.websiteUrl}
-                          </a>
-                        </div>
-                      ) : null}
-                      {selectedChannel.socialLinks &&
-                      Object.keys(selectedChannel.socialLinks).length > 0 ? (
-                        <div className="text-xs text-gray-500 mt-1 flex items-center gap-2 flex-wrap">
-                          {Object.entries(selectedChannel.socialLinks).map(([key, url]) => (
-                            <a
-                              key={key}
-                              href={url as string}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="inline-flex items-center gap-1 text-indigo-600 hover:underline"
-                            >
-                              <Link size={12} />
-                              <span className="truncate max-w-[10rem]">{key}</span>
-                            </a>
-                          ))}
-                        </div>
-                      ) : null}
-                      <div className="mt-1">
-                        <button
-                          onClick={() => setInfoTipOpen((v) => !v)}
-                          className="p-1 text-gray-400 hover:text-gray-600"
-                        >
-                          <ChevronDown size={16} />
-                        </button>
-                      </div>
-                    </>
-                  ) : null}
-                </div>
-                <div className="flex items-center gap-2">
+          </div>
+        ))}
+      </div>
+    </div>
+  ) : (
+    <>
+      {/* Tu contenido aquí cuando detailsLoading es false */}
+      <div className="bg-white shrink-0 border-b border-gray-100 flex flex-col sticky top-0 z-10 rounded-t-xl">
+        {/* Top Bar: Navigation & Actions */}
+        <div className="px-4 py-2 flex items-center justify-between">
+          <div className="flex items-center gap-2 min-w-0">
+            <button
+              onClick={() => setSelectedChannel(null)}
+              className="p-2 text-gray-500 hover:bg-gray-100 rounded-lg transition-colors shrink-0"
+              title="Volver a la lista"
+            >
+              <ArrowLeft size={20} />
+            </button>
+            
+            {/* Breadcrumbs */}
+            <div className="flex items-center gap-2 overflow-hidden">
+              {parentChannel && (
+                <div className="flex items-center gap-1 text-sm text-gray-500 truncate flex shrink-0">
                   <button
-                    onClick={openCompose}
-                    className="relative p-2 text-indigo-400 text-white rounded-md hover:text-indigo-700 flex items-center justify-center"
+                    onClick={() => setSelectedChannel(parentChannel)}
+                    className="hover:underline hover:text-gray-700 truncate max-w-[150px]"
                   >
-                    <span className="absolute inset-0 rounded-md bg-indigo-400 opacity-20 animate-ping pointer-events-none z-0"></span>
-                    <MessageSquarePlus size={18} className="relative z-10" />
+                    {parentChannel.title}
                   </button>
-                  <div className="relative">
-                    <button
-                      onClick={() => setConfigTipOpen((v) => !v)}
-                      className="text-gray-400 hover:text-gray-600 p-2 hover:bg-gray-50 rounded-md"
-                    >
-                      <LucideEye size={18} />
-                    </button>
-                    {configTipOpen && (
-                      <>
-                        <div
-                          className="fixed inset-0 z-40"
-                          onClick={() => setConfigTipOpen(false)}
-                        />
-                        <div className="absolute right-0 mt-2 w-56 bg-white border border-gray-200 rounded-lg shadow-lg p-3 z-50">
-                          <div className="space-y-2">
-                            {composeIsEmergency && (
-                              <>
-                                <span className="pointer-events-none absolute -top-6 -left-6 h-32 w-32 rounded-full bg-red-300 opacity-30 animate-ping"></span>
-                                <span className="pointer-events-none absolute -bottom-4 -right-4 h-24 w-24 rounded-full bg-red-300 opacity-30 animate-ping"></span>
-                              </>
-                            )}
-                            <div className="flex items-center justify-between">
-                              <div className="text-xs text-gray-500">
-                                {t('channels.visibility')}
-                              </div>
-                              <div className="text-sm font-medium text-gray-900">
-                                {selectedChannel.isPublic
-                                  ? t('channels.public')
-                                  : t('channels.private')}
-                              </div>
-                            </div>
-                            <div className="flex items-center justify-between">
-                              <div className="text-xs text-gray-500">
-                                {t('channels.searchable')}
-                              </div>
-                              <div className="text-sm font-medium text-gray-900">
-                                {selectedChannel.isHidden
-                                  ? t('channels.searchable_no')
-                                  : t('channels.searchable_yes')}
-                              </div>
-                            </div>
-                            <div className="flex items-center justify-between">
-                              <div className="text-xs text-gray-500">{t('channels.refCode')}</div>
-                              <div className="text-sm font-mono bg-gray-100 px-2 py-0.5 rounded">
-                                {selectedChannel.referenceCode || 'N/A'}
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-                      </>
-                    )}
-                  </div>
-                  <div className="relative">
-                    <button
-                      onClick={() => setSpeedDialOpen((v) => !v)}
-                      className="text-gray-400 hover:text-gray-600 p-2 hover:bg-gray-50 rounded-md"
-                    >
-                      <Share2 size={18} />
-                    </button>
-                    {speedDialOpen && (
-                      <>
-                        <div
-                          className="fixed inset-0 z-40"
-                          onClick={() => setSpeedDialOpen(false)}
-                        />
-                        <div className="absolute right-0 mt-2 w-48 bg-white border border-gray-200 rounded-lg shadow-lg p-2 z-50">
-                          <button
-                            onClick={copyShare}
-                            className="w-full flex items-center justify-between px-2 py-1 text-sm hover:bg-gray-50 rounded"
-                          >
-                            <span className="text-gray-600">Copiar enlace</span>
-                            <span className="text-xs text-indigo-600">
-                              {shareCopied ? 'Copiado' : ''}
-                            </span>
-                          </button>
-                          <button
-                            onClick={() => setQrTipOpen(true)}
-                            className="w-full flex items-center justify-between px-2 py-1 text-sm hover:bg-gray-50 rounded mt-1"
-                          >
-                            <span className="text-gray-600">Código QR</span>
-                            <QrCode size={16} className="text-indigo-600" />
-                          </button>
-                        </div>
-                      </>
-                    )}
-                    {qrTipOpen && (
-                      <>
-                        <div className="fixed inset-0 z-40" onClick={() => setQrTipOpen(false)} />
-                        <div className="absolute right-0 mt-2 bg-white border border-gray-200 rounded-lg shadow-lg p-3 z-50">
-                          <div className="flex items-center justify-between mb-2">
-                            <span className="text-xs font-semibold text-gray-900">Código QR</span>
-                            <button
-                              onClick={() => setQrTipOpen(false)}
-                              className="text-gray-400 hover:text-gray-600 p-1 hover:bg-gray-50 rounded"
-                            >
-                              <X size={14} />
-                            </button>
-                          </div>
-                          <div ref={qrRef} className="w-40 h-40 mx-auto" />
-                          <div className="mt-2 flex items-center justify-between">
-                            <span className="text-xs text-gray-500 truncate max-w-[9rem]">
-                              {shareUrl}
-                            </span>
-                            <button
-                              onClick={downloadQr}
-                              className="text-xs text-indigo-600 hover:underline"
-                            >
-                              Descargar
-                            </button>
-                          </div>
-                        </div>
-                      </>
-                    )}
-                  </div>
-                </div>
-              </div>
-
-              {infoTipOpen && (
-                <div className="px-3">
-                  <div
-                    className={`${selectedChannel?.parentId && inlineStatsHidden ? 'hidden' : ''} relative w-full bg-white border border-gray-200 rounded-lg shadow-sm p-4`}
-                  >
-                    {(!selectedChannel?.parentId || !inlineStatsHidden) && (
-                      <div className="absolute -top-7 left-1/2 -translate-x-1/2 inline-flex items-center gap-1 border border-gray-200 rounded-full p-1 bg-white shadow-sm">
-                        {(['1h', '24h', '7d', '1m', 'all'] as const).map((key) => (
-                          <button
-                            key={key}
-                            onClick={() => setStatsRange(key)}
-                            className={`px-2 py-1 text-xs rounded-full ${statsRange === key ? 'bg-indigo-500 text-white' : 'text-gray-600 hover:bg-gray-50'}`}
-                          >
-                            {key === '1h'
-                              ? t('stats.range.1h')
-                              : key === '24h'
-                                ? t('stats.range.24h')
-                                : key === '7d'
-                                  ? t('stats.range.7d')
-                                  : key === '1m'
-                                    ? t('stats.range.1m')
-                                    : t('stats.range.all')}
-                          </button>
-                        ))}
-                      </div>
-                    )}
-                    {(!selectedChannel?.parentId || !inlineStatsHidden) && (
-                      <ChannelStatsPanel channelId={selectedChannel.id} range={statsRange} />
-                    )}
-                  </div>
+                  <ChevronRight size={14} className="shrink-0 text-gray-400" />
                 </div>
               )}
+              <h2 className="text-base font-semibold text-gray-900 truncate">
+                {selectedChannel.parentId ? selectedChannel.title : 'Canales'}
+              </h2>
+            </div>
+          </div>
 
-              <div className="p-3 flex-1 overflow-y-auto">
-                <div className="mb-2"></div>
-                <div className="">
+          <div className="flex items-center gap-1">
+            <div className="relative">
+              <button
+                onClick={() => setSpeedDialOpen((v) => !v)}
+                className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+                title="Compartir"
+              >
+                <Share2 size={20} />
+              </button>
+              {speedDialOpen && (
+                <>
                   <div
-                    className={`${selectedChannel?.parentId ? 'hidden' : ''} bg-white rounded-lg border border-gray-100 overflow-hidden`}
-                  >
-                    <table className="w-full text-sm">
-                      <thead className="bg-slate-50">
-                        <tr className="text-left text-gray-600">
-                          <th className="px-4 py-2">Subcanal</th>
-                          <th className="px-4 py-2">
-                            <Users size={18} className="text-indigo-600" />
-                          </th>
-                          <th className="px-4 py-2">
-                            <ShieldCheck size={18} className="text-purple-600" />
-                          </th>
-                          <th className="px-4 py-2">
-                            <Hourglass size={18} className="text-red-400" />
-                          </th>
-                          <th className="px-4 py-2"></th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {subLoading ? (
-                          Array.from({ length: 6 }).map((_, i) => (
-                            <tr key={`sk-${i}`} className="border-t border-gray-100">
-                              <td className="px-4 py-2">
-                                <div className="animate-pulse flex items-center gap-2">
-                                  <div className="h-4 w-4 bg-gray-200 rounded" />
-                                  <div className="h-4 w-40 bg-gray-200 rounded" />
-                                </div>
-                              </td>
-                              <td className="px-4 py-2">
-                                <div className="h-4 w-16 bg-gray-200 rounded animate-pulse" />
-                              </td>
-                              <td className="px-4 py-2">
-                                <div className="h-8 w-8 bg-gray-200 rounded-full animate-pulse" />
-                              </td>
-                              <td className="px-4 py-2">
-                                <div className="h-4 w-10 bg-gray-200 rounded animate-pulse" />
-                              </td>
-                            </tr>
-                          ))
-                        ) : subItems && subItems.length > 0 ? (
-                          subItems.map((sc) => (
-                            <tr
-                              key={sc.id}
-                              className="border-t border-gray-100 hover:bg-gray-50 cursor-pointer"
-                              onDoubleClick={() => setSelectedChannel(sc as any)}
-                            >
-                              <td className="px-4 py-2">
-                                <div className="flex items-center gap-2">
-                                  <IconView name={sc.icon} size={14} className="text-gray-500" />
-                                  <span className="text-gray-900">{sc.title}</span>
-                                  {selectedChannel.subchannels &&
-                                    selectedChannel.subchannels[0]?.id === sc.id && (
-                                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-indigo-100 text-indigo-700 border border-indigo-200 inline-flex items-center">
-                                        <Target size={12} />
-                                      </span>
-                                    )}
-                                </div>
-                              </td>
-                              <td className="px-4 py-2">
-                                <button
-                                  className="text-indigo-600 hover:underline cursor-pointer"
-                                  onClick={() => {
-                                    setSubsForSub(sc.id);
-                                    setSubsModalOpen(true);
-                                    setSubsPage(1);
-                                    setSubsSearch('');
-                                  }}
-                                >
-                                  {sc.memberCount.toLocaleString()}
-                                </button>
-                              </td>
-                              <td className="px-4 py-2">
-                                <button
-                                  className="text-indigo-600 hover:underline cursor-pointer"
-                                  onClick={() => {
-                                    setApproverTipSub(sc as any);
-                                    setApproverModalOpen(true);
-                                    fetchPreviewData(sc.id);
-                                  }}
-                                >
-                                  {sc.counts?.approvers ?? 'Ver'}
-                                </button>
-                              </td>
-                              <td className="px-4 py-2">
-                                <button
-                                  className="text-indigo-600 hover:underline cursor-pointer"
-                                  onClick={() => {
-                                    setPendingForSub(sc.id);
-                                    setPendingModalOpen(true);
-                                    setPendingPage(1);
-                                  }}
-                                >
-                                  {sc.counts?.pending ?? '—'}
-                                </button>
-                              </td>
-                              <td className="px-4 py-2">
-                                <button
-                                  className="w-8 h-8 rounded-full border border-gray-300 flex items-center justify-center text-indigo-600 hover:bg-gray-50 cursor-pointer"
-                                  onClick={() => {
-                                    setMessagesForSub(sc.id);
-                                    setMessagesModalOpen(true);
-                                    setMessagesPage(1);
-                                    setMessagesLoading(true);
-                                    api
-                                      .getChannelMessages(sc.id, 1, messagesLimit, {
-                                        quick: 'all',
-                                        start:
-                                          statsRange === '1h'
-                                            ? new Date(Date.now() - 3600000).toISOString()
-                                            : statsRange === '24h'
-                                              ? new Date(Date.now() - 86400000).toISOString()
-                                              : statsRange === '7d'
-                                                ? new Date(Date.now() - 7 * 86400000).toISOString()
-                                                : statsRange === '1m'
-                                                  ? new Date(
-                                                      Date.now() - 30 * 86400000
-                                                    ).toISOString()
-                                                  : undefined,
-                                      })
-                                      .then((res) => {
-                                        setMessagesItems(res.messages as any);
-                                        setMessagesPages(res.pagination.pages);
-                                        setMessagesLoading(false);
-                                      })
-                                      .catch(() => setMessagesLoading(false));
-                                  }}
-                                >
-                                  <MessagesSquare size={14} />
-                                </button>
-                              </td>
-                            </tr>
-                          ))
-                        ) : (
-                          <tr>
-                            <td colSpan={5} className="px-4 py-6 text-center text-gray-400">
-                              {t('channels.approvers_empty')}
-                            </td>
-                          </tr>
-                        )}
-                      </tbody>
-                    </table>
+                    className="fixed inset-0 z-40"
+                    onClick={() => setSpeedDialOpen(false)}
+                  />
+                  <div className="absolute right-0 mt-2 w-48 bg-white border border-gray-200 rounded-lg shadow-lg p-2 z-50">
+                    <button
+                      onClick={copyShare}
+                      className="w-full flex items-center justify-between px-2 py-1 text-sm hover:bg-gray-50 rounded"
+                    >
+                      <span className="text-gray-600">Copiar enlace</span>
+                      <span className="text-xs text-indigo-600">
+                        {shareCopied ? 'Copiado' : ''}
+                      </span>
+                    </button>
+                    <button
+                      onClick={() => setQrTipOpen(true)}
+                      className="w-full flex items-center justify-between px-2 py-1 text-sm hover:bg-gray-50 rounded mt-1"
+                    >
+                      <span className="text-gray-600">Código QR</span>
+                      <QrCode size={16} className="text-indigo-600" />
+                    </button>
                   </div>
+                </>
+              )}
+              {qrTipOpen && (
+                <>
+                  <div className="fixed inset-0 z-40" onClick={() => setQrTipOpen(false)} />
+                  <div className="absolute right-0 mt-2 bg-white border border-gray-200 rounded-lg shadow-lg p-3 z-50">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-xs font-semibold text-gray-900">Código QR</span>
+                      <button
+                        onClick={() => setQrTipOpen(false)}
+                        className="text-gray-400 hover:text-gray-600 p-1 hover:bg-gray-50 rounded"
+                      >
+                        <X size={14} />
+                      </button>
+                    </div>
+                    <div ref={qrRef} className="w-40 h-40 mx-auto" />
+                    <div className="mt-2 flex items-center justify-between">
+                      <span className="text-xs text-gray-500 truncate max-w-[9rem]">
+                        {shareUrl}
+                      </span>
+                      <button
+                        onClick={downloadQr}
+                        className="text-xs text-indigo-600 hover:underline"
+                      >
+                        Descargar
+                      </button>
+                    </div>
+                  </div>
+                </>
+              )}
+            </div>
+            <button
+              onClick={() => setIsSettingsModalOpen(true)}
+              className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+              title="Configuración"
+            >
+              <Settings size={20} />
+            </button>
+          </div>
+        </div>
 
-                  {!selectedChannel?.parentId && (
+        {/* Identity Section */}
+        <div className="px-6 pb-6 pt-2">
+          <div className="flex items-start gap-5">
+            <div className="shrink-0">
+              {selectedChannel.logoUrl ? (
+                <img
+                  src={selectedChannel.logoUrl}
+                  alt={selectedChannel.title}
+                  className="w-16 h-16 rounded-2xl border border-gray-100 object-cover shadow-sm"
+                />
+              ) : (
+                <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-indigo-50 to-white flex items-center justify-center text-indigo-600 font-bold text-2xl border border-indigo-100 shadow-sm">
+                  {selectedChannel.title.charAt(0).toUpperCase()}
+                </div>
+              )}
+            </div>
+            
+            <div className="min-w-0 flex-1 pt-1">
+              <div className="flex items-center gap-2 flex-wrap mb-1.5">
+                <h2 className="text-lg md:text-xl font-bold text-gray-900 leading-tight break-words">
+                  {selectedChannel.title}
+                </h2>
+                <StatusBadge status={selectedChannel.verificationStatus} />
+              </div>
+              
+              <div className="flex items-center gap-3 text-sm text-gray-500 flex-wrap">
+                <span
+                  className={`flex items-center gap-1.5 px-2 py-0.5 rounded-full border ${
+                    selectedChannel.isPublic
+                      ? 'bg-emerald-50 text-emerald-700 border-emerald-100'
+                      : 'bg-amber-50 text-amber-700 border-amber-100'
+                  }`}
+                >
+                  {selectedChannel.isPublic ? <Globe size={12} /> : <Lock size={12} />}
+                  <span className="font-medium text-xs">{selectedChannel.isPublic ? 'Público' : 'Privado'}</span>
+                </span>
+                <span className="flex items-center gap-1 text-xs">
+                  <Users size={14} className="text-gray-400" />
+                  {selectedChannel.memberCount || 0} miembros
+                </span>
+                {selectedChannel.referenceCode && (
+                  <span className="font-mono bg-gray-50 px-1.5 py-0.5 rounded border border-gray-200 text-gray-600 text-xs hidden sm:inline-block">
+                    {selectedChannel.referenceCode}
+                  </span>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      
+      <div className="flex items-center px-4 border-b border-gray-100 overflow-x-auto shrink-0 scrollbar-hide">
+        <button
+          onClick={() => setActiveTab('messages')}
+          className={`flex items-center gap-2 px-4 py-3 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
+            activeTab === 'messages'
+              ? 'border-indigo-600 text-indigo-600'
+              : 'border-transparent text-gray-500 hover:text-gray-700'
+          }`}
+        >
+          <MessagesSquare size={16} />
+          Mensajes
+        </button>
+        <button
+          onClick={() => setActiveTab('details')}
+          className={`flex items-center gap-2 px-4 py-3 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
+            activeTab === 'details'
+              ? 'border-indigo-600 text-indigo-600'
+              : 'border-transparent text-gray-500 hover:text-gray-700'
+          }`}
+        >
+          <Info size={16} />
+          Detalles
+        </button>
+        <button
+          onClick={() => setActiveTab('stats')}
+          className={`flex items-center gap-2 px-4 py-3 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
+            activeTab === 'stats'
+              ? 'border-indigo-600 text-indigo-600'
+              : 'border-transparent text-gray-500 hover:text-gray-700'
+          }`}
+        >
+          <BarChart2 size={16} />
+          Estadísticas
+        </button>
+        {!selectedChannel.parentId && (
+          <button
+            onClick={() => setActiveTab('content')}
+            className={`flex items-center gap-2 px-4 py-3 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
+              activeTab === 'content'
+                ? 'border-indigo-600 text-indigo-600'
+                : 'border-transparent text-gray-500 hover:text-gray-700'
+            }`}
+          >
+            <ListTree size={16} />
+            Subcanales
+          </button>
+        )}
+      </div>
+
+      <>
+        <div className="p-3 flex-1 overflow-y-auto">
+          {activeTab === 'details' && (
+            <div className="space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="bg-white rounded-lg border border-gray-100 p-4">
+                  <h3 className="text-sm font-medium text-gray-900 mb-3 flex items-center gap-2">
+                    <Info size={16} className="text-indigo-600" />
+                    Información General
+                  </h3>
+                  <div className="space-y-3">
+                    <div>
+                      <span className="text-xs text-gray-500 block">Descripción</span>
+                      <p className="text-sm text-gray-800 mt-1">
+                        {selectedChannel.description || 'Sin descripción'}
+                      </p>
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <span className="text-xs text-gray-500 block">Creado el</span>
+                        <span className="text-sm text-gray-800">
+                          {new Date(selectedChannel.createdAt).toLocaleDateString()}
+                        </span>
+                      </div>
+                      <div>
+                        <span className="text-xs text-gray-500 block">Código de Referencia</span>
+                        <span className="text-sm font-mono bg-gray-50 px-2 py-0.5 rounded border border-gray-200 text-gray-700">
+                          {selectedChannel.referenceCode || 'N/A'}
+                        </span>
+                      </div>
+                      <div>
+                        <span className="text-xs text-gray-500 block">Miembros</span>
+                        <span className="text-sm text-gray-800 flex items-center gap-1">
+                          <Users size={12} className="text-gray-400" />
+                          {selectedChannel.memberCount || 0}
+                        </span>
+                      </div>
+                    </div>
+
+                    {(selectedChannel.websiteUrl || (selectedChannel.socialLinks && Object.keys(selectedChannel.socialLinks).length > 0)) && (
+                      <div className="pt-2 border-t border-gray-50 mt-2">
+                        <span className="text-xs text-gray-500 block mb-2">Enlaces</span>
+                        <div className="space-y-2">
+                          {selectedChannel.websiteUrl && (
+                            <div className="flex items-center gap-2">
+                              <Globe size={14} className="text-gray-400" />
+                              <a href={selectedChannel.websiteUrl} target="_blank" rel="noopener noreferrer" className="text-sm text-indigo-600 hover:underline truncate">
+                                {selectedChannel.websiteUrl}
+                              </a>
+                            </div>
+                          )}
+                          {selectedChannel.socialLinks && Object.entries(selectedChannel.socialLinks).map(([platform, url]) => (
+                            <div key={platform} className="flex items-center gap-2">
+                              <Link size={14} className="text-gray-400" />
+                              <span className="text-xs text-gray-500 capitalize">{platform}:</span>
+                              <a href={url as string} target="_blank" rel="noopener noreferrer" className="text-sm text-indigo-600 hover:underline truncate">
+                                {url as string}
+                              </a>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+
+
+                <div className="bg-white rounded-lg border border-gray-100 p-4 md:col-span-2">
+                  <h3 className="text-sm font-medium text-gray-900 mb-3 flex items-center gap-2">
+                    <Users size={16} className="text-indigo-600" />
+                    Propiedad
+                  </h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-600 font-semibold">
+                        {selectedChannel.owner?.fullName?.charAt(0) ||
+                          selectedChannel.owner?.username?.charAt(0) ||
+                          'U'}
+                      </div>
+                      <div>
+                        <div className="text-sm font-medium text-gray-900">
+                          {selectedChannel.owner?.fullName ||
+                            selectedChannel.owner?.username ||
+                            'Desconocido'}
+                        </div>
+                        <div className="text-xs text-gray-500">Propietario del Canal</div>
+                        <div className="text-xs text-gray-400 mt-0.5">ID: {selectedChannel.ownerId}</div>
+                      </div>
+                    </div>
+                    {selectedChannel.organizationId && (
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-full bg-slate-100 flex items-center justify-center text-slate-600 font-semibold">
+                          <RadioTower size={18} />
+                        </div>
+                        <div>
+                          <div className="text-sm font-medium text-gray-900">
+                            Organización
+                          </div>
+                          <div className="text-xs text-gray-500">ID: {selectedChannel.organizationId}</div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'stats' && (
+            <div className="px-3 py-4">
+              <div className="relative w-full bg-white border border-gray-200 rounded-lg shadow-sm p-4">
+                <div className="absolute -top-7 left-1/2 -translate-x-1/2 inline-flex items-center gap-1 border border-gray-200 rounded-full p-1 bg-white shadow-sm">
+                  {(['1h', '24h', '7d', '1m', 'all'] as const).map((key) => (
+                    <button
+                      key={key}
+                      onClick={() => setStatsRange(key)}
+                      className={`px-2 py-1 text-xs rounded-full ${statsRange === key ? 'bg-indigo-500 text-white' : 'text-gray-600 hover:bg-gray-50'}`}
+                    >
+                      {key === '1h'
+                        ? t('stats.range.1h')
+                        : key === '24h'
+                          ? t('stats.range.24h')
+                          : key === '7d'
+                            ? t('stats.range.7d')
+                            : key === '1m'
+                              ? t('stats.range.1m')
+                              : t('stats.range.all')}
+                    </button>
+                  ))}
+                </div>
+                <ChannelStatsPanel channelId={selectedChannel.id} range={statsRange} />
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'content' && (
+            <>
+              <div className="">
+              <div
+                className={`${selectedChannel?.parentId ? 'hidden' : ''} bg-white rounded-lg border border-gray-100 overflow-hidden`}
+              >
+                <table className="w-full text-sm">
+                  <thead className="bg-slate-50">
+                  <tr className="text-left text-gray-600">
+                    <th className="px-4 py-2">Subcanal</th>
+                    <th className="px-4 py-2">
+                      <Users size={18} className="text-indigo-600" />
+                    </th>
+                    <th className="px-4 py-2">
+                      <ShieldCheck size={18} className="text-purple-600" />
+                    </th>
+                    <th className="px-4 py-2">
+                      <Hourglass size={18} className="text-red-400" />
+                    </th>
+                    <th className="px-4 py-2"></th>
+                  </tr>
+                  </thead>
+                  <tbody>
+                  {subLoading ? (
+                    Array.from({ length: 6 }).map((_, i) => (
+                      <tr key={`sk-${i}`} className="border-t border-gray-100">
+                        <td className="px-4 py-2">
+                          <div className="animate-pulse flex items-center gap-2">
+                            <div className="h-4 w-4 bg-gray-200 rounded" />
+                            <div className="h-4 w-40 bg-gray-200 rounded" />
+                          </div>
+                        </td>
+                        <td className="px-4 py-2">
+                          <div className="h-4 w-16 bg-gray-200 rounded animate-pulse" />
+                        </td>
+                        <td className="px-4 py-2">
+                          <div className="h-8 w-8 bg-gray-200 rounded-full animate-pulse" />
+                        </td>
+                        <td className="px-4 py-2">
+                          <div className="h-4 w-10 bg-gray-200 rounded animate-pulse" />
+                        </td>
+                      </tr>
+                    ))
+                  ) : subItems && subItems.length > 0 ? (
+                    subItems.map((sc) => (
+                      <tr
+                        key={sc.id}
+                        className="border-t border-gray-100 hover:bg-gray-50 cursor-pointer"
+                        onDoubleClick={() => setSelectedChannel(sc as any)}
+                      >
+                        <td className="px-4 py-2">
+                          <div className="flex items-center gap-2">
+                            <IconView name={sc.icon} size={14} className="text-gray-500" />
+                            <span className="text-gray-900">{sc.title}</span>
+                            {selectedChannel.subchannels &&
+                              selectedChannel.subchannels[0]?.id === sc.id && (
+                                <span className="text-[10px] px-1.5 py-0.5 rounded bg-indigo-100 text-indigo-700 border border-indigo-200 inline-flex items-center">
+                                    <Target size={12} />
+                                  </span>
+                              )}
+                          </div>
+                        </td>
+                        <td className="px-4 py-2">
+                          <button
+                            className="text-indigo-600 hover:underline cursor-pointer"
+                            onClick={() => {
+                              setSubsForSub(sc.id);
+                              setSubsModalOpen(true);
+                              setSubsPage(1);
+                              setSubsSearch('');
+                            }}
+                          >
+                            {sc.memberCount.toLocaleString()}
+                          </button>
+                        </td>
+                        <td className="px-4 py-2">
+                          <button
+                            className="text-indigo-600 hover:underline cursor-pointer"
+                            onClick={() => {
+                              setApproverTipSub(sc as any);
+                              setApproverModalOpen(true);
+                              fetchPreviewData(sc.id);
+                            }}
+                          >
+                            {sc.counts?.approvers ?? 'Ver'}
+                          </button>
+                        </td>
+                        <td className="px-4 py-2">
+                          <button
+                            className="text-indigo-600 hover:underline cursor-pointer"
+                            onClick={() => {
+                              setPendingForSub(sc.id);
+                              setPendingModalOpen(true);
+                              setPendingPage(1);
+                            }}
+                          >
+                            {sc.counts?.pending ?? '—'}
+                          </button>
+                        </td>
+                        <td className="px-4 py-2">
+                          <button
+                            className="w-8 h-8 rounded-full border border-gray-300 flex items-center justify-center text-indigo-600 hover:bg-gray-50 cursor-pointer"
+                            onClick={() => {
+                              setMessagesForSub(sc.id);
+                              setMessagesModalOpen(true);
+                              setMessagesPage(1);
+                              setMessagesLoading(true);
+                              api
+                                .getChannelMessages(sc.id, 1, messagesLimit, {
+                                  quick: 'all',
+                                  start:
+                                    statsRange === '1h'
+                                      ? new Date(Date.now() - 3600000).toISOString()
+                                      : statsRange === '24h'
+                                        ? new Date(Date.now() - 86400000).toISOString()
+                                        : statsRange === '7d'
+                                          ? new Date(Date.now() - 7 * 86400000).toISOString()
+                                          : statsRange === '1m'
+                                            ? new Date(
+                                              Date.now() - 30 * 86400000
+                                            ).toISOString()
+                                            : undefined,
+                                })
+                                .then((res) => {
+                                  setMessagesItems(res.messages as any);
+                                  setMessagesPages(res.pagination.pages);
+                                  setMessagesLoading(false);
+                                })
+                                .catch(() => setMessagesLoading(false));
+                            }}
+                          >
+                            <MessagesSquare size={14} />
+                          </button>
+                        </td>
+                      </tr>
+                    ))
+                  ) : (
+                    <tr>
+                      <td colSpan={5} className="px-4 py-6 text-center text-gray-400">
+                        {t('channels.approvers_empty')}
+                      </td>
+                    </tr>
+                  )}
+                  </tbody>
+                </table>
+              </div>
+
+              {!selectedChannel?.parentId && (
+                <div className="pt-3 flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <button
+                      disabled={subPage <= 1}
+                      onClick={() => setSubPage((p) => p - 1)}
+                      className={`px-3 py-1.5 text-sm rounded border ${subPage <= 1 ? 'text-gray-400 border-gray-200' : 'text-gray-700 border-gray-300 hover:bg-gray-50'}`}
+                    >
+                      Anterior
+                    </button>
+                    <span className="text-xs text-gray-500">
+                      Página {subPage} de {subPages}
+                    </span>
+                    <button
+                      disabled={subPage >= subPages}
+                      onClick={() => setSubPage((p) => p + 1)}
+                      className={`px-3 py-1.5 text-sm rounded border ${subPage >= subPages ? 'text-gray-400 border-gray-200' : 'text-gray-700 border-gray-300 hover:bg-gray-50'}`}
+                    >
+                      Siguiente
+                    </button>
+                  </div>
+                  {!showSubCreate ? (
+                    <button
+                      onClick={() => {
+                        setShowSubCreate(true);
+                        setSubTitle('');
+                        setSubDesc('');
+                        setSubIcon('');
+                      }}
+                      className="px-3 py-1.5 text-sm bg-indigo-600 text-white rounded"
+                    >
+                      {t('channels.createSubchannel')}
+                    </button>
+                  ) : (
+                    <div className="grid grid-cols-3 gap-2 w-full">
+                      <input
+                        value={subTitle}
+                        onChange={(e) => setSubTitle(e.target.value)}
+                        placeholder="Título del subcanal"
+                        className="px-2 py-1 text-base md:text-sm border border-gray-300 rounded col-span-3"
+                      />
+                      <input
+                        value={subDesc}
+                        onChange={(e) => setSubDesc(e.target.value)}
+                        placeholder="Descripción"
+                        className="px-2 py-1 text-base md:text-sm border border-gray-300 rounded col-span-3"
+                      />
+                      <input
+                        value={subIcon}
+                        onChange={(e) => setSubIcon(e.target.value)}
+                        placeholder="Icono (SF Symbol)"
+                        className="px-2 py-1 text-base md:text-sm border border-gray-300 rounded col-span-3"
+                      />
+                      <div className="max-h-24 overflow-y-auto border border-gray-200 rounded col-span-3">
+                        {SF_SYMBOLS.filter((s) => s.includes(subIcon))
+                          .slice(0, 25)
+                          .map((name) => (
+                            <button
+                              key={name}
+                              onClick={() => setSubIcon(name)}
+                              className={`w-full text-left px-2 py-1 text-xs flex items-center gap-2 ${subIcon === name ? 'bg-indigo-100' : 'hover:bg-gray-100'}`}
+                            >
+                              <IconView name={name} size={14} />
+                              <span>{name}</span>
+                            </button>
+                          ))}
+                      </div>
+                      <div className="col-span-3 flex items-center gap-2 justify-end">
+                        <button
+                          onClick={() => setShowSubCreate(false)}
+                          className="px-3 py-1.5 text-sm border border-gray-300 rounded"
+                        >
+                          Cancelar
+                        </button>
+                        <button
+                          onClick={handleCreateSubInline}
+                          disabled={!subTitle}
+                          className={`px-3 py-1.5 text-sm rounded ${!subTitle ? 'bg-gray-300 text-white cursor-not-allowed' : 'bg-indigo-600 text-white'}`}
+                        >
+                          {t('channels.createSubchannel')}
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          </>
+        )}
+
+            {approverModalOpen && (
+              <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center">
+                <div className="bg-white w-full max-w-4xl rounded-xl shadow-lg border border-gray-200">
+                  <div className="p-4 border-b border-gray-100 flex items-center justify-between">
+                    <div>
+                      <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+                        <ShieldCheck size={18} className="text-purple-600" />
+                        {t('channels.approvers')}
+                      </h3>
+                      <p className="text-xs text-gray-500">
+                        Gestión de aprobadores del subcanal
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => {
+                        setApproverModalOpen(false);
+                        setApproverTipOpen(false);
+                      }}
+                      className="text-gray-400 hover:text-gray-600 p-2 hover:bg-gray-50 rounded-full"
+                    >
+                      <X size={18} />
+                    </button>
+                  </div>
+                  <div className="p-6 pt-0">
+                    <div className="mb-3"></div>
+                    <Autocomplete
+                      multiple
+                      disablePortal
+                      openOnFocus
+                      clearOnBlur={false}
+                      selectOnFocus
+                      filterSelectedOptions
+                      disableClearable
+                      loading={approverEligibleLoading}
+                      noOptionsText="Escribe para buscar inscritos"
+                      options={approverEligible
+                        .filter(
+                          (opt) =>
+                            !(approverTipList || []).some((a) => a.userId === opt.user?.id)
+                        )
+                        .filter((opt) =>
+                          approverAddSearch
+                            ? (opt.user?.fullName || '')
+                              .toLowerCase()
+                              .includes(approverAddSearch.toLowerCase()) ||
+                            (opt.user?.username || '')
+                              .toLowerCase()
+                              .includes(approverAddSearch.toLowerCase())
+                            : true
+                        )
+                        .slice(0, 10)}
+                      getOptionLabel={(s) => s.user?.fullName || s.user?.username || ''}
+                      isOptionEqualToValue={(a, b) => a.user?.id === b.user?.id}
+                      getOptionDisabled={() => false}
+                      value={approverPendingAdds.map(
+                        (p) =>
+                          approverEligible.find((s) => s.user?.id === p.id) || {
+                            id: p.id,
+                            user: { id: p.id, fullName: p.name, username: '' },
+                          }
+                      )}
+                      inputValue={approverAddSearch}
+                      onInputChange={(e, v) => setApproverAddSearch(v)}
+                      onChange={(e, value) => {
+                        const pending = value.map((v) => ({
+                          id: v.user!.id,
+                          name: v.user!.fullName || v.user!.username,
+                        }));
+                        setApproverPendingAdds(pending);
+                      }}
+                      ListboxProps={{ style: { maxHeight: 180, overflowY: 'auto' } }}
+                      sx={{ width: '100%' }}
+                      slotProps={{ popper: { placement: 'bottom-start' } }}
+                      PopperComponent={(props) => (
+                        <Popper
+                          {...props}
+                          placement="bottom-start"
+                          modifiers={[
+                            { name: 'preventOverflow', enabled: false },
+                            { name: 'flip', enabled: false },
+                            { name: 'offset', options: { offset: [0, 8] } },
+                          ]}
+                          style={{ width: (props.anchorEl as any)?.clientWidth }}
+                        />
+                      )}
+                      renderInput={(params) => (
+                        <TextField
+                          {...params}
+                          label="Busca y selecciona inscritos"
+                          size="small"
+                          fullWidth
+                        />
+                      )}
+                    />
+                    <div className="mt-3 flex items-center justify-end">
+                      {approverPendingAdds.length > 0 && (
+                        <button
+                          onClick={() => setApproverAuthorizeOpen(true)}
+                          className="px-3 py-1.5 text-xs bg-indigo-600 text-white rounded"
+                        >
+                          Autorizar seleccionados
+                        </button>
+                      )}
+                    </div>
+
+                    <hr className="my-4 border-gray-200" />
+                    {approverLoading ? (
+                      <div className="animate-pulse space-y-2">
+                        {Array.from({ length: 6 }).map((_, i) => (
+                          <div key={i} className="h-10 bg-gray-100 rounded" />
+                        ))}
+                      </div>
+                    ) : (
+                      <div>
+                        <div className="max-h-[50vh] overflow-y-auto divide-y divide-gray-100">
+                          {(approverTipList || [])
+                            .filter((a) =>
+                              (a.user?.fullName || a.userId)
+                                .toLowerCase()
+                                .includes(approverSearch.toLowerCase())
+                            )
+                            .map((a) => (
+                              <div
+                                key={a.id}
+                                className="py-3 flex items-center justify-between"
+                              >
+                                <button
+                                  onClick={() => {
+                                    setApproverProfileUserId(a.userId);
+                                    setApproverProfileOpen(true);
+                                  }}
+                                  className="text-left text-sm text-gray-700 font-medium hover:underline"
+                                >
+                                  {a.user?.fullName || a.userId}{' '}
+                                  <span className="text-gray-400 text-xs font-normal">
+                                      @{a.user?.username}
+                                    </span>
+                                </button>
+                                <div className="relative">
+                                  <button
+                                    onClick={(e) => {
+                                      setApproverRemoveAnchorEl(
+                                        e.currentTarget as HTMLElement
+                                      );
+                                      setApproverRemoveId(a.userId);
+                                    }}
+                                    className="p-1.5 bg-white border border-gray-300 text-gray-700 hover:bg-gray-50 rounded inline-flex items-center justify-center"
+                                    aria-label={t('channels.remove')}
+                                    title={t('channels.remove')}
+                                  >
+                                    <Trash size={14} />
+                                  </button>
+                                  {approverRemoveId === a.userId && (
+                                    <>
+                                      <div
+                                        className="fixed inset-0 z-[900] bg-black/30 transition-opacity duration-200"
+                                        onClick={() =>
+                                          !approverRemoveLoading && setApproverRemoveId(null)
+                                        }
+                                      />
+                                      <Popper
+                                        open
+                                        placement="bottom-end"
+                                        anchorEl={approverRemoveAnchorEl}
+                                        style={{ zIndex: 1000 }}
+                                      >
+                                        <div className="relative bg-white border border-gray-200 rounded shadow-lg p-2">
+                                          <div className="absolute -top-1 right-3 w-2 h-2 bg-white border-t border-l border-gray-200 rotate-45"></div>
+                                          <div className="text-xs text-gray-700 mb-2">
+                                            ¿Eliminar aprobador?
+                                          </div>
+                                          <div className="flex items-center gap-2">
+                                            <button
+                                              onClick={() => setApproverRemoveId(null)}
+                                              disabled={approverRemoveLoading}
+                                              className="px-2 py-1 text-xs border border-gray-300 rounded"
+                                            >
+                                              Cancelar
+                                            </button>
+                                            <button
+                                              onClick={async () => {
+                                                if (!approverTipSub || !approverRemoveId)
+                                                  return;
+                                                setApproverRemoveLoading(true);
+                                                try {
+                                                  await api.removeChannelApprover(
+                                                    approverTipSub.id,
+                                                    approverRemoveId
+                                                  );
+                                                  const fresh = await api.getChannelDetails(
+                                                    approverTipSub.id
+                                                  );
+                                                  setApproverTipList(fresh.approvers || []);
+                                                  if (
+                                                    selectedChannel &&
+                                                    !selectedChannel.parentId
+                                                  ) {
+                                                    try {
+                                                      const res = await api.getSubchannels(
+                                                        selectedChannel.id,
+                                                        subPage,
+                                                        subLimit
+                                                      );
+                                                      setSubItems(res.items || []);
+                                                      setSubPages(res.pagination?.pages || 1);
+                                                    } catch {}
+                                                  }
+                                                } finally {
+                                                  setApproverRemoveLoading(false);
+                                                  setApproverRemoveId(null);
+                                                }
+                                              }}
+                                              disabled={approverRemoveLoading}
+                                              className="px-2 py-1 text-xs bg-red-600 text-white rounded inline-flex items-center gap-1"
+                                            >
+                                              {approverRemoveLoading ? (
+                                                <Loader2 size={14} className="animate-spin" />
+                                              ) : null}{' '}
+                                              Confirmar
+                                            </button>
+                                          </div>
+                                        </div>
+                                      </Popper>
+                                    </>
+                                  )}
+                                </div>
+                              </div>
+                            ))}
+                          {(!approverTipList || approverTipList.length === 0) && (
+                            <div className="py-4 text-sm text-gray-400 text-center">
+                              {t('channels.approvers_empty')}
+                            </div>
+                          )}
+                        </div>
+
+                        <div className="mt-4 border-t border-gray-100 pt-4">
+                          {approverAuthorizeOpen && (
+                            <div className="fixed inset-0 z-50">
+                              <div
+                                className="absolute inset-0 bg-black/20"
+                                onClick={() =>
+                                  !approverAddLoading && setApproverAuthorizeOpen(false)
+                                }
+                              />
+                              <div className="absolute left-1/2 -translate-x-1/2 top-1/3 bg-white rounded-lg shadow-lg border border-gray-200 w-[420px] p-4">
+                                <div className="text-sm text-gray-800 mb-3">
+                                  ¿Autorizar aprobadores para el canal {approverTipSub?.title}
+                                  ?
+                                </div>
+                                <div className="max-h-32 overflow-y-auto text-xs text-gray-700 mb-3">
+                                  {approverPendingAdds.map((p) => (
+                                    <div key={p.id} className="py-1">
+                                      {p.name}
+                                    </div>
+                                  ))}
+                                </div>
+                                <div className="flex items-center justify-end gap-2">
+                                  <button
+                                    onClick={() =>
+                                      !approverAddLoading && setApproverAuthorizeOpen(false)
+                                    }
+                                    disabled={approverAddLoading}
+                                    className="px-3 py-1.5 text-xs border border-gray-300 rounded"
+                                  >
+                                    Cancelar
+                                  </button>
+                                  <button
+                                    onClick={async () => {
+                                      if (!approverTipSub || approverAddLoading) return;
+                                      setApproverAddLoading(true);
+                                      try {
+                                        for (const p of approverPendingAdds) {
+                                          try {
+                                            await api.addChannelApprover(
+                                              approverTipSub.id,
+                                              p.id
+                                            );
+                                          } catch {}
+                                        }
+                                        const fresh = await api.getChannelDetails(
+                                          approverTipSub.id
+                                        );
+                                        setApproverTipList(fresh.approvers || []);
+                                        const res = await api.getChannelSubscribers(
+                                          approverTipSub.id,
+                                          1,
+                                          20,
+                                          approverAddSearch
+                                        );
+                                        setApproverEligible(res.items || []);
+                                        setApproverPendingAdds([]);
+                                        setApproverAuthorizeOpen(false);
+                                        if (selectedChannel && !selectedChannel.parentId) {
+                                          try {
+                                            const r = await api.getSubchannels(
+                                              selectedChannel.id,
+                                              subPage,
+                                              subLimit
+                                            );
+                                            setSubItems(r.items || []);
+                                            setSubPages(r.pagination?.pages || 1);
+                                          } catch {}
+                                        }
+                                      } finally {
+                                        setApproverAddLoading(false);
+                                      }
+                                    }}
+                                    disabled={approverAddLoading}
+                                    className="px-3 py-1.5 text-xs bg-indigo-600 text-white rounded inline-flex items-center gap-1"
+                                  >
+                                    {approverAddLoading ? (
+                                      <Loader2 size={14} className="animate-spin" />
+                                    ) : null}{' '}
+                                    Confirmar
+                                  </button>
+                                </div>
+                              </div>
+                            </div>
+                          )}
+                          {approverProfileOpen && (
+                            <div className="fixed inset-0 z-50">
+                              <div
+                                className="absolute inset-0 bg-black/30"
+                                onClick={() => setApproverProfileOpen(false)}
+                              />
+                              <div className="absolute right-0 top-0 h-full w-full max-w-md bg-white border-l border-gray-200 shadow-2xl">
+                                <div className="p-4 border-b border-gray-100 flex items-center justify-between">
+                                  <div className="flex items-center gap-2">
+                                    <Users size={18} className="text-indigo-600" />
+                                    <span className="text-sm font-semibold text-gray-900">
+                                        Perfil
+                                      </span>
+                                  </div>
+                                  <button
+                                    onClick={() => setApproverProfileOpen(false)}
+                                    className="p-2 rounded hover:bg-gray-50 text-gray-500"
+                                  >
+                                    <X size={16} />
+                                  </button>
+                                </div>
+                                <div className="p-4 h-full overflow-y-auto">
+                                  {approverProfileLoading ? (
+                                    <div className="space-y-3 animate-pulse">
+                                      <div className="flex items-center gap-3">
+                                        <div className="w-10 h-10 rounded-full bg-gray-200" />
+                                        <div className="h-4 w-40 bg-gray-200 rounded" />
+                                      </div>
+                                      <div className="h-4 w-3/5 bg-gray-200 rounded" />
+                                      <div className="h-4 w-1/2 bg-gray-200 rounded" />
+                                      <div className="h-4 w-1/3 bg-gray-200 rounded" />
+                                      <div className="h-5 w-24 bg-gray-200 rounded" />
+                                      <div className="h-5 w-24 bg-gray-200 rounded" />
+                                    </div>
+                                  ) : approverProfile ? (
+                                    <>
+                                      <div className="flex items-center gap-3 mb-3">
+                                        <div className="w-10 h-10 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-600">
+                                          <Users size={18} />
+                                        </div>
+                                        <div>
+                                          <div className="text-sm font-semibold text-gray-900">
+                                            {approverProfile.fullName ||
+                                              approverProfile.username}
+                                          </div>
+                                          <div className="text-xs text-gray-500">
+                                            @{approverProfile.username}
+                                          </div>
+                                        </div>
+                                      </div>
+                                      <div className="grid grid-cols-2 gap-2 mb-4">
+                                        <div className="p-2 rounded border bg-white">
+                                          <div className="text-[11px] text-gray-500">
+                                            Suscripciones
+                                          </div>
+                                          <div className="text-sm font-semibold text-gray-900">
+                                            {approverProfile.subscribedChannelsCount?.toLocaleString?.() ||
+                                              0}
+                                          </div>
+                                        </div>
+                                        <div className="p-2 rounded border bg-white">
+                                          <div className="text-[11px] text-gray-500">
+                                            Canales propios
+                                          </div>
+                                          <div className="text-sm font-semibold text-gray-900">
+                                            {approverProfile.ownedChannelsCount?.toLocaleString?.() ||
+                                              0}
+                                          </div>
+                                        </div>
+                                      </div>
+                                      <div className="mb-3 text-xs font-semibold text-gray-700">
+                                        Asignaciones como aprobador
+                                      </div>
+                                      <div className="space-y-2 mb-4">
+                                        {approverProfileApprovers.length === 0 ? (
+                                          <div className="text-xs text-gray-400">
+                                            Sin asignaciones
+                                          </div>
+                                        ) : (
+                                          approverProfileApprovers.map((ap) => (
+                                            <div
+                                              key={ap.id}
+                                              className="p-2 rounded border bg-white flex items-center justify-between"
+                                            >
+                                              <div className="flex items-center gap-2">
+                                                <IconView
+                                                  name={ap.channel?.icon}
+                                                  size={14}
+                                                  className="text-gray-500"
+                                                />
+                                                <div className="text-sm text-gray-800">
+                                                  {ap.channel?.title}
+                                                </div>
+                                              </div>
+                                              {ap.channel?.parentId ? (
+                                                <span className="text-[10px] px-1.5 py-0.5 rounded bg-indigo-100 text-indigo-700 border border-indigo-200 inline-flex items-center">
+                                                    Subcanal
+                                                  </span>
+                                              ) : null}
+                                            </div>
+                                          ))
+                                        )}
+                                      </div>
+                                      <div className="mb-3 text-xs font-semibold text-gray-700">
+                                        Suscripciones
+                                      </div>
+                                      <div className="space-y-2">
+                                        {approverProfileSubs.length === 0 ? (
+                                          <div className="text-xs text-gray-400">
+                                            Sin suscripciones activas
+                                          </div>
+                                        ) : (
+                                          approverProfileSubs.map((s) => (
+                                            <div
+                                              key={s.id}
+                                              className="p-2 rounded border bg-white flex items-center gap-2"
+                                            >
+                                              <IconView
+                                                name={s.channel?.icon}
+                                                size={14}
+                                                className="text-gray-500"
+                                              />
+                                              <div className="text-sm text-gray-800">
+                                                {s.channel?.title}
+                                              </div>
+                                            </div>
+                                          ))
+                                        )}
+                                      </div>
+                                    </>
+                                  ) : (
+                                    <div className="text-xs text-gray-400">
+                                      No se pudo cargar el perfil
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {subsModalOpen && (
+              <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center">
+                <div className="bg-white w-full max-w-3xl rounded-xl shadow-lg border border-gray-200">
+                  <div className="p-4 border-b border-gray-100 flex items-center justify-between">
+                    <div>
+                      <h3 className="text-lg font-semibold text-gray-900">Inscritos</h3>
+                      <p className="text-xs text-gray-500">
+                        Usuarios inscritos en el subcanal
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => setSubsModalOpen(false)}
+                      className="text-gray-400 hover:text-gray-600 p-2 hover:bg-gray-50 rounded-full"
+                    >
+                      <X size={18} />
+                    </button>
+                  </div>
+                  <div className="p-6">
+                    <input
+                      value={subsSearch}
+                      onChange={(e) => setSubsSearch(e.target.value)}
+                      placeholder="Buscar usuario..."
+                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded mb-3"
+                    />
+                    {subsLoading ? (
+                      <div className="animate-pulse space-y-2">
+                        {Array.from({ length: 8 }).map((_, i) => (
+                          <div key={i} className="h-10 bg-gray-100 rounded" />
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="max-h-[50vh] overflow-y-auto divide-y divide-gray-100">
+                        {subsItems.map((s) => (
+                          <div key={s.id} className="py-2 flex items-center justify-between">
+                            <div className="text-sm text-gray-700 font-medium">
+                              {s.user?.fullName || s.user?.username || s.user?.email}{' '}
+                              <span className="text-gray-400 text-xs font-normal">
+                                  @{s.user?.username}
+                                </span>
+                            </div>
+                            <div className="text-xs text-gray-500">
+                              <Clock size={12} className="inline-block mr-1 text-gray-400" />
+                              {`hace ${relativeFrom(s.subscribedAt)}`}
+                              <div className="absolute left-1/2 -translate-x-1/2 top-full mt-1 bg-gray-900 text-white text-[10px] rounded px-2 py-1 opacity-0 group-hover:opacity-100 whitespace-nowrap">
+                                {formatLocal(s.subscribedAt)}
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                        {subsItems.length === 0 && (
+                          <div className="py-4 text-sm text-gray-400 text-center">
+                            Sin inscritos
+                          </div>
+                        )}
+                      </div>
+                    )}
                     <div className="pt-3 flex items-center justify-between">
                       <div className="flex items-center gap-2">
                         <button
-                          disabled={subPage <= 1}
-                          onClick={() => setSubPage((p) => p - 1)}
-                          className={`px-3 py-1.5 text-sm rounded border ${subPage <= 1 ? 'text-gray-400 border-gray-200' : 'text-gray-700 border-gray-300 hover:bg-gray-50'}`}
+                          disabled={subsPage <= 1}
+                          onClick={() => setSubsPage((p) => p - 1)}
+                          className={`px-3 py-1.5 text-sm rounded border ${subsPage <= 1 ? 'text-gray-400 border-gray-200' : 'text-gray-700 border-gray-300 hover:bg-gray-50'}`}
                         >
                           Anterior
                         </button>
                         <span className="text-xs text-gray-500">
-                          Página {subPage} de {subPages}
-                        </span>
+                            Página {subsPage} de {subsPages}
+                          </span>
                         <button
-                          disabled={subPage >= subPages}
-                          onClick={() => setSubPage((p) => p + 1)}
-                          className={`px-3 py-1.5 text-sm rounded border ${subPage >= subPages ? 'text-gray-400 border-gray-200' : 'text-gray-700 border-gray-300 hover:bg-gray-50'}`}
+                          disabled={subsPage >= subsPages}
+                          onClick={() => setSubsPage((p) => p + 1)}
+                          className={`px-3 py-1.5 text-sm rounded border ${subsPage >= subsPages ? 'text-gray-400 border-gray-200' : 'text-gray-700 border-gray-300 hover:bg-gray-50'}`}
                         >
                           Siguiente
                         </button>
                       </div>
-                      {!showSubCreate ? (
-                        <button
-                          onClick={() => {
-                            setShowSubCreate(true);
-                            setSubTitle('');
-                            setSubDesc('');
-                            setSubIcon('');
-                          }}
-                          className="px-3 py-1.5 text-sm bg-indigo-600 text-white rounded"
-                        >
-                          {t('channels.createSubchannel')}
-                        </button>
-                      ) : (
-                        <div className="grid grid-cols-3 gap-2 w-full">
-                          <input
-                            value={subTitle}
-                            onChange={(e) => setSubTitle(e.target.value)}
-                            placeholder="Título del subcanal"
-                            className="px-2 py-1 text-sm border border-gray-300 rounded col-span-3"
-                          />
-                          <input
-                            value={subDesc}
-                            onChange={(e) => setSubDesc(e.target.value)}
-                            placeholder="Descripción"
-                            className="px-2 py-1 text-sm border border-gray-300 rounded col-span-3"
-                          />
-                          <input
-                            value={subIcon}
-                            onChange={(e) => setSubIcon(e.target.value)}
-                            placeholder="Icono (SF Symbol)"
-                            className="px-2 py-1 text-sm border border-gray-300 rounded col-span-3"
-                          />
-                          <div className="max-h-24 overflow-y-auto border border-gray-200 rounded col-span-3">
-                            {SF_SYMBOLS.filter((s) => s.includes(subIcon))
-                              .slice(0, 25)
-                              .map((name) => (
-                                <button
-                                  key={name}
-                                  onClick={() => setSubIcon(name)}
-                                  className={`w-full text-left px-2 py-1 text-xs flex items-center gap-2 ${subIcon === name ? 'bg-indigo-100' : 'hover:bg-gray-100'}`}
-                                >
-                                  <IconView name={name} size={14} />
-                                  <span>{name}</span>
-                                </button>
-                              ))}
-                          </div>
-                          <div className="col-span-3 flex items-center gap-2 justify-end">
-                            <button
-                              onClick={() => setShowSubCreate(false)}
-                              className="px-3 py-1.5 text-sm border border-gray-300 rounded"
-                            >
-                              Cancelar
-                            </button>
-                            <button
-                              onClick={handleCreateSubInline}
-                              disabled={!subTitle}
-                              className={`px-3 py-1.5 text-sm rounded ${!subTitle ? 'bg-gray-300 text-white cursor-not-allowed' : 'bg-indigo-600 text-white'}`}
-                            >
-                              {t('channels.createSubchannel')}
-                            </button>
-                          </div>
-                        </div>
-                      )}
+                      <div />
                     </div>
-                  )}
+                  </div>
+                </div>
+              </div>
+            )}
 
-                  {approverModalOpen && (
-                    <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center">
-                      <div className="bg-white w-full max-w-4xl rounded-xl shadow-lg border border-gray-200">
-                        <div className="p-4 border-b border-gray-100 flex items-center justify-between">
-                          <div>
-                            <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
-                              <ShieldCheck size={18} className="text-purple-600" />
-                              {t('channels.approvers')}
-                            </h3>
-                            <p className="text-xs text-gray-500">
-                              Gestión de aprobadores del subcanal
-                            </p>
-                          </div>
-                          <button
-                            onClick={() => {
-                              setApproverModalOpen(false);
-                              setApproverTipOpen(false);
-                            }}
-                            className="text-gray-400 hover:text-gray-600 p-2 hover:bg-gray-50 rounded-full"
-                          >
-                            <X size={18} />
-                          </button>
-                        </div>
-                        <div className="p-6 pt-0">
-                          <div className="mb-3"></div>
-                          <Autocomplete
-                            multiple
-                            disablePortal
-                            openOnFocus
-                            clearOnBlur={false}
-                            selectOnFocus
-                            filterSelectedOptions
-                            disableClearable
-                            loading={approverEligibleLoading}
-                            noOptionsText="Escribe para buscar inscritos"
-                            options={approverEligible
-                              .filter(
-                                (opt) =>
-                                  !(approverTipList || []).some((a) => a.userId === opt.user?.id)
-                              )
-                              .filter((opt) =>
-                                approverAddSearch
-                                  ? (opt.user?.fullName || '')
-                                      .toLowerCase()
-                                      .includes(approverAddSearch.toLowerCase()) ||
-                                    (opt.user?.username || '')
-                                      .toLowerCase()
-                                      .includes(approverAddSearch.toLowerCase())
-                                  : true
-                              )
-                              .slice(0, 10)}
-                            getOptionLabel={(s) => s.user?.fullName || s.user?.username || ''}
-                            isOptionEqualToValue={(a, b) => a.user?.id === b.user?.id}
-                            getOptionDisabled={() => false}
-                            value={approverPendingAdds.map(
-                              (p) =>
-                                approverEligible.find((s) => s.user?.id === p.id) || {
-                                  id: p.id,
-                                  user: { id: p.id, fullName: p.name, username: '' },
-                                }
-                            )}
-                            inputValue={approverAddSearch}
-                            onInputChange={(e, v) => setApproverAddSearch(v)}
-                            onChange={(e, value) => {
-                              const pending = value.map((v) => ({
-                                id: v.user!.id,
-                                name: v.user!.fullName || v.user!.username,
-                              }));
-                              setApproverPendingAdds(pending);
-                            }}
-                            ListboxProps={{ style: { maxHeight: 180, overflowY: 'auto' } }}
-                            sx={{ width: '100%' }}
-                            slotProps={{ popper: { placement: 'bottom-start' } }}
-                            PopperComponent={(props) => (
-                              <Popper
-                                {...props}
-                                placement="bottom-start"
-                                modifiers={[
-                                  { name: 'preventOverflow', enabled: false },
-                                  { name: 'flip', enabled: false },
-                                  { name: 'offset', options: { offset: [0, 8] } },
-                                ]}
-                                style={{ width: props.anchorEl?.clientWidth }}
-                              />
-                            )}
-                            renderInput={(params) => (
-                              <TextField
-                                {...params}
-                                label="Busca y selecciona inscritos"
-                                size="small"
-                                fullWidth
-                              />
-                            )}
-                          />
-                          <div className="mt-3 flex items-center justify-end">
-                            {approverPendingAdds.length > 0 && (
-                              <button
-                                onClick={() => setApproverAuthorizeOpen(true)}
-                                className="px-3 py-1.5 text-xs bg-indigo-600 text-white rounded"
-                              >
-                                Autorizar seleccionados
-                              </button>
-                            )}
-                          </div>
-
-                          <hr className="my-4 border-gray-200" />
-                          {approverLoading ? (
-                            <div className="animate-pulse space-y-2">
-                              {Array.from({ length: 6 }).map((_, i) => (
-                                <div key={i} className="h-10 bg-gray-100 rounded" />
-                              ))}
-                            </div>
-                          ) : (
-                            <div>
-                              <div className="max-h-[50vh] overflow-y-auto divide-y divide-gray-100">
-                                {(approverTipList || [])
-                                  .filter((a) =>
-                                    (a.user?.fullName || a.userId)
-                                      .toLowerCase()
-                                      .includes(approverSearch.toLowerCase())
-                                  )
-                                  .map((a) => (
-                                    <div
-                                      key={a.id}
-                                      className="py-3 flex items-center justify-between"
-                                    >
-                                      <button
-                                        onClick={() => {
-                                          setApproverProfileUserId(a.userId);
-                                          setApproverProfileOpen(true);
-                                        }}
-                                        className="text-left text-sm text-gray-700 font-medium hover:underline"
-                                      >
-                                        {a.user?.fullName || a.userId}{' '}
-                                        <span className="text-gray-400 text-xs font-normal">
-                                          @{a.user?.username}
-                                        </span>
-                                      </button>
-                                      <div className="relative">
-                                        <button
-                                          onClick={(e) => {
-                                            setApproverRemoveAnchorEl(
-                                              e.currentTarget as HTMLElement
-                                            );
-                                            setApproverRemoveId(a.userId);
-                                          }}
-                                          className="p-1.5 bg-white border border-gray-300 text-gray-700 hover:bg-gray-50 rounded inline-flex items-center justify-center"
-                                          aria-label={t('channels.remove')}
-                                          title={t('channels.remove')}
-                                        >
-                                          <Trash size={14} />
-                                        </button>
-                                        {approverRemoveId === a.userId && (
-                                          <>
-                                            <div
-                                              className="fixed inset-0 z-[900] bg-black/30 transition-opacity duration-200"
-                                              onClick={() =>
-                                                !approverRemoveLoading && setApproverRemoveId(null)
-                                              }
-                                            />
-                                            <Popper
-                                              open
-                                              placement="bottom-end"
-                                              anchorEl={approverRemoveAnchorEl}
-                                              style={{ zIndex: 1000 }}
-                                            >
-                                              <div className="relative bg-white border border-gray-200 rounded shadow-lg p-2">
-                                                <div className="absolute -top-1 right-3 w-2 h-2 bg-white border-t border-l border-gray-200 rotate-45"></div>
-                                                <div className="text-xs text-gray-700 mb-2">
-                                                  ¿Eliminar aprobador?
-                                                </div>
-                                                <div className="flex items-center gap-2">
-                                                  <button
-                                                    onClick={() => setApproverRemoveId(null)}
-                                                    disabled={approverRemoveLoading}
-                                                    className="px-2 py-1 text-xs border border-gray-300 rounded"
-                                                  >
-                                                    Cancelar
-                                                  </button>
-                                                  <button
-                                                    onClick={async () => {
-                                                      if (!approverTipSub || !approverRemoveId)
-                                                        return;
-                                                      setApproverRemoveLoading(true);
-                                                      try {
-                                                        await api.removeChannelApprover(
-                                                          approverTipSub.id,
-                                                          approverRemoveId
-                                                        );
-                                                        const fresh = await api.getChannelDetails(
-                                                          approverTipSub.id
-                                                        );
-                                                        setApproverTipList(fresh.approvers || []);
-                                                        if (
-                                                          selectedChannel &&
-                                                          !selectedChannel.parentId
-                                                        ) {
-                                                          try {
-                                                            const res = await api.getSubchannels(
-                                                              selectedChannel.id,
-                                                              subPage,
-                                                              subLimit
-                                                            );
-                                                            setSubItems(res.items || []);
-                                                            setSubPages(res.pagination?.pages || 1);
-                                                          } catch {}
-                                                        }
-                                                      } finally {
-                                                        setApproverRemoveLoading(false);
-                                                        setApproverRemoveId(null);
-                                                      }
-                                                    }}
-                                                    disabled={approverRemoveLoading}
-                                                    className="px-2 py-1 text-xs bg-red-600 text-white rounded inline-flex items-center gap-1"
-                                                  >
-                                                    {approverRemoveLoading ? (
-                                                      <Loader2 size={14} className="animate-spin" />
-                                                    ) : null}{' '}
-                                                    Confirmar
-                                                  </button>
-                                                </div>
-                                              </div>
-                                            </Popper>
-                                          </>
-                                        )}
-                                      </div>
-                                    </div>
-                                  ))}
-                                {(!approverTipList || approverTipList.length === 0) && (
-                                  <div className="py-4 text-sm text-gray-400 text-center">
-                                    {t('channels.approvers_empty')}
-                                  </div>
-                                )}
-                              </div>
-
-                              <div className="mt-4 border-t border-gray-100 pt-4">
-                                {approverAuthorizeOpen && (
-                                  <div className="fixed inset-0 z-50">
-                                    <div
-                                      className="absolute inset-0 bg-black/20"
-                                      onClick={() =>
-                                        !approverAddLoading && setApproverAuthorizeOpen(false)
-                                      }
-                                    />
-                                    <div className="absolute left-1/2 -translate-x-1/2 top-1/3 bg-white rounded-lg shadow-lg border border-gray-200 w-[420px] p-4">
-                                      <div className="text-sm text-gray-800 mb-3">
-                                        ¿Autorizar aprobadores para el canal {approverTipSub?.title}
-                                        ?
-                                      </div>
-                                      <div className="max-h-32 overflow-y-auto text-xs text-gray-700 mb-3">
-                                        {approverPendingAdds.map((p) => (
-                                          <div key={p.id} className="py-1">
-                                            {p.name}
-                                          </div>
-                                        ))}
-                                      </div>
-                                      <div className="flex items-center justify-end gap-2">
-                                        <button
-                                          onClick={() =>
-                                            !approverAddLoading && setApproverAuthorizeOpen(false)
-                                          }
-                                          disabled={approverAddLoading}
-                                          className="px-3 py-1.5 text-xs border border-gray-300 rounded"
-                                        >
-                                          Cancelar
-                                        </button>
-                                        <button
-                                          onClick={async () => {
-                                            if (!approverTipSub || approverAddLoading) return;
-                                            setApproverAddLoading(true);
-                                            try {
-                                              for (const p of approverPendingAdds) {
-                                                try {
-                                                  await api.addChannelApprover(
-                                                    approverTipSub.id,
-                                                    p.id
-                                                  );
-                                                } catch {}
-                                              }
-                                              const fresh = await api.getChannelDetails(
-                                                approverTipSub.id
-                                              );
-                                              setApproverTipList(fresh.approvers || []);
-                                              const res = await api.getChannelSubscribers(
-                                                approverTipSub.id,
-                                                1,
-                                                20,
-                                                approverAddSearch
-                                              );
-                                              setApproverEligible(res.items || []);
-                                              setApproverPendingAdds([]);
-                                              setApproverAuthorizeOpen(false);
-                                              if (selectedChannel && !selectedChannel.parentId) {
-                                                try {
-                                                  const r = await api.getSubchannels(
-                                                    selectedChannel.id,
-                                                    subPage,
-                                                    subLimit
-                                                  );
-                                                  setSubItems(r.items || []);
-                                                  setSubPages(r.pagination?.pages || 1);
-                                                } catch {}
-                                              }
-                                            } finally {
-                                              setApproverAddLoading(false);
-                                            }
-                                          }}
-                                          disabled={approverAddLoading}
-                                          className="px-3 py-1.5 text-xs bg-indigo-600 text-white rounded inline-flex items-center gap-1"
-                                        >
-                                          {approverAddLoading ? (
-                                            <Loader2 size={14} className="animate-spin" />
-                                          ) : null}{' '}
-                                          Confirmar
-                                        </button>
-                                      </div>
-                                    </div>
-                                  </div>
-                                )}
-                                {approverProfileOpen && (
-                                  <div className="fixed inset-0 z-50">
-                                    <div
-                                      className="absolute inset-0 bg-black/30"
-                                      onClick={() => setApproverProfileOpen(false)}
-                                    />
-                                    <div className="absolute right-0 top-0 h-full w-full max-w-md bg-white border-l border-gray-200 shadow-2xl">
-                                      <div className="p-4 border-b border-gray-100 flex items-center justify-between">
-                                        <div className="flex items-center gap-2">
-                                          <Users size={18} className="text-indigo-600" />
-                                          <span className="text-sm font-semibold text-gray-900">
-                                            Perfil
-                                          </span>
-                                        </div>
-                                        <button
-                                          onClick={() => setApproverProfileOpen(false)}
-                                          className="p-2 rounded hover:bg-gray-50 text-gray-500"
-                                        >
-                                          <X size={16} />
-                                        </button>
-                                      </div>
-                                      <div className="p-4 h-full overflow-y-auto">
-                                        {approverProfileLoading ? (
-                                          <div className="space-y-3 animate-pulse">
-                                            <div className="flex items-center gap-3">
-                                              <div className="w-10 h-10 rounded-full bg-gray-200" />
-                                              <div className="h-4 w-40 bg-gray-200 rounded" />
-                                            </div>
-                                            <div className="h-4 w-3/5 bg-gray-200 rounded" />
-                                            <div className="h-4 w-1/2 bg-gray-200 rounded" />
-                                            <div className="h-4 w-1/3 bg-gray-200 rounded" />
-                                            <div className="h-5 w-24 bg-gray-200 rounded" />
-                                            <div className="h-5 w-24 bg-gray-200 rounded" />
-                                          </div>
-                                        ) : approverProfile ? (
-                                          <>
-                                            <div className="flex items-center gap-3 mb-3">
-                                              <div className="w-10 h-10 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-600">
-                                                <Users size={18} />
-                                              </div>
-                                              <div>
-                                                <div className="text-sm font-semibold text-gray-900">
-                                                  {approverProfile.fullName ||
-                                                    approverProfile.username}
-                                                </div>
-                                                <div className="text-xs text-gray-500">
-                                                  @{approverProfile.username}
-                                                </div>
-                                              </div>
-                                            </div>
-                                            <div className="grid grid-cols-2 gap-2 mb-4">
-                                              <div className="p-2 rounded border bg-white">
-                                                <div className="text-[11px] text-gray-500">
-                                                  Suscripciones
-                                                </div>
-                                                <div className="text-sm font-semibold text-gray-900">
-                                                  {approverProfile.subscribedChannelsCount?.toLocaleString?.() ||
-                                                    0}
-                                                </div>
-                                              </div>
-                                              <div className="p-2 rounded border bg-white">
-                                                <div className="text-[11px] text-gray-500">
-                                                  Canales propios
-                                                </div>
-                                                <div className="text-sm font-semibold text-gray-900">
-                                                  {approverProfile.ownedChannelsCount?.toLocaleString?.() ||
-                                                    0}
-                                                </div>
-                                              </div>
-                                            </div>
-                                            <div className="mb-3 text-xs font-semibold text-gray-700">
-                                              Asignaciones como aprobador
-                                            </div>
-                                            <div className="space-y-2 mb-4">
-                                              {approverProfileApprovers.length === 0 ? (
-                                                <div className="text-xs text-gray-400">
-                                                  Sin asignaciones
-                                                </div>
-                                              ) : (
-                                                approverProfileApprovers.map((ap) => (
-                                                  <div
-                                                    key={ap.id}
-                                                    className="p-2 rounded border bg-white flex items-center justify-between"
-                                                  >
-                                                    <div className="flex items-center gap-2">
-                                                      <IconView
-                                                        name={ap.channel?.icon}
-                                                        size={14}
-                                                        className="text-gray-500"
-                                                      />
-                                                      <div className="text-sm text-gray-800">
-                                                        {ap.channel?.title}
-                                                      </div>
-                                                    </div>
-                                                    {ap.channel?.parentId ? (
-                                                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-indigo-100 text-indigo-700 border border-indigo-200 inline-flex items-center">
-                                                        Subcanal
-                                                      </span>
-                                                    ) : null}
-                                                  </div>
-                                                ))
-                                              )}
-                                            </div>
-                                            <div className="mb-3 text-xs font-semibold text-gray-700">
-                                              Suscripciones
-                                            </div>
-                                            <div className="space-y-2">
-                                              {approverProfileSubs.length === 0 ? (
-                                                <div className="text-xs text-gray-400">
-                                                  Sin suscripciones activas
-                                                </div>
-                                              ) : (
-                                                approverProfileSubs.map((s) => (
-                                                  <div
-                                                    key={s.id}
-                                                    className="p-2 rounded border bg-white flex items-center gap-2"
-                                                  >
-                                                    <IconView
-                                                      name={s.channel?.icon}
-                                                      size={14}
-                                                      className="text-gray-500"
-                                                    />
-                                                    <div className="text-sm text-gray-800">
-                                                      {s.channel?.title}
-                                                    </div>
-                                                  </div>
-                                                ))
-                                              )}
-                                            </div>
-                                          </>
-                                        ) : (
-                                          <div className="text-xs text-gray-400">
-                                            No se pudo cargar el perfil
-                                          </div>
-                                        )}
-                                      </div>
-                                    </div>
-                                  </div>
-                                )}
-                              </div>
-                            </div>
-                          )}
-                        </div>
-                      </div>
+            {pendingModalOpen && (
+              <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center">
+                <div className="bg-white w-full max-w-3xl rounded-xl shadow-lg border border-gray-200">
+                  <div className="p-4 border-b border-gray-100 flex items-center justify-between">
+                    <div>
+                      <h3 className="text-lg font-semibold text-gray-900">
+                        Pendientes por aprobar
+                      </h3>
+                      <p className="text-xs text-gray-500">
+                        Mensajes en espera de aprobación
+                      </p>
                     </div>
-                  )}
-
-                  {subsModalOpen && (
-                    <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center">
-                      <div className="bg-white w-full max-w-3xl rounded-xl shadow-lg border border-gray-200">
-                        <div className="p-4 border-b border-gray-100 flex items-center justify-between">
-                          <div>
-                            <h3 className="text-lg font-semibold text-gray-900">Inscritos</h3>
-                            <p className="text-xs text-gray-500">
-                              Usuarios inscritos en el subcanal
-                            </p>
-                          </div>
-                          <button
-                            onClick={() => setSubsModalOpen(false)}
-                            className="text-gray-400 hover:text-gray-600 p-2 hover:bg-gray-50 rounded-full"
-                          >
-                            <X size={18} />
-                          </button>
-                        </div>
-                        <div className="p-6">
-                          <input
-                            value={subsSearch}
-                            onChange={(e) => setSubsSearch(e.target.value)}
-                            placeholder="Buscar usuario..."
-                            className="w-full px-3 py-2 text-sm border border-gray-300 rounded mb-3"
-                          />
-                          {subsLoading ? (
-                            <div className="animate-pulse space-y-2">
-                              {Array.from({ length: 8 }).map((_, i) => (
-                                <div key={i} className="h-10 bg-gray-100 rounded" />
-                              ))}
-                            </div>
-                          ) : (
-                            <div className="max-h-[50vh] overflow-y-auto divide-y divide-gray-100">
-                              {subsItems.map((s) => (
-                                <div key={s.id} className="py-2 flex items-center justify-between">
-                                  <div className="text-sm text-gray-700 font-medium">
-                                    {s.user?.fullName || s.user?.username || s.user?.email}{' '}
-                                    <span className="text-gray-400 text-xs font-normal">
-                                      @{s.user?.username}
-                                    </span>
-                                  </div>
-                                  <div className="text-xs text-gray-500">
-                                    <Clock size={12} className="inline-block mr-1 text-gray-400" />
-                                    {`hace ${relativeFrom(s.subscribedAt)}`}
-                                    <div className="absolute left-1/2 -translate-x-1/2 top-full mt-1 bg-gray-900 text-white text-[10px] rounded px-2 py-1 opacity-0 group-hover:opacity-100 whitespace-nowrap">
-                                      {formatLocal(s.subscribedAt)}
-                                    </div>
-                                  </div>
-                                </div>
-                              ))}
-                              {subsItems.length === 0 && (
-                                <div className="py-4 text-sm text-gray-400 text-center">
-                                  Sin inscritos
-                                </div>
-                              )}
-                            </div>
-                          )}
-                          <div className="pt-3 flex items-center justify-between">
-                            <div className="flex items-center gap-2">
-                              <button
-                                disabled={subsPage <= 1}
-                                onClick={() => setSubsPage((p) => p - 1)}
-                                className={`px-3 py-1.5 text-sm rounded border ${subsPage <= 1 ? 'text-gray-400 border-gray-200' : 'text-gray-700 border-gray-300 hover:bg-gray-50'}`}
-                              >
-                                Anterior
-                              </button>
-                              <span className="text-xs text-gray-500">
-                                Página {subsPage} de {subsPages}
-                              </span>
-                              <button
-                                disabled={subsPage >= subsPages}
-                                onClick={() => setSubsPage((p) => p + 1)}
-                                className={`px-3 py-1.5 text-sm rounded border ${subsPage >= subsPages ? 'text-gray-400 border-gray-200' : 'text-gray-700 border-gray-300 hover:bg-gray-50'}`}
-                              >
-                                Siguiente
-                              </button>
-                            </div>
-                            <div />
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-
-                  {pendingModalOpen && (
-                    <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center">
-                      <div className="bg-white w-full max-w-3xl rounded-xl shadow-lg border border-gray-200">
-                        <div className="p-4 border-b border-gray-100 flex items-center justify-between">
-                          <div>
-                            <h3 className="text-lg font-semibold text-gray-900">
-                              Pendientes por aprobar
-                            </h3>
-                            <p className="text-xs text-gray-500">
-                              Mensajes en espera de aprobación
-                            </p>
-                          </div>
-                          <button
-                            onClick={() => setPendingModalOpen(false)}
-                            className="text-gray-400 hover:text-gray-600 p-2 hover:bg-gray-50 rounded-full"
-                          >
-                            <X size={18} />
-                          </button>
-                        </div>
-                        <div className="p-6">
-                          {pendingLoading ? (
-                            <div className="animate-pulse space-y-2">
-                              {Array.from({ length: 6 }).map((_, i) => (
-                                <div key={i} className="h-16 bg-gray-100 rounded" />
-                              ))}
-                            </div>
-                          ) : messagesFilter.priority && messagesFilter.emergency === true ? (
-                            <div className="py-16 flex flex-col items-center justify-center text-center">
-                              <MessageSquarePlus size={48} className="text-gray-300 mb-2" />
-                              <div className="text-sm font-medium text-gray-900">
-                                Los mensajes emergentes no tienen clasificación de prioridad
-                              </div>
-                              <div className="text-xs text-gray-500 mt-1">
-                                Quita el filtro de prioridad o desmarca emergente
-                              </div>
-                            </div>
-                          ) : (
-                            <div className="max-h-[50vh] overflow-y-auto space-y-3">
-                              {pendingItems.map((m) => (
-                                <div
-                                  key={m.id}
-                                  className={`p-4 rounded-lg border ${m.isEmergency ? 'bg-amber-50 border-amber-200' : 'bg-gray-50 border-gray-200'}`}
-                                >
-                                  <div className="flex items-center justify-between">
-                                    <div className="text-sm font-semibold text-gray-900">
-                                      {m.channel?.title || selectedChannel?.title || 'Canal'}
-                                    </div>
-                                    <div className="flex items-center gap-2">
-                                      <span
-                                        className={`text-xs px-2 py-0.5 rounded-full border ${m.priority === 'HIGH' ? 'bg-red-50 text-red-700 border-red-200' : m.priority === 'LOW' ? 'bg-gray-100 text-gray-700 border-gray-200' : 'bg-blue-50 text-blue-700 border-blue-200'}`}
-                                      >
-                                        {m.priority === 'HIGH'
-                                          ? t('priority.high')
-                                          : m.priority === 'LOW'
-                                            ? t('priority.low')
-                                            : t('priority.medium')}
-                                      </span>
-                                    </div>
-                                  </div>
-                                  <div className="mt-2 text-sm text-gray-800">{m.content}</div>
-                                  <div className="mt-2 flex flex-wrap items-center gap-4 text-xs text-gray-600">
-                                    <div className="flex items-center gap-1">
-                                      <Clock size={12} className="text-gray-500" />
-                                      {m.sender?.fullName ||
-                                        m.sender?.username ||
-                                        'Desconocido'} · {timeTo(m.createdAt)}
-                                    </div>
-                                    {m.eventAt && (
-                                      <div className="flex items-center gap-1">
-                                        <Calendar size={12} className="text-indigo-600" />
-                                        Evento {timeTo(m.eventAt)}
-                                      </div>
-                                    )}
-                                    {m.expiresAt && (
-                                      <div className="flex items-center gap-1">
-                                        <Clock size={12} className="text-amber-600" />
-                                        Expira {timeTo(m.expiresAt)}
-                                      </div>
-                                    )}
-                                    {m.isEmergency && (
-                                      <div className="flex items-center gap-1 text-amber-700">
-                                        <AlertTriangle size={12} />
-                                        Emergencia
-                                      </div>
-                                    )}
-                                    <ApproverSpeedDial messageId={m.id} channelId={m.channelId} />
-                                  </div>
-                                </div>
-                              ))}
-                              {pendingItems.length === 0 && (
-                                <div className="py-4 text-sm text-gray-400 text-center">
-                                  Sin pendientes
-                                </div>
-                              )}
-                            </div>
-                          )}
-                          <div className="pt-3 flex items-center justify-between">
-                            <div className="flex items-center gap-2">
-                              <button
-                                disabled={pendingPage <= 1}
-                                onClick={() => setPendingPage((p) => p - 1)}
-                                className={`px-3 py-1.5 text-sm rounded border ${pendingPage <= 1 ? 'text-gray-400 border-gray-200' : 'text-gray-700 border-gray-300 hover:bg-gray-50'}`}
-                              >
-                                Anterior
-                              </button>
-                              <span className="text-xs text-gray-500">
-                                Página {pendingPage} de {pendingPages}
-                              </span>
-                              <button
-                                disabled={pendingPage >= pendingPages}
-                                onClick={() => setPendingPage((p) => p + 1)}
-                                className={`px-3 py-1.5 text-sm rounded border ${pendingPage >= pendingPages ? 'text-gray-400 border-gray-200' : 'text-gray-700 border-gray-300 hover:bg-gray-50'}`}
-                              >
-                                Siguiente
-                              </button>
-                            </div>
-                            <div />
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-                  {(messagesModalOpen || selectedChannel?.parentId) && (
-                    <div
-                      className={`${selectedChannel?.parentId ? 'static bg-transparent z-auto' : 'fixed inset-0 bg-black/40 z-50'} flex items-center justify-center`}
+                    <button
+                      onClick={() => setPendingModalOpen(false)}
+                      className="text-gray-400 hover:text-gray-600 p-2 hover:bg-gray-50 rounded-full"
                     >
-                      <div
-                        className={`bg-white w-full ${selectedChannel?.parentId ? '' : 'max-w-3xl'} rounded-xl shadow-lg border border-gray-200`}
-                      >
-                        <div className="p-4 border-b border-gray-100 flex items-center justify-between">
-                          <div className="flex items-center gap-3">
-                            <div className="flex flex-col">
-                              <span className="text-xs font-semibold text-gray-900">Mensajes</span>
-                              <div className="text-xs text-gray-500 flex items-center gap-1">
-                                <span>Rango</span>
-                                <button
-                                  onClick={(e) => {
-                                    setRangeMenuOpen((v) => !v);
-                                    setRangeMenuAnchorEl(e.currentTarget as HTMLElement);
-                                  }}
-                                  className="px-1.5 py-0.5 rounded border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 inline-flex items-center gap-1"
-                                >
-                                  {statsRange === '1h'
-                                    ? '1H'
-                                    : statsRange === '24h'
-                                      ? '24H'
-                                      : statsRange === '7d'
-                                        ? '1 Semana'
-                                        : statsRange === '1m'
-                                          ? '1 Mes'
-                                          : 'Histórico'}
-                                  <ChevronDown size={12} className="text-gray-500" />
-                                </button>
-                                {rangeMenuOpen && (
-                                  <Popper
-                                    open
-                                    placement="bottom-start"
-                                    anchorEl={rangeMenuAnchorEl}
-                                    style={{ zIndex: 1000 }}
+                      <X size={18} />
+                    </button>
+                  </div>
+                  <div className="p-6">
+                    {pendingLoading ? (
+                      <div className="animate-pulse space-y-2">
+                        {Array.from({ length: 6 }).map((_, i) => (
+                          <div key={i} className="h-16 bg-gray-100 rounded" />
+                        ))}
+                      </div>
+                    ) : messagesFilter.priority && messagesFilter.emergency === true ? (
+                      <div className="py-16 flex flex-col items-center justify-center text-center">
+                        <MessageSquarePlus size={48} className="text-gray-300 mb-2" />
+                        <div className="text-sm font-medium text-gray-900">
+                          Los mensajes emergentes no tienen clasificación de prioridad
+                        </div>
+                        <div className="text-xs text-gray-500 mt-1">
+                          Quita el filtro de prioridad o desmarca emergente
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="max-h-[50vh] overflow-y-auto space-y-3">
+                        {pendingItems.map((m) => (
+                          <div
+                            key={m.id}
+                            className={`p-4 rounded-lg border ${m.isEmergency ? 'bg-amber-50 border-amber-200' : 'bg-gray-50 border-gray-200'}`}
+                          >
+                            <div className="flex items-center justify-between">
+                              <div className="text-sm font-semibold text-gray-900">
+                                {m.channel?.title || selectedChannel?.title || 'Canal'}
+                              </div>
+                              <div className="flex items-center gap-2">
+                                  <span
+                                    className={`text-xs px-2 py-0.5 rounded-full border ${m.priority === 'HIGH' ? 'bg-red-50 text-red-700 border-red-200' : m.priority === 'LOW' ? 'bg-gray-100 text-gray-700 border-gray-200' : 'bg-blue-50 text-blue-700 border-blue-200'}`}
                                   >
-                                    <div className="bg-white border border-gray-200 rounded shadow p-1 text-xs">
-                                      <button
-                                        onClick={() => {
-                                          setStatsRange('1h');
-                                          setRangeMenuOpen(false);
-                                        }}
-                                        className="block w-full text-left px-2 py-1 rounded hover:bg-gray-50"
-                                      >
-                                        1H
-                                      </button>
-                                      <button
-                                        onClick={() => {
-                                          setStatsRange('24h');
-                                          setRangeMenuOpen(false);
-                                        }}
-                                        className="block w-full text-left px-2 py-1 rounded hover:bg-gray-50"
-                                      >
-                                        24H
-                                      </button>
-                                      <button
-                                        onClick={() => {
-                                          setStatsRange('7d');
-                                          setRangeMenuOpen(false);
-                                        }}
-                                        className="block w-full text-left px-2 py-1 rounded hover:bg-gray-50"
-                                      >
-                                        1 Semana
-                                      </button>
-                                      <button
-                                        onClick={() => {
-                                          setStatsRange('1m');
-                                          setRangeMenuOpen(false);
-                                        }}
-                                        className="block w-full text-left px-2 py-1 rounded hover:bg-gray-50"
-                                      >
-                                        1 Mes
-                                      </button>
-                                      <button
-                                        onClick={() => {
-                                          setStatsRange('all');
-                                          setRangeMenuOpen(false);
-                                        }}
-                                        className="block w-full text-left px-2 py-1 rounded hover:bg-gray-50"
-                                      >
-                                        Histórico
-                                      </button>
-                                    </div>
-                                  </Popper>
-                                )}
+                                    {m.priority === 'HIGH'
+                                      ? t('priority.high')
+                                      : m.priority === 'LOW'
+                                        ? t('priority.low')
+                                        : t('priority.medium')}
+                                  </span>
                               </div>
                             </div>
-                            <span className="h-4 w-px bg-gray-200"></span>
-                            <h3 className="text-lg font-semibold text-gray-900">
-                              Mensajes{selectedChannel?.title}
-                            </h3>
-                          </div>
-                          {selectedChannel?.parentId ? (
-                            <button
-                              onClick={() => setInlineStatsHidden((v) => !v)}
-                              className="text-gray-500 hover:text-gray-700 p-2 hover:bg-gray-50 rounded-full transition-transform duration-200"
-                              aria-label={inlineStatsHidden ? 'Minimizar' : 'Ampliar'}
-                              title={inlineStatsHidden ? 'Minimizar' : 'Ampliar'}
-                            >
-                              {inlineStatsHidden ? (
-                                <Minimize2 size={18} className="transform" />
-                              ) : (
-                                <Maximize2 size={18} className="transform" />
+                            <div className="mt-2 text-sm text-gray-800">{m.content}</div>
+                            <div className="mt-2 flex flex-wrap items-center gap-4 text-xs text-gray-600">
+                              <div className="flex items-center gap-1">
+                                <Clock size={12} className="text-gray-500" />
+                                {m.sender?.fullName ||
+                                  m.sender?.username ||
+                                  'Desconocido'} · {timeTo(m.createdAt)}
+                              </div>
+                              {m.eventAt && (
+                                <div className="flex items-center gap-1">
+                                  <Calendar size={12} className="text-indigo-600" />
+                                  Evento {timeTo(m.eventAt)}
+                                </div>
                               )}
-                            </button>
-                          ) : (
-                            <button
-                              onClick={() => {
-                                setMessagesSearch('');
-                                setMessagesQuick('all');
-                                setMessagesFilter({
-                                  priority: undefined,
-                                  emergency: undefined,
-                                  expired: undefined,
-                                  hasApprovals: undefined,
-                                });
-                                setMessagesFilterOpen(false);
-                                setMessagesPage(1);
-                                setMessagesModalOpen(false);
-                              }}
-                              className="text-gray-400 hover:text-gray-600 p-2 hover:bg-gray-50 rounded-full"
+                              {m.expiresAt && (
+                                <div className="flex items-center gap-1">
+                                  <Clock size={12} className="text-amber-600" />
+                                  Expira {timeTo(m.expiresAt)}
+                                </div>
+                              )}
+                              {m.isEmergency && (
+                                <div className="flex items-center gap-1 text-amber-700">
+                                  <AlertTriangle size={12} />
+                                  Emergencia
+                                </div>
+                              )}
+                              <ApproverSpeedDial messageId={m.id} channelId={m.channelId} />
+                            </div>
+                          </div>
+                        ))}
+                        {pendingItems.length === 0 && (
+                          <div className="py-4 text-sm text-gray-400 text-center">
+                            Sin pendientes
+                          </div>
+                        )}
+                      </div>
+                    )}
+                    <div className="pt-3 flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <button
+                          disabled={pendingPage <= 1}
+                          onClick={() => setPendingPage((p) => p - 1)}
+                          className={`px-3 py-1.5 text-sm rounded border ${pendingPage <= 1 ? 'text-gray-400 border-gray-200' : 'text-gray-700 border-gray-300 hover:bg-gray-50'}`}
+                        >
+                          Anterior
+                        </button>
+                        <span className="text-xs text-gray-500">
+                            Página {pendingPage} de {pendingPages}
+                          </span>
+                        <button
+                          disabled={pendingPage >= pendingPages}
+                          onClick={() => setPendingPage((p) => p + 1)}
+                          className={`px-3 py-1.5 text-sm rounded border ${pendingPage >= pendingPages ? 'text-gray-400 border-gray-200' : 'text-gray-700 border-gray-300 hover:bg-gray-50'}`}
+                        >
+                          Siguiente
+                        </button>
+                      </div>
+                      <div />
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {(messagesModalOpen || activeTab === 'messages') && (
+              <div
+                className={`${(activeTab === 'messages') ? 'static bg-transparent z-auto' : 'fixed inset-0 bg-black/40 z-50'} flex items-center justify-center`}
+              >
+                <div
+                  className={`bg-white w-full ${(activeTab === 'messages') ? '' : 'max-w-3xl'} rounded-xl shadow-lg border border-gray-200`}
+                >
+                  <div className="p-4 border-b border-gray-100 flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className="flex flex-col">
+                        <span className="text-xs font-semibold text-gray-900">Mensajes</span>
+                        <div className="text-xs text-gray-500 flex items-center gap-1">
+                          <span>Rango</span>
+                          <button
+                            onClick={(e) => {
+                              setRangeMenuOpen((v) => !v);
+                              setRangeMenuAnchorEl(e.currentTarget as HTMLElement);
+                            }}
+                            className="px-1.5 py-0.5 rounded border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 inline-flex items-center gap-1"
+                          >
+                            {statsRange === '1h'
+                              ? '1H'
+                              : statsRange === '24h'
+                                ? '24H'
+                                : statsRange === '7d'
+                                  ? '1 Semana'
+                                  : statsRange === '1m'
+                                    ? '1 Mes'
+                                    : 'Histórico'}
+                            <ChevronDown size={12} className="text-gray-500" />
+                          </button>
+                          {rangeMenuOpen && (
+                            <Popper
+                              open
+                              placement="bottom-start"
+                              anchorEl={rangeMenuAnchorEl}
+                              style={{ zIndex: 1000 }}
                             >
-                              <X size={18} />
-                            </button>
+                              <div className="bg-white border border-gray-200 rounded shadow p-1 text-xs">
+                                <button
+                                  onClick={() => {
+                                    setStatsRange('1h');
+                                    setRangeMenuOpen(false);
+                                  }}
+                                  className="block w-full text-left px-2 py-1 rounded hover:bg-gray-50"
+                                >
+                                  1H
+                                </button>
+                                <button
+                                  onClick={() => {
+                                    setStatsRange('24h');
+                                    setRangeMenuOpen(false);
+                                  }}
+                                  className="block w-full text-left px-2 py-1 rounded hover:bg-gray-50"
+                                >
+                                  24H
+                                </button>
+                                <button
+                                  onClick={() => {
+                                    setStatsRange('7d');
+                                    setRangeMenuOpen(false);
+                                  }}
+                                  className="block w-full text-left px-2 py-1 rounded hover:bg-gray-50"
+                                >
+                                  1 Semana
+                                </button>
+                                <button
+                                  onClick={() => {
+                                    setStatsRange('1m');
+                                    setRangeMenuOpen(false);
+                                  }}
+                                  className="block w-full text-left px-2 py-1 rounded hover:bg-gray-50"
+                                >
+                                  1 Mes
+                                </button>
+                                <button
+                                  onClick={() => {
+                                    setStatsRange('all');
+                                    setRangeMenuOpen(false);
+                                  }}
+                                  className="block w-full text-left px-2 py-1 rounded hover:bg-gray-50"
+                                >
+                                  Histórico
+                                </button>
+                              </div>
+                            </Popper>
                           )}
                         </div>
-                        <div className="p-6">
-                          <div className="sticky top-0 z-10 bg-white pb-2 mb-3 border-b border-gray-100 flex items-center justify-between gap-3">
-                            <input
-                              value={messagesSearch}
-                              onChange={(e) => setMessagesSearch(e.target.value)}
-                              placeholder="Filtrar mensajes..."
-                              className="flex-1 px-3 py-2 bg-gray-100 border border-gray-200 rounded text-xs"
-                            />
-                            <div className="flex items-center gap-2">
-                              <button
-                                className={`group relative p-2 rounded border ${messagesQuick === 'all' ? 'bg-slate-800 text-white border-slate-800' : 'text-gray-700 border-gray-300 hover:bg-gray-50'}`}
-                                onClick={() => setMessagesQuick('all')}
-                                aria-label="Todos"
-                                title="Todos"
-                              >
-                                <MessagesSquare
-                                  size={16}
-                                  className={
-                                    messagesQuick === 'all' ? 'text-white' : 'text-slate-600'
-                                  }
-                                />
-                                <div className="absolute left-1/2 -translate-x-1/2 top-full mt-1 bg-gray-900 text-white text-xs rounded px-2 py-1 opacity-0 group-hover:opacity-100 pointer-events-none whitespace-nowrap">
-                                  Todos
-                                </div>
-                              </button>
-                              <button
-                                className={`group relative p-2 rounded border ${messagesQuick === 'emergency' ? 'bg-slate-800 text-white border-slate-800' : 'text-gray-700 border-gray-300 hover:bg-gray-50'}`}
-                                onClick={() => setMessagesQuick('emergency')}
-                                aria-label="Emergentes"
-                                title="Emergentes"
-                              >
-                                <AlertTriangle
-                                  size={16}
-                                  className={
-                                    messagesQuick === 'emergency' ? 'text-white' : 'text-red-600'
-                                  }
-                                />
-                                <div className="absolute left-1/2 -translate-x-1/2 top-full mt-1 bg-gray-900 text-white text-xs rounded px-2 py-1 opacity-0 group-hover:opacity-100 pointer-events-none whitespace-nowrap">
-                                  Emergentes
-                                </div>
-                              </button>
-                              <button
-                                className={`group relative p-2 rounded border ${messagesQuick === 'high' ? 'bg-slate-800 text-white border-slate-800' : 'text-gray-700 border-gray-300 hover:bg-gray-50'}`}
-                                onClick={() => setMessagesQuick('high')}
-                                aria-label="Alta"
-                                title="Alta"
-                              >
-                                <Zap
-                                  size={16}
-                                  className={
-                                    messagesQuick === 'high' ? 'text-white' : 'text-slate-600'
-                                  }
-                                />
-                                <div className="absolute left-1/2 -translate-x-1/2 top-full mt-1 bg-gray-900 text-white text-xs rounded px-2 py-1 opacity-0 group-hover:opacity-100 pointer-events-none whitespace-nowrap">
-                                  Alta
-                                </div>
-                              </button>
-                              <button
-                                className={`group relative p-2 rounded border ${messagesQuick === 'vigent' ? 'bg-slate-800 text-white border-slate-800' : 'text-gray-700 border-gray-300 hover:bg-gray-50'}`}
-                                onClick={() => setMessagesQuick('vigent')}
-                                aria-label="Vigentes"
-                                title="Vigentes"
-                              >
-                                <Clock
-                                  size={16}
-                                  className={
-                                    messagesQuick === 'vigent' ? 'text-white' : 'text-emerald-600'
-                                  }
-                                />
-                                <div className="absolute left-1/2 -translate-x-1/2 top-full mt-1 bg-gray-900 text-white text-xs rounded px-2 py-1 opacity-0 group-hover:opacity-100 pointer-events-none whitespace-nowrap">
-                                  Vigentes
-                                </div>
-                              </button>
-                              <button
-                                className={`group relative p-2 rounded border ${messagesQuick === 'expired' ? 'bg-slate-800 text-white border-slate-800' : 'text-gray-700 border-gray-300 hover:bg-gray-50'}`}
-                                onClick={() => setMessagesQuick('expired')}
-                                aria-label="Vencidos"
-                                title="Vencidos"
-                              >
-                                <Hourglass
-                                  size={16}
-                                  className={
-                                    messagesQuick === 'expired' ? 'text-white' : 'text-slate-600'
-                                  }
-                                />
-                                <div className="absolute left-1/2 -translate-x-1/2 top-full mt-1 bg-gray-900 text-white text-xs rounded px-2 py-1 opacity-0 group-hover:opacity-100 pointer-events-none whitespace-nowrap">
-                                  Vencidos
-                                </div>
-                              </button>
-                              <button
-                                className={`group relative p-2 rounded border ${messagesQuick === 'hasApprovals' ? 'bg-slate-800 text-white border-slate-800' : 'text-gray-700 border-gray-300 hover:bg-gray-50'}`}
-                                onClick={() => setMessagesQuick('hasApprovals')}
-                                aria-label="Con aprob."
-                                title="Con aprob."
-                              >
-                                <CheckCircle
-                                  size={16}
-                                  className={
-                                    messagesQuick === 'hasApprovals'
-                                      ? 'text-white'
-                                      : 'text-slate-600'
-                                  }
-                                />
-                                <div className="absolute left-1/2 -translate-x-1/2 top-full mt-1 bg-gray-900 text-white text-xs rounded px-2 py-1 opacity-0 group-hover:opacity-100 pointer-events-none whitespace-nowrap">
-                                  Con aprob.
-                                </div>
-                              </button>
-                              <button
-                                className={`group relative p-2 rounded border ${messagesQuick === 'noApprovals' ? 'bg-slate-800 text-white border-slate-800' : 'text-gray-700 border-gray-300 hover:bg-gray-50'}`}
-                                onClick={() => setMessagesQuick('noApprovals')}
-                                aria-label="Sin aprob."
-                                title="Sin aprob."
-                              >
-                                <Clock
-                                  size={16}
-                                  className={
-                                    messagesQuick === 'noApprovals'
-                                      ? 'text-white'
-                                      : 'text-slate-600'
-                                  }
-                                />
-                                <div className="absolute left-1/2 -translate-x-1/2 top-full mt-1 bg-gray-900 text-white text-xs rounded px-2 py-1 opacity-0 group-hover:opacity-100 pointer-events-none whitespace-nowrap">
-                                  Sin aprob.
-                                </div>
-                              </button>
-                              <button
-                                className={`group relative p-2 rounded border ml-2 ${messagesFilterOpen ? 'bg-slate-800 text-white border-slate-800' : 'text-gray-700 border-gray-300 hover:bg-gray-50'}`}
-                                onClick={() => setMessagesFilterOpen((o) => !o)}
-                                aria-label="Filtro avanzado"
-                                title="Filtro avanzado"
-                              >
-                                <Settings
-                                  size={16}
-                                  className={messagesFilterOpen ? 'text-white' : 'text-slate-600'}
-                                />
-                                <div className="absolute left-1/2 -translate-x-1/2 top-full mt-1 bg-gray-900 text-white text-xs rounded px-2 py-1 opacity-0 group-hover:opacity-100 pointer-events-none whitespace-nowrap">
-                                  Filtro avanzado
-                                </div>
-                              </button>
-                            </div>
+                      </div>
+                      <span className="h-4 w-px bg-gray-200"></span>
+                      <h3 className="text-lg font-semibold text-gray-900">
+                        Mensajes {selectedChannel?.title}
+                      </h3>
+                    </div>
+                    {selectedChannel?.parentId ? (
+                      <button
+                        onClick={() => setInlineStatsHidden((v) => !v)}
+                        className="text-gray-500 hover:text-gray-700 p-2 hover:bg-gray-50 rounded-full transition-transform duration-200"
+                        aria-label={inlineStatsHidden ? 'Minimizar' : 'Ampliar'}
+                        title={inlineStatsHidden ? 'Minimizar' : 'Ampliar'}
+                      >
+                        {inlineStatsHidden ? (
+                          <Minimize2 size={18} className="transform" />
+                        ) : (
+                          <Maximize2 size={18} className="transform" />
+                        )}
+                      </button>
+                    ) : (
+                      <button
+                        onClick={() => {
+                          setMessagesSearch('');
+                          setMessagesQuick('all');
+                          setMessagesFilter({
+                            priority: undefined,
+                            emergency: undefined,
+                            expired: undefined,
+                            hasApprovals: undefined,
+                          });
+                          setMessagesFilterOpen(false);
+                          setMessagesPage(1);
+                          setMessagesModalOpen(false);
+                        }}
+                        className="text-gray-400 hover:text-gray-600 p-2 hover:bg-gray-50 rounded-full"
+                      >
+                        <X size={18} />
+                      </button>
+                    )}
+                  </div>
+                  <div className="p-6">
+                    <div className="sticky top-0 z-10 bg-white pb-2 mb-3 border-b border-gray-100 flex items-center justify-between gap-3">
+                      <input
+                        value={messagesSearch}
+                        onChange={(e) => setMessagesSearch(e.target.value)}
+                        placeholder="Filtrar mensajes..."
+                        className="flex-1 px-3 py-2 bg-gray-100 border border-gray-200 rounded text-xs"
+                      />
+                      <div className="flex items-center gap-2">
+                        <button
+                          className={`group relative p-2 rounded border ${messagesQuick === 'all' ? 'bg-slate-800 text-white border-slate-800' : 'text-gray-700 border-gray-300 hover:bg-gray-50'}`}
+                          onClick={() => setMessagesQuick('all')}
+                          aria-label="Todos"
+                          title="Todos"
+                        >
+                          <MessagesSquare
+                            size={16}
+                            className={
+                              messagesQuick === 'all' ? 'text-white' : 'text-slate-600'
+                            }
+                          />
+                          <div className="absolute left-1/2 -translate-x-1/2 top-full mt-1 bg-gray-900 text-white text-xs rounded px-2 py-1 opacity-0 group-hover:opacity-100 pointer-events-none whitespace-nowrap">
+                            Todos
                           </div>
-                          {messagesFilterOpen && (
-                            <div className="mb-3 grid grid-cols-1 sm:grid-cols-4 gap-2 bg-slate-50 border border-gray-200 rounded p-2">
-                              <div className="flex items-center gap-2">
-                                <span className="text-xs text-gray-500">Prioridad</span>
-                                <select
-                                  value={messagesFilter.priority || ''}
-                                  onChange={(e) =>
-                                    setMessagesFilter((f) => ({
-                                      ...f,
-                                      priority: ((e.target.value || '') as any) || undefined,
-                                    }))
-                                  }
-                                  className="px-2 py-1 text-xs border rounded"
-                                >
-                                  <option value="">Todas</option>
-                                  <option value="HIGH">Alta</option>
-                                  <option value="MEDIUM">Media</option>
-                                  <option value="LOW">Baja</option>
-                                </select>
-                              </div>
-                              <div className="flex items-center gap-2">
-                                <span className="text-xs text-gray-500">Emergente</span>
-                                <select
-                                  value={
-                                    messagesFilter.emergency === undefined
-                                      ? ''
-                                      : messagesFilter.emergency
-                                        ? '1'
-                                        : '0'
-                                  }
-                                  onChange={(e) =>
-                                    setMessagesFilter((f) => ({
-                                      ...f,
-                                      emergency:
-                                        e.target.value === '' ? undefined : e.target.value === '1',
-                                    }))
-                                  }
-                                  className="px-2 py-1 text-xs border rounded"
-                                >
-                                  <option value="">Todos</option>
-                                  <option value="1">Sí</option>
-                                  <option value="0">No</option>
-                                </select>
-                              </div>
-                              <div className="flex items-center gap-2">
-                                <span className="text-xs text-gray-500">Estado</span>
-                                <select
-                                  value={
-                                    messagesFilter.expired === undefined
-                                      ? ''
-                                      : messagesFilter.expired
-                                        ? '1'
-                                        : '0'
-                                  }
-                                  onChange={(e) =>
-                                    setMessagesFilter((f) => ({
-                                      ...f,
-                                      expired:
-                                        e.target.value === '' ? undefined : e.target.value === '1',
-                                    }))
-                                  }
-                                  className="px-2 py-1 text-xs border rounded"
-                                >
-                                  <option value="">Todos</option>
-                                  <option value="0">Vigente</option>
-                                  <option value="1">Vencido</option>
-                                </select>
-                              </div>
-                              <div className="flex items-center gap-2">
-                                <span className="text-xs text-gray-500">Aprobaciones</span>
-                                <select
-                                  value={
-                                    messagesFilter.hasApprovals === undefined
-                                      ? ''
-                                      : messagesFilter.hasApprovals
-                                        ? '1'
-                                        : '0'
-                                  }
-                                  onChange={(e) =>
-                                    setMessagesFilter((f) => ({
-                                      ...f,
-                                      hasApprovals:
-                                        e.target.value === '' ? undefined : e.target.value === '1',
-                                    }))
-                                  }
-                                  className="px-2 py-1 text-xs border rounded"
-                                >
-                                  <option value="">Todas</option>
-                                  <option value="1">Con</option>
-                                  <option value="0">Sin</option>
-                                </select>
-                              </div>
-                            </div>
-                          )}
-                          {messagesLoading ? (
-                            <div className="animate-pulse space-y-2">
-                              {Array.from({ length: 6 }).map((_, i) => (
-                                <div key={i} className="h-16 bg-gray-100 rounded" />
-                              ))}
-                            </div>
-                          ) : (
-                            <div className="max-h-[50vh] overflow-y-auto space-y-3">
-                              {messagesItems.map((m) => (
-                                <div
-                                  key={m.id}
-                                  className={`relative overflow-hidden p-4 rounded-lg border ${m.isEmergency ? 'bg-gradient-to-br from-red-50 via-white to-rose-100 border-red-200' : new Date(m.expiresAt) > new Date() ? 'bg-emerald-50 border-emerald-200' : 'bg-gray-50 border-gray-200'}`}
-                                  onMouseEnter={() => {
-                                    try {
-                                      api.viewMessage(m.id);
-                                    } catch {}
-                                  }}
-                                >
-                                  {m.isEmergency && (
-                                    <span className="pointer-events-none absolute inset-0 rounded-lg bg-red-300/10 animate-pulse"></span>
-                                  )}
-                                  <div className="absolute top-2 right-2 flex items-center gap-2 text-xs">
-                                    <span className="text-[10px] text-gray-500">
-                                      Vistas: {m.viewsCount ?? (m._count?.views || 0)}
-                                    </span>
-                                    {m.eventAt && (
-                                      <span className="relative inline-flex items-center gap-1">
-                                        <button
-                                          type="button"
-                                          onClick={() =>
-                                            setEventTipId(eventTipId === m.id ? null : m.id)
-                                          }
-                                          className="p-1 rounded hover:bg-gray-100 cursor-pointer"
-                                          aria-label="Ver fecha exacta"
-                                        >
-                                          <Calendar
-                                            size={12}
-                                            className={
-                                              new Date(m.eventAt) <= new Date()
-                                                ? 'text-red-600'
-                                                : 'text-indigo-600'
-                                            }
-                                          />
-                                        </button>
-                                        <span
-                                          className={
-                                            new Date(m.eventAt) <= new Date()
-                                              ? 'text-red-600'
-                                              : 'text-gray-500'
-                                          }
-                                        >
-                                          {new Date(m.eventAt) <= new Date()
-                                            ? `hace: ${(relativeFrom(m.eventAt) || '')
-                                                .replace(/\b(en|hace)\b\s*/, '')
-                                                .replace(/segundos?/, 's')
-                                                .replace(/minutos?/, 'min')
-                                                .replace(/horas?/, 'h')
-                                                .replace(/días?/, 'd')
-                                                .replace(/mes(es)?/, 'm')
-                                                .replace(/años?/, 'a')}`
-                                            : `en: ${(relativeIn(m.eventAt) || '')
-                                                .replace(/segundos?/, 's')
-                                                .replace(/minutos?/, 'min')
-                                                .replace(/horas?/, 'h')
-                                                .replace(/días?/, 'd')
-                                                .replace(/mes(es)?/, 'm')
-                                                .replace(/años?/, 'a')}`}
-                                        </span>
-                                        {eventTipId === m.id && (
-                                          <>
-                                            <div
-                                              className="fixed inset-0 z-40"
-                                              onClick={() => setEventTipId(null)}
-                                            />
-                                            <div className="absolute right-0 top-full z-50 bg-white rounded-lg shadow-lg border border-gray-200 px-2 py-1 text-xs text-gray-700 whitespace-nowrap">
-                                              <span className="font-semibold">Evento:</span>{' '}
-                                              {formatLocal(m.eventAt)}
-                                            </div>
-                                          </>
-                                        )}
-                                      </span>
-                                    )}
-                                    {(!m.state || m.state === 'ACTIVE') &&
-                                      m.expiresAt &&
-                                      new Date(m.expiresAt) > new Date() &&
-                                      (m.sender?.id || m.senderId) === api.getCurrentUserId() && (
-                                        <button
-                                          onClick={async () => {
-                                            try {
-                                              await api.cancelMessage(m.id);
-                                              setMessagesItems((prev) =>
-                                                prev.map((x) =>
-                                                  x.id === m.id
-                                                    ? {
-                                                        ...x,
-                                                        state: 'CANCELLED',
-                                                        expiresAt: new Date().toISOString(),
-                                                      }
-                                                    : x
-                                                )
-                                              );
-                                            } catch {}
-                                          }}
-                                          className="px-2 py-1 rounded border text-xs text-red-600 border-red-300 hover:bg-red-50"
-                                        >
-                                          Cancelar
-                                        </button>
-                                      )}
-                                  </div>
-                                  <div className="flex items-center justify-between">
-                                    <div className="flex items-center gap-2">
-                                      <div className="text-sm text-gray-900 font-bold">
-                                        {m.channel?.title || 'Canal'}
-                                      </div>
-                                      <span
-                                        className={`text-[10px] px-1.5 py-0.5 rounded border ${m.isEmergency ? 'bg-red-50 text-red-700 border-red-200' : m.priority === 'HIGH' ? 'bg-indigo-50 text-indigo-700 border-indigo-200' : m.priority === 'MEDIUM' ? 'bg-sky-50 text-sky-700 border-sky-200' : 'bg-gray-100 text-gray-700 border-gray-200'}`}
-                                      >
-                                        {m.isEmergency
-                                          ? 'Emergente'
-                                          : m.priority === 'HIGH'
-                                            ? 'Alta'
-                                            : m.priority === 'MEDIUM'
-                                              ? 'Media'
-                                              : 'Baja'}
-                                      </span>
-                                      {m.state === 'CANCELLED' && (
-                                        <span className="text-[10px] px-1.5 py-0.5 rounded border bg-gray-100 text-gray-700 border-gray-200">
-                                          Cancelado
-                                        </span>
-                                      )}
-                                      <span className="text-xs text-gray-500">
-                                        hace:{' '}
-                                        {(relativeFrom(m.createdAt) || '')
+                        </button>
+                        <button
+                          className={`group relative p-2 rounded border ${messagesQuick === 'emergency' ? 'bg-slate-800 text-white border-slate-800' : 'text-gray-700 border-gray-300 hover:bg-gray-50'}`}
+                          onClick={() => setMessagesQuick('emergency')}
+                          aria-label="Emergentes"
+                          title="Emergentes"
+                        >
+                          <AlertTriangle
+                            size={16}
+                            className={
+                              messagesQuick === 'emergency' ? 'text-white' : 'text-red-600'
+                            }
+                          />
+                          <div className="absolute left-1/2 -translate-x-1/2 top-full mt-1 bg-gray-900 text-white text-xs rounded px-2 py-1 opacity-0 group-hover:opacity-100 pointer-events-none whitespace-nowrap">
+                            Emergentes
+                          </div>
+                        </button>
+                        <button
+                          className={`group relative p-2 rounded border ${messagesQuick === 'high' ? 'bg-slate-800 text-white border-slate-800' : 'text-gray-700 border-gray-300 hover:bg-gray-50'}`}
+                          onClick={() => setMessagesQuick('high')}
+                          aria-label="Alta"
+                          title="Alta"
+                        >
+                          <Zap
+                            size={16}
+                            className={
+                              messagesQuick === 'high' ? 'text-white' : 'text-slate-600'
+                            }
+                          />
+                          <div className="absolute left-1/2 -translate-x-1/2 top-full mt-1 bg-gray-900 text-white text-xs rounded px-2 py-1 opacity-0 group-hover:opacity-100 pointer-events-none whitespace-nowrap">
+                            Alta
+                          </div>
+                        </button>
+                        <button
+                          className={`group relative p-2 rounded border ${messagesQuick === 'vigent' ? 'bg-slate-800 text-white border-slate-800' : 'text-gray-700 border-gray-300 hover:bg-gray-50'}`}
+                          onClick={() => setMessagesQuick('vigent')}
+                          aria-label="Vigentes"
+                          title="Vigentes"
+                        >
+                          <Clock
+                            size={16}
+                            className={
+                              messagesQuick === 'vigent' ? 'text-white' : 'text-emerald-600'
+                            }
+                          />
+                          <div className="absolute left-1/2 -translate-x-1/2 top-full mt-1 bg-gray-900 text-white text-xs rounded px-2 py-1 opacity-0 group-hover:opacity-100 pointer-events-none whitespace-nowrap">
+                            Vigentes
+                          </div>
+                        </button>
+                        <button
+                          className={`group relative p-2 rounded border ${messagesQuick === 'expired' ? 'bg-slate-800 text-white border-slate-800' : 'text-gray-700 border-gray-300 hover:bg-gray-50'}`}
+                          onClick={() => setMessagesQuick('expired')}
+                          aria-label="Vencidos"
+                          title="Vencidos"
+                        >
+                          <Hourglass
+                            size={16}
+                            className={
+                              messagesQuick === 'expired' ? 'text-white' : 'text-slate-600'
+                            }
+                          />
+                          <div className="absolute left-1/2 -translate-x-1/2 top-full mt-1 bg-gray-900 text-white text-xs rounded px-2 py-1 opacity-0 group-hover:opacity-100 pointer-events-none whitespace-nowrap">
+                            Vencidos
+                          </div>
+                        </button>
+                        <button
+                          className={`group relative p-2 rounded border ${messagesQuick === 'hasApprovals' ? 'bg-slate-800 text-white border-slate-800' : 'text-gray-700 border-gray-300 hover:bg-gray-50'}`}
+                          onClick={() => setMessagesQuick('hasApprovals')}
+                          aria-label="Con aprob."
+                          title="Con aprob."
+                        >
+                          <CheckCircle
+                            size={16}
+                            className={
+                              messagesQuick === 'hasApprovals'
+                                ? 'text-white'
+                                : 'text-slate-600'
+                            }
+                          />
+                          <div className="absolute left-1/2 -translate-x-1/2 top-full mt-1 bg-gray-900 text-white text-xs rounded px-2 py-1 opacity-0 group-hover:opacity-100 pointer-events-none whitespace-nowrap">
+                            Con aprob.
+                          </div>
+                        </button>
+                        <button
+                          className={`group relative p-2 rounded border ${messagesQuick === 'noApprovals' ? 'bg-slate-800 text-white border-slate-800' : 'text-gray-700 border-gray-300 hover:bg-gray-50'}`}
+                          onClick={() => setMessagesQuick('noApprovals')}
+                          aria-label="Sin aprob."
+                          title="Sin aprob."
+                        >
+                          <Clock
+                            size={16}
+                            className={
+                              messagesQuick === 'noApprovals'
+                                ? 'text-white'
+                                : 'text-slate-600'
+                            }
+                          />
+                          <div className="absolute left-1/2 -translate-x-1/2 top-full mt-1 bg-gray-900 text-white text-xs rounded px-2 py-1 opacity-0 group-hover:opacity-100 pointer-events-none whitespace-nowrap">
+                            Sin aprob.
+                          </div>
+                        </button>
+                        <button
+                          className={`group relative p-2 rounded border ml-2 ${messagesFilterOpen ? 'bg-slate-800 text-white border-slate-800' : 'text-gray-700 border-gray-300 hover:bg-gray-50'}`}
+                          onClick={() => setMessagesFilterOpen((o) => !o)}
+                          aria-label="Filtro avanzado"
+                          title="Filtro avanzado"
+                        >
+                          <Settings
+                            size={16}
+                            className={messagesFilterOpen ? 'text-white' : 'text-slate-600'}
+                          />
+                          <div className="absolute left-1/2 -translate-x-1/2 top-full mt-1 bg-gray-900 text-white text-xs rounded px-2 py-1 opacity-0 group-hover:opacity-100 pointer-events-none whitespace-nowrap">
+                            Filtro avanzado
+                          </div>
+                        </button>
+                      </div>
+                    </div>
+                    {messagesFilterOpen && (
+                      <div className="mb-3 grid grid-cols-1 sm:grid-cols-4 gap-2 bg-slate-50 border border-gray-200 rounded p-2">
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs text-gray-500">Prioridad</span>
+                          <select
+                            value={messagesFilter.priority || ''}
+                            onChange={(e) =>
+                              setMessagesFilter((f) => ({
+                                ...f,
+                                priority: ((e.target.value || '') as any) || undefined,
+                              }))
+                            }
+                            className="px-2 py-1 text-xs border rounded"
+                          >
+                            <option value="">Todas</option>
+                            <option value="HIGH">Alta</option>
+                            <option value="MEDIUM">Media</option>
+                            <option value="LOW">Baja</option>
+                          </select>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs text-gray-500">Emergente</span>
+                          <select
+                            value={
+                              messagesFilter.emergency === undefined
+                                ? ''
+                                : messagesFilter.emergency
+                                  ? '1'
+                                  : '0'
+                            }
+                            onChange={(e) =>
+                              setMessagesFilter((f) => ({
+                                ...f,
+                                emergency:
+                                  e.target.value === '' ? undefined : e.target.value === '1',
+                              }))
+                            }
+                            className="px-2 py-1 text-xs border rounded"
+                          >
+                            <option value="">Todos</option>
+                            <option value="1">Sí</option>
+                            <option value="0">No</option>
+                          </select>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs text-gray-500">Estado</span>
+                          <select
+                            value={
+                              messagesFilter.expired === undefined
+                                ? ''
+                                : messagesFilter.expired
+                                  ? '1'
+                                  : '0'
+                            }
+                            onChange={(e) =>
+                              setMessagesFilter((f) => ({
+                                ...f,
+                                expired:
+                                  e.target.value === '' ? undefined : e.target.value === '1',
+                              }))
+                            }
+                            className="px-2 py-1 text-xs border rounded"
+                          >
+                            <option value="">Todos</option>
+                            <option value="0">Vigente</option>
+                            <option value="1">Vencido</option>
+                          </select>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs text-gray-500">Aprobaciones</span>
+                          <select
+                            value={
+                              messagesFilter.hasApprovals === undefined
+                                ? ''
+                                : messagesFilter.hasApprovals
+                                  ? '1'
+                                  : '0'
+                            }
+                            onChange={(e) =>
+                              setMessagesFilter((f) => ({
+                                ...f,
+                                hasApprovals:
+                                  e.target.value === '' ? undefined : e.target.value === '1',
+                              }))
+                            }
+                            className="px-2 py-1 text-xs border rounded"
+                          >
+                            <option value="">Todas</option>
+                            <option value="1">Con</option>
+                            <option value="0">Sin</option>
+                          </select>
+                        </div>
+                      </div>
+                    )}
+                    {messagesLoading ? (
+                      <div className="animate-pulse space-y-2">
+                        {Array.from({ length: 6 }).map((_, i) => (
+                          <div key={i} className="h-16 bg-gray-100 rounded" />
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="max-h-[50vh] overflow-y-auto space-y-3">
+                        {messagesItems.map((m) => (
+                          <div
+                            key={m.id}
+                            className={`relative overflow-hidden p-4 rounded-lg border ${m.isEmergency ? 'bg-gradient-to-br from-red-50 via-white to-rose-100 border-red-200' : new Date(m.expiresAt) > new Date() ? 'bg-emerald-50 border-emerald-200' : 'bg-gray-50 border-gray-200'}`}
+                            onMouseEnter={() => {
+                              try {
+                                api.viewMessage(m.id);
+                              } catch {}
+                            }}
+                          >
+                            {m.isEmergency && (
+                              <span className="pointer-events-none absolute inset-0 rounded-lg bg-red-300/10 animate-pulse"></span>
+                            )}
+                            <div className="absolute top-2 right-2 flex items-center gap-2 text-xs">
+                                <span className="text-[10px] text-gray-500">
+                                  Vistas: {m.viewsCount ?? (m._count?.views || 0)}
+                                </span>
+                              {m.eventAt && (
+                                <span className="relative inline-flex items-center gap-1">
+                                    <button
+                                      type="button"
+                                      onClick={() =>
+                                        setEventTipId(eventTipId === m.id ? null : m.id)
+                                      }
+                                      className="p-1 rounded hover:bg-gray-100 cursor-pointer"
+                                      aria-label="Ver fecha exacta"
+                                    >
+                                      <Calendar
+                                        size={12}
+                                        className={
+                                          new Date(m.eventAt) <= new Date()
+                                            ? 'text-red-600'
+                                            : 'text-indigo-600'
+                                        }
+                                      />
+                                    </button>
+                                    <span
+                                      className={
+                                        new Date(m.eventAt) <= new Date()
+                                          ? 'text-red-600'
+                                          : 'text-gray-500'
+                                      }
+                                    >
+                                      {new Date(m.eventAt) <= new Date()
+                                        ? `hace: ${(relativeFrom(m.eventAt) || '')
                                           .replace(/\b(en|hace)\b\s*/, '')
                                           .replace(/segundos?/, 's')
                                           .replace(/minutos?/, 'min')
                                           .replace(/horas?/, 'h')
                                           .replace(/días?/, 'd')
                                           .replace(/mes(es)?/, 'm')
-                                          .replace(/años?/, 'a')}
-                                      </span>
-                                    </div>
-                                    <div />
-                                  </div>
-
-                                  <div className="mt-2 text-sm text-gray-800">{m.content}</div>
-                                  <div className="mt-3 flex items-center gap-2">
-                                    {m.expiresAt && (
-                                      <span className="relative inline-flex items-center gap-1">
-                                        <button
-                                          type="button"
-                                          onClick={() =>
-                                            setExpiresTipId(expiresTipId === m.id ? null : m.id)
-                                          }
-                                          className="p-1 rounded hover:bg-gray-100 cursor-pointer"
-                                          aria-label="Ver fecha exacta"
-                                        >
-                                          <Hourglass size={12} className="text-amber-600" />
-                                        </button>
-                                        <span className="text-xs font-semibold text-gray-900">
-                                          {(relativeIn(m.expiresAt) || '')
-                                            .replace(/en:\s*/, '')
-                                            .replace(/segundos?/, 's')
-                                            .replace(/minutos?/, 'min')
-                                            .replace(/horas?/, 'h')
-                                            .replace(/días?/, 'd')
-                                            .replace(/mes(es)?/, 'm')
-                                            .replace(/años?/, 'a')}
-                                        </span>
-                                        {expiresTipId === m.id && (
-                                          <>
-                                            <div
-                                              className="fixed inset-0 z-40"
-                                              onClick={() => setExpiresTipId(null)}
-                                            />
-                                            <div className="absolute left-0 top-full z-50 bg-white rounded-lg shadow-lg border border-gray-200 px-2 py-1 text-xs text-gray-700 whitespace-nowrap">
-                                              <span className="font-semibold">Expira:</span>{' '}
-                                              {formatLocal(m.expiresAt)}
-                                            </div>
-                                          </>
-                                        )}
-                                      </span>
-                                    )}
-                                    {(m.approvals || []).map((a) =>
-                                      a.status === 'APPROVED' ? (
-                                        <span
-                                          key={a.userId}
-                                          className="inline-flex items-center gap-1 text-[11px] text-green-700 bg-white border border-green-200 px-1.5 py-0.5 rounded"
-                                        >
-                                          <CheckIcon size={12} className="text-green-700" />{' '}
-                                          <button
-                                            className="hover:underline"
-                                            onMouseEnter={(e) => {
-                                              setApproverHoverUserId(a.user?.id || a.approverId);
-                                              setApproverHoverAnchorEl(
-                                                e.currentTarget as HTMLElement
-                                              );
-                                            }}
-                                            onMouseLeave={() => {
-                                              setApproverHoverUserId(null);
-                                              setApproverHoverAnchorEl(null);
-                                            }}
-                                          >
-                                            {a.approver?.fullName ||
-                                              a.user?.fullName ||
-                                              a.approver?.username ||
-                                              a.user?.username ||
-                                              a.approverId}
-                                          </button>
-                                          {approverHoverUserId === (a.user?.id || a.approverId) && (
-                                            <Popper
-                                              open
-                                              placement="top"
-                                              anchorEl={approverHoverAnchorEl}
-                                              style={{ zIndex: 1000 }}
-                                            >
-                                              <div className="text-[10px] px-2 py-1 rounded bg-gray-900 text-white shadow">
-                                                @{a.approver?.username || a.user?.username || ''}
-                                              </div>
-                                            </Popper>
-                                          )}
-                                          {a.removed && (
-                                            <span className="text-[10px] text-gray-500">
-                                              (removido)
-                                            </span>
-                                          )}
-                                        </span>
-                                      ) : a.status === 'REJECTED' ? (
-                                        <span
-                                          key={a.userId}
-                                          className="inline-flex items-center gap-1 text-[11px] text-red-700 bg-white border border-red-200 px-1.5 py-0.5 rounded"
-                                        >
-                                          <X size={12} className="text-red-700" />{' '}
-                                          <button
-                                            className="hover:underline"
-                                            onMouseEnter={(e) => {
-                                              setApproverHoverUserId(a.user?.id || a.approverId);
-                                              setApproverHoverAnchorEl(
-                                                e.currentTarget as HTMLElement
-                                              );
-                                            }}
-                                            onMouseLeave={() => {
-                                              setApproverHoverUserId(null);
-                                              setApproverHoverAnchorEl(null);
-                                            }}
-                                          >
-                                            {a.approver?.fullName ||
-                                              a.user?.fullName ||
-                                              a.approver?.username ||
-                                              a.user?.username ||
-                                              a.approverId}
-                                          </button>
-                                          {approverHoverUserId === (a.user?.id || a.approverId) && (
-                                            <Popper
-                                              open
-                                              placement="top"
-                                              anchorEl={approverHoverAnchorEl}
-                                              style={{ zIndex: 1000 }}
-                                            >
-                                              <div className="text-[10px] px-2 py-1 rounded bg-gray-900 text-white shadow">
-                                                @{a.approver?.username || a.user?.username || ''}
-                                              </div>
-                                            </Popper>
-                                          )}
-                                          {a.removed && (
-                                            <span className="text-[10px] text-gray-500">
-                                              (removido)
-                                            </span>
-                                          )}
-                                        </span>
-                                      ) : m.expiresAt && new Date(m.expiresAt) <= new Date() ? (
-                                        <span
-                                          key={a.userId}
-                                          className="inline-flex items-center gap-1 text-[11px] text-gray-700 bg-white border border-gray-200 px-1.5 py-0.5 rounded"
-                                        >
-                                          <Hourglass size={12} className="text-red-600" />{' '}
-                                          <button
-                                            className="hover:underline"
-                                            onMouseEnter={(e) => {
-                                              setApproverHoverUserId(a.user?.id || a.approverId);
-                                              setApproverHoverAnchorEl(
-                                                e.currentTarget as HTMLElement
-                                              );
-                                            }}
-                                            onMouseLeave={() => {
-                                              setApproverHoverUserId(null);
-                                              setApproverHoverAnchorEl(null);
-                                            }}
-                                          >
-                                            {a.approver?.fullName ||
-                                              a.user?.fullName ||
-                                              a.approver?.username ||
-                                              a.user?.username ||
-                                              a.approverId}
-                                          </button>
-                                          {approverHoverUserId === (a.user?.id || a.approverId) && (
-                                            <Popper
-                                              open
-                                              placement="top"
-                                              anchorEl={approverHoverAnchorEl}
-                                              style={{ zIndex: 1000 }}
-                                            >
-                                              <div className="text-[10px] px-2 py-1 rounded bg-gray-900 text-white shadow">
-                                                @{a.approver?.username || a.user?.username || ''}
-                                              </div>
-                                            </Popper>
-                                          )}
-                                          {a.removed && (
-                                            <span className="text-[10px] text-gray-500">
-                                              (removido)
-                                            </span>
-                                          )}
-                                        </span>
-                                      ) : (
-                                        <span
-                                          key={a.userId}
-                                          className="relative inline-flex items-center gap-1 text-[11px] text-gray-700 bg-white border border-gray-200 px-1.5 py-0.5 rounded group"
-                                        >
-                                          <Clock size={12} className="text-gray-700 cursor-help" />{' '}
-                                          <button
-                                            className="hover:underline"
-                                            onMouseEnter={(e) => {
-                                              setApproverHoverUserId(a.user?.id || a.approverId);
-                                              setApproverHoverAnchorEl(
-                                                e.currentTarget as HTMLElement
-                                              );
-                                            }}
-                                            onMouseLeave={() => {
-                                              setApproverHoverUserId(null);
-                                              setApproverHoverAnchorEl(null);
-                                            }}
-                                          >
-                                            {a.approver?.fullName ||
-                                              a.user?.fullName ||
-                                              a.approver?.username ||
-                                              a.user?.username ||
-                                              a.approverId}
-                                          </button>
-                                          {approverHoverUserId === (a.user?.id || a.approverId) && (
-                                            <Popper
-                                              open
-                                              placement="top"
-                                              anchorEl={approverHoverAnchorEl}
-                                              style={{ zIndex: 1000 }}
-                                            >
-                                              <div className="text-[10px] px-2 py-1 rounded bg-gray-900 text-white shadow">
-                                                @{a.approver?.username || a.user?.username || ''}
-                                              </div>
-                                            </Popper>
-                                          )}
-                                          {a.removed && (
-                                            <span className="text-[10px] text-gray-500">
-                                              (removido)
-                                            </span>
-                                          )}
-                                          {m.expiresAt && (
-                                            <div className=" hidden absolute left-0 top-full mt-1 bg-gray-900 text-white text-[10px] rounded px-2 py-1 opacity-0 group-hover:opacity-100 whitespace-nowrap">
-                                              Aún tiene{' '}
-                                              {(relativeIn(m.expiresAt) || '')
-                                                .replace(/en:\s*/, '')
-                                                .replace(/segundos?/, 's')
-                                                .replace(/minutos?/, 'min')
-                                                .replace(/horas?/, 'h')
-                                                .replace(/días?/, 'd')
-                                                .replace(/mes(es)?/, 'm')
-                                                .replace(/años?/, 'a')}{' '}
-                                              para aprobarlo
-                                            </div>
-                                          )}
-                                        </span>
-                                      )
-                                    )}
-                                  </div>
-                                </div>
-                              ))}
-                              {messagesItems.length === 0 && (
-                                <div className="py-8 text-center text-gray-500">
-                                  <div className="w-12 h-12 mx-auto mb-3 flex items-center justify-center rounded-full">
-                                    <MessagesSquare size={42} className="text-gray-300" />
-                                  </div>
-                                  <div className="text-sm">
-                                    <span className="font-semibold">
-                                      Aún no encontramos mensajes con este filtro
+                                          .replace(/años?/, 'a')}`
+                                        : `en: ${(relativeIn(m.eventAt) || '')
+                                          .replace(/segundos?/, 's')
+                                          .replace(/minutos?/, 'min')
+                                          .replace(/horas?/, 'h')
+                                          .replace(/días?/, 'd')
+                                          .replace(/mes(es)?/, 'm')
+                                          .replace(/años?/, 'a')}`}
                                     </span>
-                                  </div>
-                                  <div className="text-sm mt-1 mb-10 ">Intenta con otro filtro</div>
-
-                                  <div className="text-sm mt-5 ">
-                                    Si consideras que esto fue un error haznoslo saber aquí, con un
-                                    solo click
-                                  </div>
+                                  {eventTipId === m.id && (
+                                    <>
+                                      <div
+                                        className="fixed inset-0 z-40"
+                                        onClick={() => setEventTipId(null)}
+                                      />
+                                      <div className="absolute right-0 top-full z-50 bg-white rounded-lg shadow-lg border border-gray-200 px-2 py-1 text-xs text-gray-700 whitespace-nowrap">
+                                        <span className="font-semibold">Evento:</span>{' '}
+                                        {formatLocal(m.eventAt)}
+                                      </div>
+                                    </>
+                                  )}
+                                  </span>
+                              )}
+                              {(!m.state || m.state === 'ACTIVE') &&
+                                m.expiresAt &&
+                                new Date(m.expiresAt) > new Date() &&
+                                (m.sender?.id || m.senderId) === api.getCurrentUserId() && (
+                                  <button
+                                    onClick={async () => {
+                                      try {
+                                        await api.cancelMessage(m.id);
+                                        setMessagesItems((prev) =>
+                                          prev.map((x) =>
+                                            x.id === m.id
+                                              ? {
+                                                ...x,
+                                                state: 'CANCELLED',
+                                                expiresAt: new Date().toISOString(),
+                                              }
+                                              : x
+                                          )
+                                        );
+                                      } catch {}
+                                    }}
+                                    className="px-2 py-1 rounded border text-xs text-red-600 border-red-300 hover:bg-red-50"
+                                  >
+                                    Cancelar
+                                  </button>
+                                )}
+                            </div>
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-2">
+                                <div className="text-sm text-gray-900 font-bold">
+                                  {m.channel?.title || 'Canal'}
                                 </div>
+                                <span
+                                  className={`text-[10px] px-1.5 py-0.5 rounded border ${m.isEmergency ? 'bg-red-50 text-red-700 border-red-200' : m.priority === 'HIGH' ? 'bg-indigo-50 text-indigo-700 border-indigo-200' : m.priority === 'MEDIUM' ? 'bg-sky-50 text-sky-700 border-sky-200' : 'bg-gray-100 text-gray-700 border-gray-200'}`}
+                                >
+                                    {m.isEmergency
+                                      ? 'Emergente'
+                                      : m.priority === 'HIGH'
+                                        ? 'Alta'
+                                        : m.priority === 'MEDIUM'
+                                          ? 'Media'
+                                          : 'Baja'}
+                                  </span>
+                                {m.state === 'CANCELLED' && (
+                                  <span className="text-[10px] px-1.5 py-0.5 rounded border bg-gray-100 text-gray-700 border-gray-200">
+                                      Cancelado
+                                    </span>
+                                )}
+                                <span className="text-xs text-gray-500">
+                                    hace:{' '}
+                                  {(relativeFrom(m.createdAt) || '')
+                                    .replace(/\b(en|hace)\b\s*/, '')
+                                    .replace(/segundos?/, 's')
+                                    .replace(/minutos?/, 'min')
+                                    .replace(/horas?/, 'h')
+                                    .replace(/días?/, 'd')
+                                    .replace(/mes(es)?/, 'm')
+                                    .replace(/años?/, 'a')}
+                                  </span>
+                              </div>
+                              <div />
+                            </div>
+
+                            <div className="mt-2 text-sm text-gray-800">{m.content}</div>
+                            <div className="mt-3 flex items-center gap-2">
+                              {m.expiresAt && (
+                                <span className="relative inline-flex items-center gap-1">
+                                    <button
+                                      type="button"
+                                      onClick={() =>
+                                        setExpiresTipId(expiresTipId === m.id ? null : m.id)
+                                      }
+                                      className="p-1 rounded hover:bg-gray-100 cursor-pointer"
+                                      aria-label="Ver fecha exacta"
+                                    >
+                                      <Hourglass size={12} className="text-amber-600" />
+                                    </button>
+                                    <span className="text-xs font-semibold text-gray-900">
+                                      {(relativeIn(m.expiresAt) || '')
+                                        .replace(/en:\s*/, '')
+                                        .replace(/segundos?/, 's')
+                                        .replace(/minutos?/, 'min')
+                                        .replace(/horas?/, 'h')
+                                        .replace(/días?/, 'd')
+                                        .replace(/mes(es)?/, 'm')
+                                        .replace(/años?/, 'a')}
+                                    </span>
+                                  {expiresTipId === m.id && (
+                                    <>
+                                      <div
+                                        className="fixed inset-0 z-40"
+                                        onClick={() => setExpiresTipId(null)}
+                                      />
+                                      <div className="absolute left-0 top-full z-50 bg-white rounded-lg shadow-lg border border-gray-200 px-2 py-1 text-xs text-gray-700 whitespace-nowrap">
+                                        <span className="font-semibold">Expira:</span>{' '}
+                                        {formatLocal(m.expiresAt)}
+                                      </div>
+                                    </>
+                                  )}
+                                  </span>
+                              )}
+                              {(m.approvals || []).map((a) =>
+                                a.status === 'APPROVED' ? (
+                                  <span
+                                    key={a.userId}
+                                    className="inline-flex items-center gap-1 text-[11px] text-green-700 bg-white border border-green-200 px-1.5 py-0.5 rounded"
+                                  >
+                                      <CheckIcon size={12} className="text-green-700" />{' '}
+                                    <button
+                                      className="hover:underline"
+                                      onMouseEnter={(e) => {
+                                        setApproverHoverUserId(a.user?.id || a.approverId);
+                                        setApproverHoverAnchorEl(
+                                          e.currentTarget as HTMLElement
+                                        );
+                                      }}
+                                      onMouseLeave={() => {
+                                        setApproverHoverUserId(null);
+                                        setApproverHoverAnchorEl(null);
+                                      }}
+                                    >
+                                        {a.approver?.fullName ||
+                                          a.user?.fullName ||
+                                          a.approver?.username ||
+                                          a.user?.username ||
+                                          a.approverId}
+                                      </button>
+                                    {approverHoverUserId === (a.user?.id || a.approverId) && (
+                                      <Popper
+                                        open
+                                        placement="top"
+                                        anchorEl={approverHoverAnchorEl}
+                                        style={{ zIndex: 1000 }}
+                                      >
+                                        <div className="text-[10px] px-2 py-1 rounded bg-gray-900 text-white shadow">
+                                          @{a.approver?.username || a.user?.username || ''}
+                                        </div>
+                                      </Popper>
+                                    )}
+                                    {a.removed && (
+                                      <span className="text-[10px] text-gray-500">
+                                          (removido)
+                                        </span>
+                                    )}
+                                    </span>
+                                ) : a.status === 'REJECTED' ? (
+                                  <span
+                                    key={a.userId}
+                                    className="inline-flex items-center gap-1 text-[11px] text-red-700 bg-white border border-red-200 px-1.5 py-0.5 rounded"
+                                  >
+                                      <X size={12} className="text-red-700" />{' '}
+                                    <button
+                                      className="hover:underline"
+                                      onMouseEnter={(e) => {
+                                        setApproverHoverUserId(a.user?.id || a.approverId);
+                                        setApproverHoverAnchorEl(
+                                          e.currentTarget as HTMLElement
+                                        );
+                                      }}
+                                      onMouseLeave={() => {
+                                        setApproverHoverUserId(null);
+                                        setApproverHoverAnchorEl(null);
+                                      }}
+                                    >
+                                        {a.approver?.fullName ||
+                                          a.user?.fullName ||
+                                          a.approver?.username ||
+                                          a.user?.username ||
+                                          a.approverId}
+                                      </button>
+                                    {approverHoverUserId === (a.user?.id || a.approverId) && (
+                                      <Popper
+                                        open
+                                        placement="top"
+                                        anchorEl={approverHoverAnchorEl}
+                                        style={{ zIndex: 1000 }}
+                                      >
+                                        <div className="text-[10px] px-2 py-1 rounded bg-gray-900 text-white shadow">
+                                          @{a.approver?.username || a.user?.username || ''}
+                                        </div>
+                                      </Popper>
+                                    )}
+                                    {a.removed && (
+                                      <span className="text-[10px] text-gray-500">
+                                          (removido)
+                                        </span>
+                                    )}
+                                    </span>
+                                ) : m.expiresAt && new Date(m.expiresAt) <= new Date() ? (
+                                  <span
+                                    key={a.userId}
+                                    className="inline-flex items-center gap-1 text-[11px] text-gray-700 bg-white border border-gray-200 px-1.5 py-0.5 rounded"
+                                  >
+                                      <Hourglass size={12} className="text-red-600" />{' '}
+                                    <button
+                                      className="hover:underline"
+                                      onMouseEnter={(e) => {
+                                        setApproverHoverUserId(a.user?.id || a.approverId);
+                                        setApproverHoverAnchorEl(
+                                          e.currentTarget as HTMLElement
+                                        );
+                                      }}
+                                      onMouseLeave={() => {
+                                        setApproverHoverUserId(null);
+                                        setApproverHoverAnchorEl(null);
+                                      }}
+                                    >
+                                        {a.approver?.fullName ||
+                                          a.user?.fullName ||
+                                          a.approver?.username ||
+                                          a.user?.username ||
+                                          a.approverId}
+                                      </button>
+                                    {approverHoverUserId === (a.user?.id || a.approverId) && (
+                                      <Popper
+                                        open
+                                        placement="top"
+                                        anchorEl={approverHoverAnchorEl}
+                                        style={{ zIndex: 1000 }}
+                                      >
+                                        <div className="text-[10px] px-2 py-1 rounded bg-gray-900 text-white shadow">
+                                          @{a.approver?.username || a.user?.username || ''}
+                                        </div>
+                                      </Popper>
+                                    )}
+                                    {a.removed && (
+                                      <span className="text-[10px] text-gray-500">
+                                          (removido)
+                                        </span>
+                                    )}
+                                    </span>
+                                ) : (
+                                  <span
+                                    key={a.userId}
+                                    className="relative inline-flex items-center gap-1 text-[11px] text-gray-700 bg-white border border-gray-200 px-1.5 py-0.5 rounded group"
+                                  >
+                                      <Clock size={12} className="text-gray-700 cursor-help" />{' '}
+                                    <button
+                                      className="hover:underline"
+                                      onMouseEnter={(e) => {
+                                        setApproverHoverUserId(a.user?.id || a.approverId);
+                                        setApproverHoverAnchorEl(
+                                          e.currentTarget as HTMLElement
+                                        );
+                                      }}
+                                      onMouseLeave={() => {
+                                        setApproverHoverUserId(null);
+                                        setApproverHoverAnchorEl(null);
+                                      }}
+                                    >
+                                        {a.approver?.fullName ||
+                                          a.user?.fullName ||
+                                          a.approver?.username ||
+                                          a.user?.username ||
+                                          a.approverId}
+                                      </button>
+                                    {approverHoverUserId === (a.user?.id || a.approverId) && (
+                                      <Popper
+                                        open
+                                        placement="top"
+                                        anchorEl={approverHoverAnchorEl}
+                                        style={{ zIndex: 1000 }}
+                                      >
+                                        <div className="text-[10px] px-2 py-1 rounded bg-gray-900 text-white shadow">
+                                          @{a.approver?.username || a.user?.username || ''}
+                                        </div>
+                                      </Popper>
+                                    )}
+                                    {a.removed && (
+                                      <span className="text-[10px] text-gray-500">
+                                          (removido)
+                                        </span>
+                                    )}
+                                    {m.expiresAt && (
+                                      <div className=" hidden absolute left-0 top-full mt-1 bg-gray-900 text-white text-[10px] rounded px-2 py-1 opacity-0 group-hover:opacity-100 whitespace-nowrap">
+                                        Aún tiene{' '}
+                                        {(relativeIn(m.expiresAt) || '')
+                                          .replace(/en:\s*/, '')
+                                          .replace(/segundos?/, 's')
+                                          .replace(/minutos?/, 'min')
+                                          .replace(/horas?/, 'h')
+                                          .replace(/días?/, 'd')
+                                          .replace(/mes(es)?/, 'm')
+                                          .replace(/años?/, 'a')}{' '}
+                                        para aprobarlo
+                                      </div>
+                                    )}
+                                    </span>
+                                )
                               )}
                             </div>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  )}
-                </div>{' '}
-              </div>
-
-              {showCompose && (
-                <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
-                  <div className="bg-white w-full max-w-2xl rounded-xl shadow-lg border border-gray-200">
-                    <div className="p-4 border-b border-gray-100 flex items-center justify-between">
-                      <h3 className="text-lg font-semibold text-gray-900">{t('compose.title')}</h3>
-                      <button
-                        onClick={closeComposeAutoSave}
-                        className="text-gray-400 hover:text-gray-600 p-2 hover:bg-gray-50 rounded-full"
-                      >
-                        <X size={18} />
-                      </button>
-                    </div>
-                    <div className="p-6 space-y-6">
-                      <div className="relative">
-                        <div className="mb-2 flex items-center justify-between gap-6">
-                          <div className="flex items-center gap-3">
-                            <div className="relative group">
-                              <button
-                                type="button"
-                                className="p-1.5 rounded-md hover:bg-gray-100 text-indigo-600"
-                              >
-                                <Zap size={16} />
-                              </button>
-                              <div className="absolute left-1/2 -translate-x-1/2 top-full mt-1 whitespace-nowrap rounded bg-gray-900 text-white text-xs px-2 py-1 opacity-0 group-hover:opacity-100 pointer-events-none">
-                                {t('priority')}
-                              </div>
+                          </div>
+                        ))}
+                        {messagesItems.length === 0 && (
+                          <div className="py-8 text-center text-gray-500">
+                            <div className="w-12 h-12 mx-auto mb-3 flex items-center justify-center rounded-full">
+                              <MessagesSquare size={42} className="text-gray-300" />
                             </div>
-                            <div className="flex rounded-md shadow-sm" role="group">
-                              {[
-                                MessagePriority.LOW,
-                                MessagePriority.MEDIUM,
-                                MessagePriority.HIGH,
-                              ].map((p) => (
-                                <button
-                                  key={p}
-                                  type="button"
-                                  disabled={composeIsEmergency}
-                                  onClick={() => setComposePriority(p)}
-                                  className={`px-3 py-1.5 text-xs font-medium border first:rounded-l-lg last:rounded-r-lg ${composePriority === p ? 'bg-slate-800 text-white border-slate-800' : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'} ${composeIsEmergency ? 'opacity-50 cursor-not-allowed' : ''}`}
-                                >
-                                  {p === MessagePriority.LOW
-                                    ? t('priority.low')
-                                    : p === MessagePriority.MEDIUM
-                                      ? t('priority.medium')
-                                      : t('priority.high')}
-                                </button>
-                              ))}
+                            <div className="text-sm">
+                                <span className="font-semibold">
+                                  Aún no encontramos mensajes con este filtro
+                                </span>
+                            </div>
+                            <div className="text-sm mt-1 mb-10 ">Intenta con otro filtro</div>
+
+                            <div className="text-sm mt-5 ">
+                              Si consideras que esto fue un error haznoslo saber aquí, con un
+                              solo click
                             </div>
                           </div>
-                          <label className="flex items-center cursor-pointer relative">
-                            <input
-                              type="checkbox"
-                              checked={composeIsEmergency}
-                              onChange={(e) => setComposeIsEmergency(e.target.checked)}
-                              className="sr-only peer"
-                            />
-                            <div className="w-11 h-6 bg-gray-200 rounded-full peer peer-checked:bg-red-500 relative after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:after:translate-x-full"></div>
-                            <div className="ml-3 relative group">
-                              <button
-                                type="button"
-                                className="p-1.5 rounded-md hover:bg-gray-100 text-red-600"
-                              >
-                                <AlertTriangle size={16} />
-                              </button>
-                              <div className="absolute left-1/2 -translate-x-1/2 top-full mt-1 whitespace-nowrap rounded bg-gray-900 text-white text-xs px-2 py-1 opacity-0 group-hover:opacity-100 pointer-events-none">
-                                {t('emergencyBroadcast')}
-                              </div>
-                            </div>
-                          </label>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              
+              </div>
+              )}
+
+
+              <button
+                onClick={openCompose}
+                className="fixed bottom-8 right-8 bg-indigo-600 hover:bg-indigo-700 text-white p-4 rounded-full shadow-lg transition-all hover:scale-110 z-[100]"
+                title="Nuevo Mensaje"
+              >
+                <Plus size={24} />
+              </button>
+
+          {showCompose && (
+                        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+                        <div className="bg-white w-full max-w-2xl rounded-xl shadow-lg border border-gray-200">
+                        <div className="p-4 border-b border-gray-100 flex items-center justify-between">
+                        <h3 className="text-lg font-semibold text-gray-900">{t('compose.title')}</h3>
+                    <button
+                      onClick={closeComposeAutoSave}
+                      className="text-gray-400 hover:text-gray-600 p-2 hover:bg-gray-50 rounded-full"
+                    >
+                      <X size={18} />
+                    </button>
+                    </div>
+                <div className="p-6 space-y-6">
+                  <div className="relative">
+                    <div className="mb-2 flex items-center justify-between gap-6">
+                      <div className="flex items-center gap-3">
+                        <div className="relative group">
+                          <button
+                            type="button"
+                            className="p-1.5 rounded-md hover:bg-gray-100 text-indigo-600"
+                          >
+                            <Zap size={16} />
+                          </button>
+                          <div className="absolute left-1/2 -translate-x-1/2 top-full mt-1 whitespace-nowrap rounded bg-gray-900 text-white text-xs px-2 py-1 opacity-0 group-hover:opacity-100 pointer-events-none">
+                            {t('priority')}
+                          </div>
                         </div>
-                        <textarea
-                          value={composeContent}
-                          onChange={(e) => setComposeContent(e.target.value)}
-                          rows={6}
-                          className={`w-full p-4 bg-white border-indigo-200 ring-indigo-200 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none resize-none text-gray-900 placeholder-gray-400`}
-                          placeholder={t('content.placeholder')}
+                        <div className="flex rounded-md shadow-sm" role="group">
+                          {[
+                            MessagePriority.LOW,
+                            MessagePriority.MEDIUM,
+                            MessagePriority.HIGH,
+                          ].map((p) => (
+                            <button
+                              key={p}
+                              type="button"
+                              disabled={composeIsEmergency}
+                              onClick={() => setComposePriority(p)}
+                              className={`px-3 py-1.5 text-xs font-medium border first:rounded-l-lg last:rounded-r-lg ${composePriority === p ? 'bg-slate-800 text-white border-slate-800' : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'} ${composeIsEmergency ? 'opacity-50 cursor-not-allowed' : ''}`}
+                            >
+                              {p === MessagePriority.LOW
+                                ? t('priority.low')
+                                : p === MessagePriority.MEDIUM
+                                  ? t('priority.medium')
+                                  : t('priority.high')}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                      <label className="flex items-center cursor-pointer relative">
+                        <input
+                          type="checkbox"
+                          checked={composeIsEmergency}
+                          onChange={(e) => setComposeIsEmergency(e.target.checked)}
+                          className="sr-only peer"
                         />
+                        <div className="w-11 h-6 bg-gray-200 rounded-full peer peer-checked:bg-red-500 relative after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:after:translate-x-full"></div>
+                        <div className="ml-3 relative group">
+                          <button
+                            type="button"
+                            className="p-1.5 rounded-md hover:bg-gray-100 text-red-600"
+                          >
+                            <AlertTriangle size={16} />
+                          </button>
+                          <div className="absolute left-1/2 -translate-x-1/2 top-full mt-1 whitespace-nowrap rounded bg-gray-900 text-white text-xs px-2 py-1 opacity-0 group-hover:opacity-100 pointer-events-none">
+                            {t('emergencyBroadcast')}
+                          </div>
+                        </div>
+                      </label>
+                    </div>
+                    <textarea
+                      value={composeContent}
+                      onChange={(e) => setComposeContent(e.target.value)}
+                      rows={6}
+                      className={`w-full p-4 bg-white border-indigo-200 ring-indigo-200 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none resize-none text-gray-900 placeholder-gray-400`}
+                      placeholder={t('content.placeholder')}
+                    />
+                    <button
+                      onClick={handleComposeAIAssist}
+                      disabled={composeIsGenerating}
+                      className="absolute bottom-3 right-3 flex items-center gap-1.5 px-3 py-1.5 bg-indigo-50 text-indigo-600 hover:bg-indigo-100 rounded-md text-sm font-medium transition-colors disabled:opacity-50"
+                    >
+                      <Sparkles size={14} />
+                      {composeIsGenerating ? t('ai.drafting') : t('ai.polish')}
+                    </button>
+                  </div>
+
+                  <div
+                    className={`relative overflow-hidden bg-gradient-to-br ${composeIsEmergency ? 'from-red-50 via-white to-rose-100 border-red-200' : 'from-indigo-50 via-white to-emerald-50 border-gray-200'} p-5 rounded-lg border`}
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <IconView
+                          name={selectedChannel?.icon}
+                          size={16}
+                          className="text-indigo-600"
+                        />
+                        <span className="text-sm font-semibold text-gray-900">
+                                    {selectedChannel?.title}
+                                  </span>
+                      </div>
+                      <div className="relative">
                         <button
-                          onClick={handleComposeAIAssist}
-                          disabled={composeIsGenerating}
-                          className="absolute bottom-3 right-3 flex items-center gap-1.5 px-3 py-1.5 bg-indigo-50 text-indigo-600 hover:bg-indigo-100 rounded-md text-sm font-medium transition-colors disabled:opacity-50"
+                          type="button"
+                          onClick={() => {
+                            if (selectedChannel) setApproverTipSub(selectedChannel as any);
+                            setApproverModalOpen(true);
+                          }}
+                          className="p-1.5 rounded-full text-indigo-600 hover:bg-indigo-50"
                         >
-                          <Sparkles size={14} />
-                          {composeIsGenerating ? t('ai.drafting') : t('ai.polish')}
+                          <Users size={14} />
                         </button>
                       </div>
-
-                      <div
-                        className={`relative overflow-hidden bg-gradient-to-br ${composeIsEmergency ? 'from-red-50 via-white to-rose-100 border-red-200' : 'from-indigo-50 via-white to-emerald-50 border-gray-200'} p-5 rounded-lg border`}
-                      >
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-2">
-                            <IconView
-                              name={selectedChannel?.icon}
-                              size={16}
-                              className="text-indigo-600"
-                            />
-                            <span className="text-sm font-semibold text-gray-900">
-                              {selectedChannel?.title}
-                            </span>
-                          </div>
-                          <div className="relative">
-                            <button
-                              type="button"
-                              onClick={() => {
-                                if (selectedChannel) setApproverTipSub(selectedChannel as any);
-                                setApproverModalOpen(true);
+                    </div>
+                    <div className="mt-4 text-xl font-bold text-gray-900 whitespace-pre-wrap">
+                      {composeContent || t('content.placeholder')}
+                    </div>
+                    <div className="mt-4 flex flex-wrap items-center gap-3 text-xs text-gray-600">
+                      {composeIsEmergency ? (
+                        <div className="relative inline-flex items-center"></div>
+                      ) : (
+                        composeSendAt && (
+                          <span className="inline-flex items-center gap-1">
+                                      <Clock size={12} className="text-gray-600" />
+                                      <span className="text-gray-500">{relativeIn(composeSendAt)}</span>
+                                    </span>
+                        )
+                      )}
+                      {composeEventAt && (
+                        <span className="inline-flex items-center gap-1">
+                                    <Calendar
+                                      size={12}
+                                      className={
+                                        new Date(composeEventAt) <= new Date()
+                                          ? 'text-red-600'
+                                          : 'text-indigo-600'
+                                      }
+                                    />
+                                    <span
+                                      className={
+                                        new Date(composeEventAt) <= new Date()
+                                          ? 'text-red-600'
+                                          : 'text-gray-500'
+                                      }
+                                    >
+                                      {new Date(composeEventAt) <= new Date()
+                                        ? `hace: ${(relativeFrom(composeEventAt) || '')
+                                          .replace(/\b(en|hace)\b\s*/, '')
+                                          .replace(/segundos?/, 's')
+                                          .replace(/minutos?/, 'min')
+                                          .replace(/horas?/, 'h')
+                                          .replace(/días?/, 'd')
+                                          .replace(/mes(es)?/, 'm')
+                                          .replace(/años?/, 'a')}`
+                                        : relativeIn(composeEventAt) || ''}
+                                    </span>
+                                  </span>
+                      )}
+                      {composeExpiresAt && (
+                        <span className="inline-flex items-center gap-1">
+                                    <Hourglass size={12} className="text-amber-600" />
+                                    <span className="text-gray-500">{relativeIn(composeExpiresAt)}</span>
+                                  </span>
+                      )}
+                    </div>
+                    <div className="mt-3 border-t border-gray-100 pt-3">
+                      <LocalizationProvider dateAdapter={AdapterDayjs}>
+                        <div className="flex items-center gap-6 text-xs text-gray-700">
+                          {!composeIsEmergency && (
+                            <div className="flex flex-col gap-1">
+                              <div className="flex items-center gap-2">
+                                <span className="font-medium">{t('schedule.sendAt')}</span>
+                                <button
+                                  ref={sendAnchorRef}
+                                  onClick={() => setSendPickerOpen(true)}
+                                  className="p-1.5 rounded-md hover:bg-gray-100 text-gray-600"
+                                >
+                                  <Clock size={14} />
+                                </button>
+                              </div>
+                              <DateTimePicker
+                                value={composeSendAt ? dayjs(composeSendAt) : null}
+                                onChange={(v) => setComposeSendAt(v ? v.toISOString() : '')}
+                                minDateTime={dayjs()}
+                                maxDateTime={
+                                  composeEventAt && composeExpiresAt
+                                    ? new Date(composeEventAt) < new Date(composeExpiresAt)
+                                      ? dayjs(composeEventAt)
+                                      : dayjs(composeExpiresAt)
+                                    : composeEventAt
+                                      ? dayjs(composeEventAt)
+                                      : composeExpiresAt
+                                        ? dayjs(composeExpiresAt)
+                                        : undefined
+                                }
+                                open={sendPickerOpen}
+                                onClose={() => setSendPickerOpen(false)}
+                                slotProps={{
+                                  popper: {
+                                    anchorEl: sendAnchorRef.current,
+                                    placement: 'bottom-start',
+                                  },
+                                  textField: { sx: { display: 'none' } },
+                                }}
+                              />
+                              <div className="text-[11px] text-gray-500">
+                                -- {composeSendAt ? formatLocal(composeSendAt) : ''}
+                              </div>
+                            </div>
+                          )}
+                          <div className="flex flex-col gap-1">
+                            <div className="flex items-center gap-2">
+                              <span className="font-medium">{t('schedule.eventAt')}</span>
+                              <button
+                                ref={eventAnchorRef}
+                                onClick={() => setEventPickerOpen(true)}
+                                className="p-1.5 rounded-md hover:bg-gray-100 text-gray-600"
+                              >
+                                <Calendar size={14} />
+                              </button>
+                            </div>
+                            <DateTimePicker
+                              value={composeEventAt ? dayjs(composeEventAt) : null}
+                              onChange={(v) => setComposeEventAt(v ? v.toISOString() : '')}
+                              minDateTime={
+                                composeSendAt || composeExpiresAt
+                                  ? dayjs(
+                                    new Date(
+                                      Math.max(
+                                        composeSendAt
+                                          ? new Date(composeSendAt).getTime()
+                                          : Date.now(),
+                                        composeExpiresAt
+                                          ? new Date(composeExpiresAt).getTime()
+                                          : Date.now()
+                                      )
+                                    )
+                                  )
+                                  : dayjs()
+                              }
+                              open={eventPickerOpen}
+                              onClose={() => setEventPickerOpen(false)}
+                              slotProps={{
+                                popper: {
+                                  anchorEl: eventAnchorRef.current,
+                                  placement: 'bottom-start',
+                                },
+                                textField: { sx: { display: 'none' } },
                               }}
-                              className="p-1.5 rounded-full text-indigo-600 hover:bg-indigo-50"
+                            />
+                            <div className="text-[11px] text-gray-500">
+                              -- {composeEventAt ? formatLocal(composeEventAt) : ''}
+                            </div>
+                          </div>
+                          <div className="flex flex-col gap-1">
+                            <div className="flex items-center gap-2">
+                              <span className="font-medium">{t('schedule.expiresAt')}</span>
+                              <button
+                                ref={expiresAnchorRef}
+                                onClick={() => setExpiresPickerOpen(true)}
+                                className="p-1.5 rounded-md hover:bg-gray-100 text-gray-600"
+                              >
+                                <Hourglass size={14} />
+                              </button>
+                            </div>
+                            <DateTimePicker
+                              value={composeExpiresAt ? dayjs(composeExpiresAt) : null}
+                              onChange={(v) => setComposeExpiresAt(v ? v.toISOString() : '')}
+                              minDateTime={composeSendAt ? dayjs(composeSendAt) : dayjs()}
+                              maxDateTime={composeEventAt ? dayjs(composeEventAt) : undefined}
+                              open={expiresPickerOpen}
+                              onClose={() => setExpiresPickerOpen(false)}
+                              slotProps={{
+                                popper: {
+                                  anchorEl: expiresAnchorRef.current,
+                                  placement: 'bottom-start',
+                                },
+                                textField: { sx: { display: 'none' } },
+                              }}
+                            />
+                            <div className="text-[11px] text-gray-500">
+                              -- {composeExpiresAt ? formatLocal(composeExpiresAt) : ''}
+                            </div>
+                          </div>
+                        </div>
+                      </LocalizationProvider>
+                      <div className="mt-4">
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-semibold text-gray-700"></span>
+                          <div className="flex items-center gap-2">
+                            <input
+                              ref={fileInputRef}
+                              type="file"
+                              multiple
+                              className="hidden"
+                              onChange={(e) => {
+                                const files = Array.from(e.target.files || []);
+                                setComposeAttachments((prev) => [
+                                  ...prev,
+                                  ...files.map((f) => ({
+                                    name: f.name,
+                                    size: f.size,
+                                    type: f.type,
+                                  })),
+                                ]);
+                              }}
+                            />
+                            <button
+                              onClick={() => fileInputRef.current?.click()}
+                              className={`px-2 py-1 text-xs rounded border ${selectedChannel?.verificationStatus === VerificationStatus.VERIFIED ? 'border-indigo-300 text-indigo-600 hover:bg-indigo-50' : 'border-gray-300 text-gray-400 cursor-not-allowed'}`}
+                              disabled={
+                                selectedChannel?.verificationStatus !==
+                                VerificationStatus.VERIFIED
+                              }
                             >
-                              <Users size={14} />
+                              <Paperclip size={12} className="inline mr-1" />
+                              {selectedChannel?.verificationStatus ===
+                              VerificationStatus.VERIFIED
+                                ? 'Adjuntar'
+                                : 'Solo canal verificado'}
                             </button>
                           </div>
                         </div>
-                        <div className="mt-4 text-xl font-bold text-gray-900 whitespace-pre-wrap">
-                          {composeContent || t('content.placeholder')}
-                        </div>
-                        <div className="mt-4 flex flex-wrap items-center gap-3 text-xs text-gray-600">
-                          {composeIsEmergency ? (
-                            <div className="relative inline-flex items-center"></div>
-                          ) : (
-                            composeSendAt && (
-                              <span className="inline-flex items-center gap-1">
-                                <Clock size={12} className="text-gray-600" />
-                                <span className="text-gray-500">{relativeIn(composeSendAt)}</span>
-                              </span>
-                            )
-                          )}
-                          {composeEventAt && (
-                            <span className="inline-flex items-center gap-1">
-                              <Calendar
-                                size={12}
-                                className={
-                                  new Date(composeEventAt) <= new Date()
-                                    ? 'text-red-600'
-                                    : 'text-indigo-600'
-                                }
-                              />
-                              <span
-                                className={
-                                  new Date(composeEventAt) <= new Date()
-                                    ? 'text-red-600'
-                                    : 'text-gray-500'
-                                }
+                        {composeAttachments.length > 0 && (
+                          <ul className="mt-2 space-y-1">
+                            {composeAttachments.map((a, i) => (
+                              <li
+                                key={`${a.name}-${i}`}
+                                className="text-xs text-gray-600 flex items-center justify-between"
                               >
-                                {new Date(composeEventAt) <= new Date()
-                                  ? `hace: ${(relativeFrom(composeEventAt) || '')
-                                      .replace(/\b(en|hace)\b\s*/, '')
-                                      .replace(/segundos?/, 's')
-                                      .replace(/minutos?/, 'min')
-                                      .replace(/horas?/, 'h')
-                                      .replace(/días?/, 'd')
-                                      .replace(/mes(es)?/, 'm')
-                                      .replace(/años?/, 'a')}`
-                                  : relativeIn(composeEventAt) || ''}
-                              </span>
-                            </span>
-                          )}
-                          {composeExpiresAt && (
-                            <span className="inline-flex items-center gap-1">
-                              <Hourglass size={12} className="text-amber-600" />
-                              <span className="text-gray-500">{relativeIn(composeExpiresAt)}</span>
-                            </span>
-                          )}
-                        </div>
-                        <div className="mt-3 border-t border-gray-100 pt-3">
-                          <LocalizationProvider dateAdapter={AdapterDayjs}>
-                            <div className="flex items-center gap-6 text-xs text-gray-700">
-                              {!composeIsEmergency && (
-                                <div className="flex flex-col gap-1">
-                                  <div className="flex items-center gap-2">
-                                    <span className="font-medium">{t('schedule.sendAt')}</span>
-                                    <button
-                                      ref={sendAnchorRef}
-                                      onClick={() => setSendPickerOpen(true)}
-                                      className="p-1.5 rounded-md hover:bg-gray-100 text-gray-600"
-                                    >
-                                      <Clock size={14} />
-                                    </button>
-                                  </div>
-                                  <DateTimePicker
-                                    value={composeSendAt ? dayjs(composeSendAt) : null}
-                                    onChange={(v) => setComposeSendAt(v ? v.toISOString() : '')}
-                                    minDateTime={dayjs()}
-                                    maxDateTime={
-                                      composeEventAt && composeExpiresAt
-                                        ? new Date(composeEventAt) < new Date(composeExpiresAt)
-                                          ? dayjs(composeEventAt)
-                                          : dayjs(composeExpiresAt)
-                                        : composeEventAt
-                                          ? dayjs(composeEventAt)
-                                          : composeExpiresAt
-                                            ? dayjs(composeExpiresAt)
-                                            : undefined
-                                    }
-                                    open={sendPickerOpen}
-                                    onClose={() => setSendPickerOpen(false)}
-                                    slotProps={{
-                                      popper: {
-                                        anchorEl: sendAnchorRef.current,
-                                        placement: 'bottom-start',
-                                      },
-                                      textField: { sx: { display: 'none' } },
-                                    }}
-                                  />
-                                  <div className="text-[11px] text-gray-500">
-                                    -- {composeSendAt ? formatLocal(composeSendAt) : ''}
-                                  </div>
-                                </div>
-                              )}
-                              <div className="flex flex-col gap-1">
-                                <div className="flex items-center gap-2">
-                                  <span className="font-medium">{t('schedule.eventAt')}</span>
-                                  <button
-                                    ref={eventAnchorRef}
-                                    onClick={() => setEventPickerOpen(true)}
-                                    className="p-1.5 rounded-md hover:bg-gray-100 text-gray-600"
-                                  >
-                                    <Calendar size={14} />
-                                  </button>
-                                </div>
-                                <DateTimePicker
-                                  value={composeEventAt ? dayjs(composeEventAt) : null}
-                                  onChange={(v) => setComposeEventAt(v ? v.toISOString() : '')}
-                                  minDateTime={
-                                    composeSendAt || composeExpiresAt
-                                      ? dayjs(
-                                          new Date(
-                                            Math.max(
-                                              composeSendAt
-                                                ? new Date(composeSendAt).getTime()
-                                                : Date.now(),
-                                              composeExpiresAt
-                                                ? new Date(composeExpiresAt).getTime()
-                                                : Date.now()
-                                            )
-                                          )
-                                        )
-                                      : dayjs()
-                                  }
-                                  open={eventPickerOpen}
-                                  onClose={() => setEventPickerOpen(false)}
-                                  slotProps={{
-                                    popper: {
-                                      anchorEl: eventAnchorRef.current,
-                                      placement: 'bottom-start',
-                                    },
-                                    textField: { sx: { display: 'none' } },
-                                  }}
-                                />
-                                <div className="text-[11px] text-gray-500">
-                                  -- {composeEventAt ? formatLocal(composeEventAt) : ''}
-                                </div>
-                              </div>
-                              <div className="flex flex-col gap-1">
-                                <div className="flex items-center gap-2">
-                                  <span className="font-medium">{t('schedule.expiresAt')}</span>
-                                  <button
-                                    ref={expiresAnchorRef}
-                                    onClick={() => setExpiresPickerOpen(true)}
-                                    className="p-1.5 rounded-md hover:bg-gray-100 text-gray-600"
-                                  >
-                                    <Hourglass size={14} />
-                                  </button>
-                                </div>
-                                <DateTimePicker
-                                  value={composeExpiresAt ? dayjs(composeExpiresAt) : null}
-                                  onChange={(v) => setComposeExpiresAt(v ? v.toISOString() : '')}
-                                  minDateTime={composeSendAt ? dayjs(composeSendAt) : dayjs()}
-                                  maxDateTime={composeEventAt ? dayjs(composeEventAt) : undefined}
-                                  open={expiresPickerOpen}
-                                  onClose={() => setExpiresPickerOpen(false)}
-                                  slotProps={{
-                                    popper: {
-                                      anchorEl: expiresAnchorRef.current,
-                                      placement: 'bottom-start',
-                                    },
-                                    textField: { sx: { display: 'none' } },
-                                  }}
-                                />
-                                <div className="text-[11px] text-gray-500">
-                                  -- {composeExpiresAt ? formatLocal(composeExpiresAt) : ''}
-                                </div>
-                              </div>
-                            </div>
-                          </LocalizationProvider>
-                          <div className="mt-4">
-                            <div className="flex items-center justify-between">
-                              <span className="text-xs font-semibold text-gray-700"></span>
-                              <div className="flex items-center gap-2">
-                                <input
-                                  ref={fileInputRef}
-                                  type="file"
-                                  multiple
-                                  className="hidden"
-                                  onChange={(e) => {
-                                    const files = Array.from(e.target.files || []);
-                                    setComposeAttachments((prev) => [
-                                      ...prev,
-                                      ...files.map((f) => ({
-                                        name: f.name,
-                                        size: f.size,
-                                        type: f.type,
-                                      })),
-                                    ]);
-                                  }}
-                                />
+                                <span className="truncate max-w-[16rem]">{a.name}</span>
                                 <button
-                                  onClick={() => fileInputRef.current?.click()}
-                                  className={`px-2 py-1 text-xs rounded border ${selectedChannel?.verificationStatus === VerificationStatus.VERIFIED ? 'border-indigo-300 text-indigo-600 hover:bg-indigo-50' : 'border-gray-300 text-gray-400 cursor-not-allowed'}`}
-                                  disabled={
-                                    selectedChannel?.verificationStatus !==
-                                    VerificationStatus.VERIFIED
+                                  className="text-red-600 hover:underline"
+                                  onClick={() =>
+                                    setComposeAttachments((prev) =>
+                                      prev.filter((_, idx) => idx !== i)
+                                    )
                                   }
                                 >
-                                  <Paperclip size={12} className="inline mr-1" />
-                                  {selectedChannel?.verificationStatus ===
-                                  VerificationStatus.VERIFIED
-                                    ? 'Adjuntar'
-                                    : 'Solo canal verificado'}
+                                  Quitar
                                 </button>
-                              </div>
-                            </div>
-                            {composeAttachments.length > 0 && (
-                              <ul className="mt-2 space-y-1">
-                                {composeAttachments.map((a, i) => (
-                                  <li
-                                    key={`${a.name}-${i}`}
-                                    className="text-xs text-gray-600 flex items-center justify-between"
-                                  >
-                                    <span className="truncate max-w-[16rem]">{a.name}</span>
-                                    <button
-                                      className="text-red-600 hover:underline"
-                                      onClick={() =>
-                                        setComposeAttachments((prev) =>
-                                          prev.filter((_, idx) => idx !== i)
-                                        )
-                                      }
-                                    >
-                                      Quitar
-                                    </button>
-                                  </li>
-                                ))}
-                              </ul>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-
-                      <div className="pt-4 flex items-center justify-end gap-3 border-t border-gray-100">
-                        <button
-                          onClick={saveDraft}
-                          className="px-6 py-2.5 border border-gray-300 text-gray-700 font-medium rounded-lg hover:bg-gray-50 transition-colors"
-                        >
-                          {t('saveDraft')}
-                        </button>
-                        <button
-                          onClick={cancelCompose}
-                          className="px-6 py-2.5 border border-gray-300 text-gray-700 font-medium rounded-lg hover:bg-gray-50 transition-colors"
-                        >
-                          Cancelar
-                        </button>
-                        <button
-                          ref={sendButtonRef}
-                          onClick={sendCompose}
-                          disabled={composeSending}
-                          className={`px-6 py-2.5 ${composeIsEmergency ? 'bg-red-600 hover:bg-red-700 shadow-red-200' : 'bg-indigo-600 hover:bg-indigo-700 shadow-indigo-200'} text-white font-medium rounded-lg transition-colors flex items-center gap-2 disabled:opacity-50 relative`}
-                        >
-                          {composeSending ? (
-                            <Loader2 className="animate-spin" size={18} />
-                          ) : (
-                            <Send size={18} />
-                          )}
-                          {t('sendMessage')}
-                        </button>
-                        {composeIsEmergency && sendButtonRef?.current && (
-                          <span
-                            className="fixed z-[100] pointer-events-none rounded-lg bg-red-300/10 animate-ping"
-                            style={{
-                              top: sendButtonRef.current.getBoundingClientRect().top - 2,
-                              left: sendButtonRef.current.getBoundingClientRect().left - 2,
-                              width: sendButtonRef.current.getBoundingClientRect().width + 4,
-                              height: sendButtonRef.current.getBoundingClientRect().height + 4,
-                            }}
-                          />
+                              </li>
+                            ))}
+                          </ul>
                         )}
                       </div>
                     </div>
                   </div>
+
+                  <div className="pt-4 flex items-center justify-end gap-3 border-t border-gray-100">
+                    <button
+                      onClick={saveDraft}
+                      className="px-6 py-2.5 border border-gray-300 text-gray-700 font-medium rounded-lg hover:bg-gray-50 transition-colors"
+                    >
+                      {t('saveDraft')}
+                    </button>
+                    <button
+                      onClick={cancelCompose}
+                      className="px-6 py-2.5 border border-gray-300 text-gray-700 font-medium rounded-lg hover:bg-gray-50 transition-colors"
+                    >
+                      Cancelar
+                    </button>
+                    <button
+                      ref={sendButtonRef}
+                      onClick={sendCompose}
+                      disabled={composeSending}
+                      className={`px-6 py-2.5 ${composeIsEmergency ? 'bg-red-600 hover:bg-red-700 shadow-red-200' : 'bg-indigo-600 hover:bg-indigo-700 shadow-indigo-200'} text-white font-medium rounded-lg transition-colors flex items-center gap-2 disabled:opacity-50 relative`}
+                    >
+                      {composeSending ? (
+                        <Loader2 className="animate-spin" size={18} />
+                      ) : (
+                        <Send size={18} />
+                      )}
+                      {t('sendMessage')}
+                    </button>
+                    {composeIsEmergency && sendButtonRef?.current && (
+                      <span
+                        className="fixed z-[100] pointer-events-none rounded-lg bg-red-300/10 animate-ping"
+                        style={{
+                          top: sendButtonRef.current.getBoundingClientRect().top - 2,
+                          left: sendButtonRef.current.getBoundingClientRect().left - 2,
+                          width: sendButtonRef.current.getBoundingClientRect().width + 4,
+                          height: sendButtonRef.current.getBoundingClientRect().height + 4,
+                        }}
+                      />
+                    )}
+                  </div>
+                </div>
+                </div>
                 </div>
               )}
-            </>
-          )
-        ) : (
-          <div className="flex-1 flex items-center justify-center text-gray-400">
-            {t('channels.selectPrompt')}
+        
+        </div>
+        {isSettingsModalOpen && selectedChannel && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+            <div className="bg-white w-full max-w-lg rounded-xl shadow-2xl border border-gray-100 overflow-hidden max-h-[90vh] flex flex-col">
+              <div className="p-4 border-b border-gray-100 flex items-center justify-between bg-gray-50">
+                <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+                  <Settings size={20} className="text-indigo-600" />
+                  Configuración y Estado
+                </h3>
+                <button
+                  onClick={() => setIsSettingsModalOpen(false)}
+                  className="text-gray-400 hover:text-gray-600 p-2 hover:bg-gray-200 rounded-full transition-colors"
+                >
+                  <X size={20} />
+                </button>
+              </div>
+              
+              <div className="p-6 overflow-y-auto space-y-6">
+                <div className="space-y-0">
+                  <div className="flex items-center justify-between py-1 border-b border-gray-100">
+                      <span className="text-sm font-medium text-gray-700">Visibilidad</span>
+                      <span
+                        className={`text-xs font-medium px-3 py-1 rounded-full ${selectedChannel.isPublic ? 'bg-emerald-50 text-emerald-700 border border-emerald-100' : 'bg-amber-50 text-amber-700 border border-amber-100'}`}
+                      >
+                        {selectedChannel.isPublic ? 'Público' : 'Privado'}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between py-3 border-b border-gray-100">
+                      <span className="text-sm font-medium text-gray-700">Búsqueda</span>
+                      <span
+                        className={`text-xs font-medium px-3 py-1 rounded-full ${!selectedChannel.isHidden ? 'bg-blue-50 text-blue-700 border border-blue-100' : 'bg-gray-100 text-gray-600 border border-gray-200'}`}
+                      >
+                        {!selectedChannel.isHidden ? 'Visible' : 'Oculto'}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between py-3 border-b border-gray-100">
+                      <span className="text-sm font-medium text-gray-700">Búsqueda Exacta</span>
+                      <span
+                        className={`text-xs font-medium px-3 py-1 rounded-full ${selectedChannel.searchExactOnly ? 'bg-purple-50 text-purple-700 border border-purple-100' : 'bg-gray-100 text-gray-600 border border-gray-200'}`}
+                      >
+                        {selectedChannel.searchExactOnly ? 'Activado' : 'Desactivado'}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between py-3 border-b border-gray-100">
+                      <span className="text-sm font-medium text-gray-700">Política de Aprobación</span>
+                      <PolicyBadge policy={selectedChannel.approvalPolicy} />
+                    </div>
+                    <div className="flex items-center justify-between py-3">
+                      <span className="text-sm font-medium text-gray-700">Estado de Verificación</span>
+                      <StatusBadge status={selectedChannel.verificationStatus} />
+                    </div>
+                </div>
+              </div>
+            </div>
           </div>
         )}
+      </>
+    </>
+  )
+) : (
+  <div className="flex-1 flex items-center justify-center text-gray-400">
+    {t('channels.selectPrompt')}
+  </div>
+)}
       </div>
+      {subchannelModalOpen && currentSubchannelParent && (
+        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
+          <div className="bg-white w-full h-full max-w-7xl rounded-xl shadow-lg border border-gray-200 flex flex-col overflow-hidden animate-in fade-in zoom-in duration-200">
+            <div className="p-6 border-b border-gray-100 flex items-center justify-between bg-gray-50/50">
+              <div className="flex items-center gap-4">
+                 <div className="p-3 bg-indigo-50 rounded-xl text-indigo-600">
+                    <IconView name={currentSubchannelParent.icon} size={24} />
+                 </div>
+                 <div>
+                    <h3 className="text-xl font-bold text-gray-900">{currentSubchannelParent.title}</h3>
+                    {currentSubchannelParent.description && (
+                      <p className="text-sm text-gray-500 mt-1">{currentSubchannelParent.description}</p>
+                    )}
+                 </div>
+              </div>
+              <button
+                onClick={() => setSubchannelModalOpen(false)}
+                className="text-gray-400 hover:text-gray-600 p-2 hover:bg-gray-100 rounded-full transition-colors"
+              >
+                <X size={24} />
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto p-6 bg-gray-50/30">
+               {currentSubchannelParent.subchannels && currentSubchannelParent.subchannels.length > 0 ? (
+                  renderCards(currentSubchannelParent.subchannels)
+               ) : (
+                  <div className="flex flex-col items-center justify-center h-full text-gray-400">
+                    <div className="p-4 bg-gray-50 rounded-full mb-3">
+                       <ListTree size={32} />
+                    </div>
+                    <p>No hay subcanales disponibles</p>
+                  </div>
+               )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
-  );
-};
+  )};
 
 export default ChannelManager;
+

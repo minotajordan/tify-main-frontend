@@ -145,7 +145,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onChangeView }) => {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 p-4 md:p-8">
       <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
         <div>
           <h2 className="text-2xl font-bold text-gray-900">{t('dashboard.overview')}</h2>
