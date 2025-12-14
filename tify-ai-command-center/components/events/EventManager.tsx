@@ -133,6 +133,14 @@ export default function EventManager() {
     title?: string;
   }>({ isOpen: false, status: 'loading', message: '' });
 
+  // Templates
+  const [templates, setTemplates] = useState<any[]>([]);
+  const [selectedTemplateId, setSelectedTemplateId] = useState<string>('');
+
+  useEffect(() => {
+    api.getEventTemplates().then(setTemplates);
+  }, [view]); // Reload templates when entering create view
+
   // Load events
   useEffect(() => {
     loadEvents();
@@ -189,6 +197,19 @@ export default function EventManager() {
     });
 
     const formData = new FormData(e.target as HTMLFormElement);
+    
+    let templateData = {};
+    if (selectedTemplateId) {
+        const template = templates.find(t => t.id === selectedTemplateId);
+        if (template) {
+            // Deep copy to avoid reference issues
+            templateData = {
+                zones: JSON.parse(JSON.stringify(template.zones)),
+                seats: JSON.parse(JSON.stringify(template.seats))
+            };
+        }
+    }
+
     const data = {
       title: formData.get('title') as string,
       description: formData.get('description') as string,
@@ -197,7 +218,8 @@ export default function EventManager() {
       location: formData.get('location') as string,
       categories: (formData.get('categories') as string).split(',').map(c => c.trim()).filter(Boolean),
       paymentInfo: formData.get('paymentInfo') as string,
-      status: EventStatus.DRAFT
+      status: EventStatus.DRAFT,
+      ...templateData
     };
 
     try {
@@ -453,6 +475,29 @@ export default function EventManager() {
           <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-8">
             <h2 className="text-xl font-bold text-gray-900 mb-6">Nuevo Evento</h2>
             <form onSubmit={handleCreateEvent} className="space-y-6">
+              
+              {templates.length > 0 && (
+                <div className="bg-indigo-50 border border-indigo-100 rounded-lg p-4 mb-6">
+                  <h3 className="font-medium text-indigo-900 mb-2 flex items-center gap-2">
+                    <Layout size={18} />
+                    Plantilla de Escenario
+                  </h3>
+                  <p className="text-sm text-indigo-700 mb-3">
+                    Puedes comenzar con un escenario vacío o usar una plantilla guardada.
+                  </p>
+                  <select 
+                    className="w-full px-4 py-2 border border-indigo-200 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 bg-white"
+                    value={selectedTemplateId}
+                    onChange={(e) => setSelectedTemplateId(e.target.value)}
+                  >
+                    <option value="">Escenario Vacío (Crear desde cero)</option>
+                    {templates.map(t => (
+                      <option key={t.id} value={t.id}>{t.name}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Título del Evento</label>
                 <input required name="title" type="text" className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500" placeholder="Ej: Concierto de Verano" />

@@ -183,6 +183,12 @@ export interface EventZone {
   seatGap?: number;
   startNumber?: number;
   numberingDirection?: 'LTR' | 'RTL';
+  verticalDirection?: 'TTB' | 'BTT';
+  numberingMode?: 'ROW' | 'COLUMN';
+  continuousNumbering?: boolean;
+  numberingSnake?: boolean;
+  rowLabelType?: 'Alpha' | 'Numeric' | 'Roman';
+  rotation?: number; // Degrees
   seats?: EventSeat[];
   _count?: { tickets: number };
 }

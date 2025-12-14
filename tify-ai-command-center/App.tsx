@@ -306,7 +306,7 @@ const App: React.FC = () => {
         </header>
 
         {/* View Content */}
-        <div className="flex-1 overflow-y-auto bg-gray-50 p-0 md:p-0">
+        <div className="flex-1 bg-gray-50 overflow-y-auto p-0 md:p-0">
           <div className="max-w-7xl mx-auto h-full">
             {renderContent()}
           </div>

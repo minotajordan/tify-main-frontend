@@ -334,7 +334,11 @@ const FormsList: React.FC<{
         {/* Mobile View: Cards */}
         <div className="block md:hidden space-y-4">
         {filteredForms.map((form) => (
-          <div key={form.id} className="bg-white rounded-xl border border-gray-200 shadow-sm p-4">
+          <div 
+            key={form.id} 
+            className="bg-white rounded-xl border border-gray-200 shadow-sm p-4 cursor-pointer hover:border-indigo-300 transition-colors"
+            onClick={() => onViewSubmissions(form.id)}
+          >
             <div className="flex justify-between items-start mb-2">
               <div>
                 <h3 className="font-medium text-gray-900 line-clamp-1">{form.title}</h3>
@@ -383,21 +387,21 @@ const FormsList: React.FC<{
             <div className="flex justify-between items-center">
               <div className="flex gap-1">
                 <button
-                  onClick={() => window.open(`/forms/${form.slug}`, '_blank')}
+                  onClick={(e) => { e.stopPropagation(); window.open(`/forms/${form.slug}`, '_blank'); }}
                   className="p-2 text-gray-500 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
                   title={t('forms.action.viewPublic')}
                 >
                   <ExternalLink size={18} />
                 </button>
                 <button
-                  onClick={() => handleOpenQR(form)}
+                  onClick={(e) => { e.stopPropagation(); handleOpenQR(form); }}
                   className="p-2 text-gray-500 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
                   title={t('forms.action.qrCode')}
                 >
                   <QrCode size={18} />
                 </button>
                 <button
-                  onClick={() => onViewSubmissions(form.id)}
+                  onClick={(e) => { e.stopPropagation(); onViewSubmissions(form.id); }}
                   className="p-2 text-gray-500 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
                   title={t('forms.action.viewSubmissions')}
                 >
@@ -407,14 +411,14 @@ const FormsList: React.FC<{
               
               <div className="flex gap-1 border-l border-gray-100 pl-2">
                 <button
-                  onClick={() => onEdit(form.id)}
+                  onClick={(e) => { e.stopPropagation(); onEdit(form.id); }}
                   className="p-2 text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
                   title={t('forms.action.edit')}
                 >
                   <Edit2 size={18} />
                 </button>
                 <button
-                  onClick={() => handleDelete(form.id)}
+                  onClick={(e) => { e.stopPropagation(); handleDelete(form.id); }}
                   className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
                   title={t('forms.action.delete')}
                 >

@@ -9,7 +9,10 @@ import {
   CreditCard,
   User,
   Mail,
-  ChevronRight
+  ChevronRight,
+  ZoomIn,
+  ZoomOut,
+  Maximize
 } from 'lucide-react';
 import { TifyEvent, EventZone, EventSeat, SeatStatus } from '../../types';
 import { api } from '../../services/api';
@@ -37,6 +40,12 @@ export default function PublicTicketPurchase({ eventId }: PublicTicketPurchasePr
   const [guestForm, setGuestForm] = useState({ fullName: '', email: '' });
   const [processing, setProcessing] = useState(false);
 
+  // Zoom and Pan State
+  const [transform, setTransform] = useState({ scale: 1, x: 0, y: 0 });
+  const containerRef = React.useRef<HTMLDivElement>(null);
+  const dragStartRef = React.useRef({ x: 0, y: 0 });
+  const [isDragging, setIsDragging] = useState(false);
+
   useEffect(() => {
     const fetchEvent = async () => {
       try {
@@ -51,6 +60,107 @@ export default function PublicTicketPurchase({ eventId }: PublicTicketPurchasePr
     };
     fetchEvent();
   }, [eventId]);
+
+  // Calculate optimal zoom and center when event loads or window resizes
+  useEffect(() => {
+    if (!event?.zones || event.zones.length === 0 || !containerRef.current) return;
+
+    const calculateBounds = () => {
+      let minX = Infinity;
+      let minY = Infinity;
+      let maxX = -Infinity;
+      let maxY = -Infinity;
+
+      event.zones.forEach(zone => {
+        let x = 0, y = 0, width = 0, height = 0;
+
+        if (zone.type === 'STAGE') {
+          x = zone.layout?.x || 50;
+          y = zone.layout?.y || 50;
+          width = zone.layout?.width || 200;
+          height = zone.layout?.height || 100;
+        } else if (zone.type === 'INFO') {
+          x = zone.layout?.x || 0;
+          y = zone.layout?.y || 0;
+          width = zone.layout?.width || 100;
+          height = zone.layout?.height || 50;
+        } else {
+          // General or Seated
+          const zoneSeats = zone.seats || event.seats?.filter(s => s.zoneId === zone.id) || [];
+          const hasSeats = zoneSeats.length > 0;
+          const isGeneral = !hasSeats && (zone.capacity || 0) > 0;
+
+          if (isGeneral) {
+            x = zone.layout?.x || 50;
+            y = zone.layout?.y || 100;
+            width = zone.layout?.width || 200;
+            height = zone.layout?.height || 150;
+          } else {
+            x = zone.layout?.x || 0;
+            y = zone.layout?.y || 0;
+            width = zone.layout?.width || (zone.cols * 40 + 40);
+            height = zone.layout?.height || (zone.rows * 40 + 40);
+          }
+        }
+
+        minX = Math.min(minX, x);
+        minY = Math.min(minY, y);
+        maxX = Math.max(maxX, x + width);
+        maxY = Math.max(maxY, y + height);
+      });
+
+      // Add padding
+      const padding = 50;
+      minX -= padding;
+      minY -= padding;
+      maxX += padding;
+      maxY += padding;
+
+      const contentWidth = maxX - minX;
+      const contentHeight = maxY - minY;
+
+      if (containerRef.current) {
+        const { clientWidth, clientHeight } = containerRef.current;
+        const scaleX = clientWidth / contentWidth;
+        const scaleY = clientHeight / contentHeight;
+        
+        // Use the smaller scale to fit everything
+        // Limit max scale to 1.2 to avoid too much zoom on few items
+        const scale = Math.min(Math.min(scaleX, scaleY), 1.2);
+        
+        // Center the content
+        const x = (clientWidth - contentWidth * scale) / 2 - minX * scale;
+        const y = (clientHeight - contentHeight * scale) / 2 - minY * scale;
+
+        setTransform({ scale, x, y });
+      }
+    };
+
+    calculateBounds();
+    window.addEventListener('resize', calculateBounds);
+    return () => window.removeEventListener('resize', calculateBounds);
+  }, [event]);
+
+  const handleZoomIn = () => {
+    setTransform(prev => ({
+      ...prev,
+      scale: Math.min(prev.scale * 1.2, 3)
+    }));
+  };
+
+  const handleZoomOut = () => {
+    setTransform(prev => ({
+      ...prev,
+      scale: Math.max(prev.scale / 1.2, 0.2)
+    }));
+  };
+
+  const handleResetZoom = () => {
+    // Trigger re-calculation
+    const evt = new Event('resize');
+    window.dispatchEvent(evt);
+  };
+
 
   const toggleSeat = (seat: EventSeat, zone: EventZone) => {
     if (seat.status !== SeatStatus.AVAILABLE) return;
@@ -141,13 +251,68 @@ export default function PublicTicketPurchase({ eventId }: PublicTicketPurchasePr
 
   // Render Seat Map
   const renderSeatMap = () => {
-    // Calculate bounds to center the map
-    // Default 800x600 canvas for relative positioning
     return (
-      <div className="relative w-full h-[600px] bg-slate-50 border border-slate-200 rounded-xl overflow-hidden shadow-inner">
-        <div className="absolute inset-0 overflow-auto">
-          <div className="relative min-w-[800px] min-h-[600px] p-10">
-            {event.zones?.map(zone => {
+      <div 
+        ref={containerRef}
+        className={`relative w-full h-[600px] bg-slate-50 border border-slate-200 rounded-xl overflow-hidden shadow-inner ${isDragging ? 'cursor-grabbing' : 'cursor-grab'}`}
+        onMouseDown={(e) => {
+           // Ignore clicks on buttons
+           if ((e.target as HTMLElement).closest('button')) return;
+           
+           e.preventDefault();
+           setIsDragging(true);
+           dragStartRef.current = { 
+             x: e.clientX - transform.x, 
+             y: e.clientY - transform.y 
+           };
+        }}
+        onMouseMove={(e) => {
+           if (isDragging) {
+             setTransform(prev => ({
+               ...prev,
+               x: e.clientX - dragStartRef.current.x,
+               y: e.clientY - dragStartRef.current.y
+             }));
+           }
+        }}
+        onMouseUp={() => setIsDragging(false)}
+        onMouseLeave={() => setIsDragging(false)}
+      >
+        <div className="absolute top-4 right-4 flex flex-col gap-2 z-20 bg-white rounded-lg shadow-md border border-slate-200 p-1">
+          <button 
+            onClick={handleZoomIn}
+            className="p-2 hover:bg-slate-100 rounded text-slate-600 hover:text-indigo-600 transition-colors"
+            title="Acercar"
+          >
+            <ZoomIn size={20} />
+          </button>
+          <button 
+            onClick={handleZoomOut}
+            className="p-2 hover:bg-slate-100 rounded text-slate-600 hover:text-indigo-600 transition-colors"
+            title="Alejar"
+          >
+            <ZoomOut size={20} />
+          </button>
+          <button 
+            onClick={handleResetZoom}
+            className="p-2 hover:bg-slate-100 rounded text-slate-600 hover:text-indigo-600 transition-colors"
+            title="Restablecer vista"
+          >
+            <Maximize size={20} />
+          </button>
+        </div>
+
+        <div 
+          className="absolute origin-top-left"
+          style={{
+            transform: `translate(${transform.x}px, ${transform.y}px) scale(${transform.scale})`,
+            transition: isDragging ? 'none' : 'transform 0.1s ease-out',
+            width: '100%',
+            height: '100%'
+          }}
+        >
+          <div className="relative min-w-[800px] min-h-[600px]">
+            {event?.zones?.map(zone => {
               // Handle Stage Zones
               if (zone.type === 'STAGE') {
                 return (
@@ -275,7 +440,9 @@ export default function PublicTicketPurchase({ eventId }: PublicTicketPurchasePr
                     width: zone.layout?.width || (zone.cols * 40 + 40),
                     height: zone.layout?.height || (zone.rows * 40 + 40),
                     borderColor: zone.color || '#cbd5e1',
-                    backgroundColor: zone.color ? `${zone.color}10` : 'rgba(255,255,255,0.5)'
+                    backgroundColor: zone.color ? `${zone.color}10` : 'rgba(255,255,255,0.5)',
+                    transform: zone.rotation ? `rotate(${zone.rotation}deg)` : 'none',
+                    transformOrigin: 'center center'
                   }}
                 >
                   <div 
@@ -299,30 +466,34 @@ export default function PublicTicketPurchase({ eventId }: PublicTicketPurchasePr
                       top = seat.y;
                     } else if (zone.rows > 0 && zone.cols > 0) {
                       // Grid calculation - Fixed size with gap
-                      // Use same logic as SeatDesigner for consistency
                       const seatSize = 24;
                       const gap = zone.seatGap ?? 4;
-                      const padding = 16; // Adjusted to match SeatDesigner
+                      const padding = 10; // Match SeatDesigner padding (it was 10 in designer, 16 here previously)
                       
                       width = seatSize;
                       height = seatSize;
                       
-                      const r = seat.rowLabel.charCodeAt(0) - 65;
-                      // Calculate column index based on direction
-                      const dir = zone.numberingDirection || 'LTR';
-                      const start = zone.startNumber ?? 1;
-                      const labelNum = parseInt(seat.colLabel);
-                      
-                      let c;
-                      if (dir === 'LTR') {
-                          c = labelNum - start;
+                      // Use grid coordinates if available (Preferred)
+                      if (seat.gridRow !== undefined && seat.gridCol !== undefined) {
+                        left = padding + seat.gridCol * (seatSize + gap);
+                        top = padding + seat.gridRow * (seatSize + gap);
                       } else {
-                          // RTL: col = cols - (label - start) - 1
-                          c = zone.cols - (labelNum - start) - 1;
+                        // Fallback Legacy Calculation
+                        const r = seat.rowLabel.charCodeAt(0) - 65;
+                        const dir = zone.numberingDirection || 'LTR';
+                        const start = zone.startNumber ?? 1;
+                        const labelNum = parseInt(seat.colLabel);
+                        
+                        let c;
+                        if (dir === 'LTR') {
+                            c = labelNum - start;
+                        } else {
+                            c = zone.cols - (labelNum - start) - 1;
+                        }
+                        
+                        left = padding + c * (seatSize + gap);
+                        top = padding + r * (seatSize + gap);
                       }
-                      
-                      left = padding + c * (seatSize + gap);
-                      top = padding + r * (seatSize + gap);
                     } else {
                       // Fallback for missing coords/grid
                       const r = seat.rowLabel.charCodeAt(0) - 65;
@@ -337,7 +508,7 @@ export default function PublicTicketPurchase({ eventId }: PublicTicketPurchasePr
                         onClick={() => toggleSeat(seat, zone)}
                         disabled={!isAvailable}
                         className={`
-                          absolute rounded-t-lg text-[10px] font-bold flex items-center justify-center transition-all shadow-sm
+                          absolute rounded-sm text-[10px] font-bold flex items-center justify-center transition-all shadow-sm
                           ${!isAvailable 
                             ? 'bg-slate-200 text-slate-400 cursor-not-allowed border border-slate-300' 
                             : isSelected

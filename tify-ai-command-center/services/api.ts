@@ -668,4 +668,22 @@ export const api = {
       }
     }
   },
+
+  // --- Templates ---
+  saveEventTemplate: async (name: string, zones: EventZone[], seats: EventSeat[]): Promise<void> => {
+      const templates = JSON.parse(localStorage.getItem('tify_event_templates') || '[]');
+      const newTemplate = {
+          id: Math.random().toString(36).substr(2, 9),
+          name,
+          zones,
+          seats,
+          createdAt: new Date().toISOString()
+      };
+      templates.push(newTemplate);
+      localStorage.setItem('tify_event_templates', JSON.stringify(templates));
+  },
+
+  getEventTemplates: async (): Promise<Array<{ id: string; name: string; zones: EventZone[]; seats: EventSeat[] }>> => {
+      return JSON.parse(localStorage.getItem('tify_event_templates') || '[]');
+  },
 };
