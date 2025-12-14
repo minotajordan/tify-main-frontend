@@ -108,6 +108,7 @@ export interface Message {
   publishedAt?: string;
   eventAt?: string;
   expiresAt?: string;
+  extra?: any;
   createdAt: string;
   sender: UserProfileShort;
   channel: { title: string; icon: string };
@@ -150,6 +151,11 @@ export interface UserStats {
   totalChannels: number;
   pendingApprovals: number;
   unreadMessages: number;
+  subscribedChannelsCount?: number;
+  messagesCount?: number;
+  ownedChannelsCount?: number;
+  pendingApprovalsCount?: number;
+  recentActivity?: any[];
 }
 
 // --- EVENTS MODULE TYPES ---
@@ -181,6 +187,8 @@ export interface EventZone {
   type: 'SALE' | 'INFO' | 'STAGE';
   layout?: { x: number; y: number; width?: number; height?: number };
   seatGap?: number;
+  seatGapX?: number;
+  seatGapY?: number;
   startNumber?: number;
   numberingDirection?: 'LTR' | 'RTL';
   verticalDirection?: 'TTB' | 'BTT';

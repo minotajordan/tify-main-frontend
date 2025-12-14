@@ -18,9 +18,20 @@ interface RichTextEditorProps {
   onChange: (value: string) => void;
   placeholder?: string;
   label?: string;
+  className?: string;
+  enablePagination?: boolean;
+  pageHeight?: number;
 }
 
-const RichTextEditor: React.FC<RichTextEditorProps> = ({ value, onChange, placeholder, label }) => {
+const RichTextEditor: React.FC<RichTextEditorProps> = ({ 
+  value, 
+  onChange, 
+  placeholder, 
+  label, 
+  className = '',
+  enablePagination = false,
+  pageHeight = 1122 // A4 at 96 DPI is approx 1123px, let's use a safe printable height
+}) => {
   const contentRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -59,13 +70,13 @@ const RichTextEditor: React.FC<RichTextEditorProps> = ({ value, onChange, placeh
   );
 
   return (
-    <div className="border border-gray-300 rounded-lg overflow-hidden bg-white focus-within:ring-2 focus-within:ring-indigo-500 focus-within:border-indigo-500">
+    <div className={`border border-gray-300 rounded-lg overflow-hidden bg-white focus-within:ring-2 focus-within:ring-indigo-500 focus-within:border-indigo-500 flex flex-col ${className}`}>
       {label && (
-        <div className="px-3 py-2 text-xs font-semibold text-gray-500 uppercase border-b border-gray-100 bg-gray-50">
+        <div className="px-3 py-2 text-xs font-semibold text-gray-500 uppercase border-b border-gray-100 bg-gray-50 shrink-0">
           {label}
         </div>
       )}
-      <div className="flex flex-wrap gap-1 p-2 border-b border-gray-200 bg-gray-50">
+      <div className="flex flex-wrap gap-1 p-2 border-b border-gray-200 bg-gray-50 shrink-0">
         <ToolbarButton icon={Bold} command="bold" title="Bold" />
         <ToolbarButton icon={Italic} command="italic" title="Italic" />
         <ToolbarButton icon={Underline} command="underline" title="Underline" />
@@ -84,9 +95,20 @@ const RichTextEditor: React.FC<RichTextEditorProps> = ({ value, onChange, placeh
         ref={contentRef}
         contentEditable
         onInput={handleInput}
-        className="p-4 min-h-[120px] outline-none prose prose-sm max-w-none"
+        className={`outline-none prose max-w-none flex-1 overflow-y-auto relative font-serif text-gray-800 leading-relaxed text-justify ${enablePagination ? 'p-12' : 'p-4'}`}
+        style={enablePagination ? {
+          backgroundImage: `linear-gradient(to bottom, transparent ${pageHeight - 10}px, #e2e8f0 ${pageHeight - 10}px, #e2e8f0 ${pageHeight}px, transparent ${pageHeight}px)`,
+          backgroundSize: `100% ${pageHeight}px`,
+          backgroundRepeat: 'repeat-y',
+          paddingBottom: '50px'
+        } : {}}
         data-placeholder={placeholder}
       />
+      {enablePagination && (
+        <div className="absolute right-2 top-2 text-[10px] text-gray-400 pointer-events-none bg-white/80 px-1 rounded">
+          Formato Paginado (A4)
+        </div>
+      )}
     </div>
   );
 };

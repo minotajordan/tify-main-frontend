@@ -17,11 +17,14 @@ import {
   Loader2,
   CheckCircle,
   AlertCircle,
-  Trash2
+  Trash2,
+  Gift
 } from 'lucide-react';
 import { api } from '../../services/api';
 import { TifyEvent, EventStatus } from '../../types';
 import SeatDesigner from './SeatDesigner';
+import SalesDetails from './SalesDetails';
+import RaffleSystem from './RaffleSystem';
 
 interface LiveStats {
   totalRevenue: number;
@@ -115,7 +118,7 @@ export default function EventManager() {
   const [events, setEvents] = useState<TifyEvent[]>([]);
   const [selectedEvent, setSelectedEvent] = useState<TifyEvent | null>(null);
   const [view, setView] = useState<'list' | 'create' | 'details'>('list');
-  const [activeTab, setActiveTab] = useState<'info' | 'seats' | 'control'>('info');
+  const [activeTab, setActiveTab] = useState<'info' | 'seats' | 'control' | 'sales' | 'raffle'>('info');
   const [loading, setLoading] = useState(false);
   const [checkInCode, setCheckInCode] = useState('');
   const [liveStats, setLiveStats] = useState<LiveStats | null>(null);
@@ -640,6 +643,24 @@ export default function EventManager() {
               Control en Vivo
             </div>
           </button>
+          <button
+            onClick={() => setActiveTab('sales')}
+            className={`py-3 text-sm font-medium border-b-2 transition-colors ${activeTab === 'sales' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
+          >
+            <div className="flex items-center gap-2">
+              <Ticket size={16} />
+              Detalles de Ventas
+            </div>
+          </button>
+          <button
+            onClick={() => setActiveTab('raffle')}
+            className={`py-3 text-sm font-medium border-b-2 transition-colors ${activeTab === 'raffle' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
+          >
+            <div className="flex items-center gap-2">
+              <Gift size={16} />
+              Sorteo
+            </div>
+          </button>
         </div>
       </div>
 
@@ -670,6 +691,12 @@ export default function EventManager() {
                 message: 'La configuración de aforo y sillas se ha guardado correctamente.'
              });
           }} />
+        )}
+        {activeTab === 'sales' && selectedEvent && (
+          <SalesDetails eventId={selectedEvent.id} />
+        )}
+        {activeTab === 'raffle' && selectedEvent && (
+          <RaffleSystem eventId={selectedEvent.id} />
         )}
         {activeTab === 'info' && (
           <div className="p-8 max-w-3xl mx-auto space-y-6">
@@ -772,15 +799,15 @@ export default function EventManager() {
            <div className="h-full flex flex-col p-6 max-w-4xl mx-auto w-full">
              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 h-full">
                {/* Scanner Section */}
-               <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200 flex flex-col">
-                 <h3 className="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2">
+               <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200 flex flex-col h-full overflow-hidden">
+                 <h3 className="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2 flex-shrink-0">
                    <Ticket size={20} />
                    Control de Acceso
                  </h3>
                  
-                 <div className="flex-1 flex flex-col items-center justify-center border-2 border-dashed border-gray-200 rounded-xl bg-gray-50 mb-6 p-6">
-                   <div className="w-48 h-48 bg-white p-2 rounded-lg shadow-sm mb-4 flex items-center justify-center">
-                     <Search size={48} className="text-gray-300" />
+                 <div className="w-full flex flex-col items-center border-2 border-dashed border-gray-200 rounded-xl bg-gray-50 mb-6 p-6 flex-shrink-0">
+                   <div className="w-32 h-32 bg-white p-2 rounded-lg shadow-sm mb-4 flex items-center justify-center">
+                     <Search size={32} className="text-gray-300" />
                    </div>
                    <p className="text-sm text-gray-500 text-center mb-4">Escanea el código QR del asistente o ingresa el código manual</p>
                    
@@ -802,8 +829,9 @@ export default function EventManager() {
                    </div>
                  </div>
 
-                 <div className="space-y-2">
-                   <h4 className="font-medium text-sm text-gray-700">Últimas Ventas</h4>
+                 <div className="space-y-2 flex-1 flex flex-col min-h-0">
+                   <h4 className="font-medium text-sm text-gray-700 flex-shrink-0">Últimas Ventas</h4>
+                   <div className="overflow-y-auto flex-1 space-y-2 pr-2">
                    {liveStats?.recentSales?.length ? (
                      liveStats.recentSales.map(sale => (
                        <div key={sale.id} className="bg-green-50 text-green-700 p-3 rounded-lg text-sm flex justify-between items-center">
@@ -824,12 +852,13 @@ export default function EventManager() {
                        No hay ventas recientes
                      </div>
                    )}
+                   </div>
                  </div>
                </div>
 
                {/* Stats Section */}
-               <div className="space-y-6">
-                 <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
+               <div className="flex flex-col gap-6 h-full overflow-hidden">
+                 <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200 flex-shrink-0">
                    <h3 className="text-lg font-bold text-gray-900 mb-4">Estadísticas en Vivo</h3>
                    <div className="grid grid-cols-2 gap-4">
                      <div className="p-4 bg-indigo-50 rounded-xl">
@@ -859,9 +888,9 @@ export default function EventManager() {
                    </div>
                  </div>
 
-                 <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200 flex-1">
-                   <h3 className="text-lg font-bold text-gray-900 mb-4">Estado de Zonas</h3>
-                   <div className="space-y-4">
+                 <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200 flex-1 flex flex-col min-h-0 overflow-hidden">
+                   <h3 className="text-lg font-bold text-gray-900 mb-4 flex-shrink-0">Estado de Zonas</h3>
+                   <div className="space-y-4 overflow-y-auto flex-1 pr-2">
                      {liveStats?.revenueByZone.map(zone => {
                        const percentage = zone.capacity > 0 ? (zone.count / zone.capacity) * 100 : 0;
                        const originalZone = selectedEvent?.zones.find(z => z.id === zone.id);

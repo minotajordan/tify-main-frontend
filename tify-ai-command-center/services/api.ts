@@ -28,8 +28,8 @@ export const API_BASE = (() => {
   ) {
     return (process as any).env.TIFY_API_BASE;
   }
-  // return 'https://tify-main-backend.vercel.app/api';
-  return 'http://localhost:3333/api';
+  return 'https://tify-main-backend.vercel.app/api';
+  // return 'http://localhost:3333/api';
 })();
 export function getAuthToken(): string | null {
   return typeof localStorage !== 'undefined' ? localStorage.getItem('tify_token') : null;
@@ -105,12 +105,29 @@ async function request<T>(url: string, options?: RequestInit): Promise<T> {
   return json;
 }
 
+export async function uploadFile(file: File): Promise<{ url: string }> {
+  const formData = new FormData();
+  formData.append('file', file);
+  return request<{ url: string }>(`${API_BASE}/upload`, {
+    method: 'POST',
+    body: formData,
+  });
+}
+
 export const api = {
   getCurrentUserId: () => getCurrentUserId() || '',
   getBootstrap: async (userId?: string): Promise<any> => {
     const uid = userId || getCurrentUserId();
     const query = new URLSearchParams(uid ? { userid: uid } : ({} as any));
     return request(`${API_BASE}/app/bootstrap?${query.toString()}`);
+  },
+  uploadFile: async (file: File): Promise<{ url: string; filename: string; originalName: string; size: number; mimetype: string }> => {
+    const formData = new FormData();
+    formData.append('file', file);
+    return request(`${API_BASE}/upload`, {
+      method: 'POST',
+      body: formData,
+    });
   },
   // --- Channels ---
   getChannels: async (params?: { search?: string; isPublic?: boolean }): Promise<Channel[]> => {
@@ -234,6 +251,8 @@ export const api = {
     publishedAt?: string;
     eventAt?: string;
     expiresAt?: string;
+    extra?: any;
+    attachments?: string[];
   }): Promise<{ message: string; data: Message }> => {
     return request(`${API_BASE}/messages`, {
       method: 'POST',
@@ -685,5 +704,17 @@ export const api = {
 
   getEventTemplates: async (): Promise<Array<{ id: string; name: string; zones: EventZone[]; seats: EventSeat[] }>> => {
       return JSON.parse(localStorage.getItem('tify_event_templates') || '[]');
+  },
+
+  getEventTickets: async (eventId: string): Promise<any[]> => {
+    return request<any[]>(`${API_BASE}/events/${eventId}/tickets`);
+  },
+
+  checkInTicket: async (eventId: string, code: string): Promise<any> => {
+    return request(`${API_BASE}/events/${eventId}/check-in`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code })
+    });
   },
 };

@@ -1,9 +1,24 @@
 import React, { useState, useEffect } from 'react';
-import { Send, Sparkles, Paperclip, Clock, AlertTriangle, Loader2 } from 'lucide-react';
+import { Send, Sparkles, Paperclip, Clock, AlertTriangle, Loader2, X, FileText, Image as ImageIcon, Film, File, MapPin } from 'lucide-react';
 import { generateMessageDraft } from '../services/geminiService';
-import { api } from '../services/api';
+import { api, API_BASE, getAuthToken } from '../services/api';
 import { MessagePriority, Channel, DeliveryMethod } from '../types';
 import { useI18n } from '../i18n';
+import LocationPicker from './LocationPicker';
+
+const getFileIcon = (filename: string) => {
+  const ext = filename.split('.').pop()?.toLowerCase();
+  if (['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg'].includes(ext || '')) {
+    return <ImageIcon size={24} className="text-purple-500" />;
+  }
+  if (['pdf', 'doc', 'docx', 'txt', 'xls', 'xlsx'].includes(ext || '')) {
+    return <FileText size={24} className="text-blue-500" />;
+  }
+  if (['mp4', 'mov', 'avi', 'webm'].includes(ext || '')) {
+    return <Film size={24} className="text-pink-500" />;
+  }
+  return <File size={24} className="text-gray-500" />;
+};
 
 const MessageCenter: React.FC = () => {
   const { t } = useI18n();
@@ -15,9 +30,24 @@ const MessageCenter: React.FC = () => {
   const [isEmergency, setIsEmergency] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
   const [sending, setSending] = useState(false);
+  const [attachments, setAttachments] = useState<{ url: string; name: string }[]>([]);
+  const [uploading, setUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const [uploadFileName, setUploadFileName] = useState('');
+  const [uploadFileSize, setUploadFileSize] = useState('');
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; text: string } | null>(
     null
   );
+  const [showLocationPicker, setShowLocationPicker] = useState(false);
+
+  const formatBytes = (bytes: number, decimals = 2) => {
+    if (bytes === 0) return '0 Bytes';
+    const k = 1024;
+    const dm = decimals < 0 ? 0 : decimals;
+    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + ' ' + sizes[i];
+  };
 
   useEffect(() => {
     setLoadingChannels(true);
@@ -39,6 +69,102 @@ const MessageCenter: React.FC = () => {
     setIsGenerating(false);
   };
 
+  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!e.target.files || e.target.files.length === 0) return;
+    
+    const file = e.target.files[0];
+    setUploading(true);
+    setUploadFileName(file.name);
+    setUploadFileSize(formatBytes(file.size));
+    setUploadProgress(0);
+    setFeedback(null);
+    
+    console.log(`[Upload] Starting upload for ${file.name} (${file.size} bytes)`);
+
+    const xhr = new XMLHttpRequest();
+    const formData = new FormData();
+    formData.append('file', file);
+
+    xhr.upload.onprogress = (event) => {
+      if (event.lengthComputable) {
+        const percentComplete = Math.round((event.loaded / event.total) * 100);
+        setUploadProgress(percentComplete);
+        console.log(`[Upload] Progress: ${percentComplete}%`);
+      }
+    };
+
+    xhr.onload = () => {
+      if (xhr.status === 200) {
+        setUploadProgress(100); // Ensure it shows 100%
+        console.log('[Upload] Completed (100%), waiting for server response...');
+        
+        setTimeout(() => {
+          try {
+            const result = JSON.parse(xhr.responseText);
+            console.log('[Upload] Server response:', result);
+            setAttachments((prev) => [...prev, { url: result.url, name: result.originalName }]);
+            setFeedback({ type: 'success', text: 'File uploaded successfully' });
+          } catch (err) {
+            console.error('Error parsing response', err);
+            setFeedback({ type: 'error', text: 'Failed to parse server response' });
+          }
+          setUploading(false);
+          setUploadProgress(0);
+          setUploadFileName('');
+          setUploadFileSize('');
+          e.target.value = '';
+        }, 800); // 800ms delay to let user see 100%
+      } else {
+        console.error('Upload failed', xhr.responseText);
+        let errorMsg = 'Failed to upload file';
+        try {
+          const errRes = JSON.parse(xhr.responseText);
+          if (errRes.error) errorMsg = errRes.error;
+        } catch {}
+        setFeedback({ type: 'error', text: errorMsg });
+        setUploading(false);
+        setUploadProgress(0);
+        setUploadFileName('');
+        setUploadFileSize('');
+        e.target.value = '';
+      }
+    };
+
+    xhr.onerror = () => {
+      console.error('Upload error (Network)');
+      setFeedback({ type: 'error', text: 'Network error during upload' });
+      setUploading(false);
+      setUploadProgress(0);
+      setUploadFileName('');
+      setUploadFileSize('');
+      e.target.value = '';
+    };
+
+    const token = getAuthToken();
+    xhr.open('POST', `${API_BASE}/upload`);
+    if (token) {
+      xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+    }
+    xhr.send(formData);
+  };
+
+ const removeAttachment = (index: number) => {
+    setAttachments((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  const handleLocationSave = (data: { markers: [number, number][]; polylines: [number, number][][] }) => {
+    let locText = '\n\n📍 Location Attached:';
+    if (data.markers.length > 0) {
+      locText += `\nMarkers: ${data.markers.map((m) => `[${m[0].toFixed(5)}, ${m[1].toFixed(5)}]`).join(', ')}`;
+    }
+    if (data.polylines.length > 0) {
+      locText += `\nRoutes: ${data.polylines.length} route(s) defined.`;
+    }
+    setContent((prev) => prev + locText);
+    setShowLocationPicker(false);
+  };
+
+
   const handleSend = async () => {
     if (!selectedChannelId || !content) return;
     setSending(true);
@@ -59,9 +185,11 @@ const MessageCenter: React.FC = () => {
               : '31072ba7-c571-11f0-8d01-1be21eee4db9',
         senderId: api.getCurrentUserId() || '',
         deliveryMethod: DeliveryMethod.PUSH,
+        attachments: attachments.map((a) => a.url),
       });
       setFeedback({ type: 'success', text: 'Message sent successfully!' });
       setContent('');
+      setAttachments([]);
     } catch (error: any) {
       setFeedback({ type: 'error', text: error.message || 'Failed to send' });
     } finally {
@@ -134,6 +262,79 @@ const MessageCenter: React.FC = () => {
               {isGenerating ? t('ai.drafting') : t('ai.polish')}
             </button>
           </div>
+
+          {/* Attachments */}
+          <div>
+            <div className="flex flex-wrap gap-3 mb-3">
+              {attachments.map((file, idx) => (
+                <div
+                  key={idx}
+                  className="relative group flex flex-col items-center justify-center w-24 h-24 bg-white border border-gray-200 rounded-xl p-2 shadow-sm hover:shadow-md transition-all hover:border-indigo-200"
+                >
+                  <button
+                    onClick={() => removeAttachment(idx)}
+                    className="absolute -top-2 -right-2 bg-white text-gray-400 hover:text-red-500 rounded-full p-1 shadow border border-gray-100 opacity-0 group-hover:opacity-100 transition-opacity z-10"
+                  >
+                    <X size={14} />
+                  </button>
+                  <div className="p-2 bg-gray-50 rounded-lg mb-2">
+                    {getFileIcon(file.name)}
+                  </div>
+                  <span className="text-[10px] text-gray-600 text-center truncate w-full font-medium" title={file.name}>
+                    {file.name}
+                  </span>
+                </div>
+              ))}
+
+              {uploading && (
+                <div className="relative flex flex-col items-center justify-center w-24 h-24 bg-indigo-50 border border-indigo-200 rounded-xl p-2 shadow-sm">
+                  <div className="relative p-2 mb-2">
+                    {getFileIcon(uploadFileName)}
+                    <div className="absolute inset-0 flex items-center justify-center bg-white/50 rounded-lg backdrop-blur-[1px]">
+                      <Loader2 size={20} className="animate-spin text-indigo-600" />
+                    </div>
+                  </div>
+                  <div className="w-full px-1">
+                     <div className="text-[10px] text-indigo-700 text-center truncate w-full font-medium mb-1">
+                        {uploadFileName}
+                     </div>
+                     <div className="w-full bg-indigo-200 rounded-full h-1 overflow-hidden">
+                        <div
+                          className="bg-indigo-600 h-full rounded-full transition-all duration-200"
+                          style={{ width: `${uploadProgress}%` }}
+                        />
+                     </div>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <label className="cursor-pointer flex items-center gap-2 text-sm text-indigo-600 hover:text-indigo-700 font-medium w-fit px-3 py-2 bg-indigo-50 rounded-lg hover:bg-indigo-100 transition-colors border border-indigo-100">
+              <Paperclip size={16} />
+              <span>{t('compose.addAttachment')}</span>
+              <input
+                type="file"
+                className="hidden"
+                onChange={handleFileSelect}
+                disabled={uploading}
+              />
+            </label>
+
+            <button
+              onClick={() => setShowLocationPicker(true)}
+              className="flex items-center gap-2 text-sm text-indigo-600 hover:text-indigo-700 font-medium w-fit px-3 py-2 bg-indigo-50 rounded-lg hover:bg-indigo-100 transition-colors border border-indigo-100"
+            >
+              <MapPin size={16} />
+              <span>Add Location</span>
+            </button>
+          </div>
+
+          {showLocationPicker && (
+            <LocationPicker
+              onSave={handleLocationSave}
+              onClose={() => setShowLocationPicker(false)}
+            />
+          )}
 
           {/* Settings Grid */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">

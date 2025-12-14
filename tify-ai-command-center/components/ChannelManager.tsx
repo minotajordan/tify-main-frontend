@@ -1,8 +1,11 @@
 import React, { useState, useEffect, useRef } from 'react';
+// @ts-ignore
+import html2pdf from 'html2pdf.js';
 import {
   ChevronRight,
   ChevronDown,
   ArrowLeft,
+  Shield,
   ShieldCheck,
   Lock,
   Globe,
@@ -51,8 +54,38 @@ import {
   Info,
   BarChart2,
   ListTree,
+  Save,
+  FileText,
+  CalendarPlus,
+  Film,
+  File,
+  Edit,
+  LayoutTemplate,
+  Type,
+  Code,
+  ZoomIn,
+  ZoomOut,
+  RotateCcw,
+  AlignLeft,
+  AlignCenter,
+  AlignRight,
+  Columns,
+  Hash,
+  GitBranch,
+  Heading1,
+  Heading2,
+  Heading3,
+  Heading4,
+  Heading5,
+  MoveHorizontal,
+  ToggleLeft,
+  ToggleRight,
+  Palette,
+  MousePointer2,
+  Download,
 } from 'lucide-react';
-import { api } from '../services/api';
+import { motion, AnimatePresence } from 'framer-motion';
+import { api, uploadFile } from '../services/api';
 import { generateMessageDraft } from '../services/geminiService';
 import {
   Channel,
@@ -66,9 +99,127 @@ import { useI18n } from '../i18n';
 import QRCodeStyling from 'qr-code-styling';
 import dayjs from 'dayjs';
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
+import LocationPicker from './LocationPicker';
+import { MapContainer, TileLayer, Marker, Polyline } from 'react-leaflet';
+import L from 'leaflet';
 import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs';
 import { DateTimePicker } from '@mui/x-date-pickers/DateTimePicker';
 import { Autocomplete, Popper, TextField } from '@mui/material';
+import RichTextEditor from './forms/RichTextEditor';
+
+  const splitHtmlContent = (html: string, initialOffset: number = 0): string[] => {
+    if (typeof document === 'undefined') return [html];
+
+    // Create a container that mimics the page dimensions and styles
+    const container = document.createElement('div');
+    container.style.width = '21cm'; // Match A4 width
+    container.style.paddingLeft = '4rem'; // Match md:p-16 (4rem) - Desktop view
+    container.style.paddingRight = '4rem';
+    container.style.paddingTop = '3rem';
+    container.style.paddingBottom = '3rem';
+    container.style.position = 'absolute';
+    container.style.visibility = 'hidden';
+    container.style.left = '-9999px';
+    container.style.top = '0';
+    container.className = 'prose max-w-none font-serif text-gray-800 leading-relaxed text-justify'; // Match preview classes
+    document.body.appendChild(container);
+
+    const tempDiv = document.createElement('div');
+    tempDiv.innerHTML = html;
+
+    const pages: string[] = [];
+    let currentPageNodes: Node[] = [];
+    let currentHeight = 0;
+    // Further reduce height to be extremely safe for headers/footers and margins
+    // A4 (297mm) ~ 1123px at 96dpi.
+    // Margins (top/bottom) + Header/Footer take significant space.
+    // Let's use a smaller safe content area.
+    const BASE_MAX_HEIGHT = 650; 
+
+    // Helper to get height of a node
+    const getNodeHeight = (node: Node): number => {
+      const clone = node.cloneNode(true);
+      container.innerHTML = '';
+      container.appendChild(clone);
+      return container.offsetHeight;
+    };
+
+    // Helper to process nodes
+    const processNodes = (nodes: NodeList) => {
+      Array.from(nodes).forEach((node) => {
+        // Determine max height for current page
+        // If pages.length is 0, we are on the first page, so subtract initialOffset
+        const currentMaxHeight = pages.length === 0 ? BASE_MAX_HEIGHT - initialOffset : BASE_MAX_HEIGHT;
+
+        if (node.nodeType === Node.TEXT_NODE) {
+          // For text nodes, we might need to wrap them in a span to measure
+          if (!node.textContent?.trim()) return;
+          const span = document.createElement('span');
+          span.textContent = node.textContent;
+          const height = getNodeHeight(span);
+          
+          if (currentHeight + height > currentMaxHeight && currentPageNodes.length > 0) {
+            // Push current page
+            const pageDiv = document.createElement('div');
+            currentPageNodes.forEach(n => pageDiv.appendChild(n.cloneNode(true)));
+            pages.push(pageDiv.innerHTML);
+            currentPageNodes = [];
+            currentHeight = 0;
+          }
+          currentPageNodes.push(node);
+          currentHeight += height;
+        } else {
+          // Element node
+          const height = getNodeHeight(node);
+          
+          if (currentHeight + height > currentMaxHeight) {
+            // If it's a large block that doesn't fit, we might want to push current page first
+            if (currentPageNodes.length > 0) {
+               const pageDiv = document.createElement('div');
+               currentPageNodes.forEach(n => pageDiv.appendChild(n.cloneNode(true)));
+               pages.push(pageDiv.innerHTML);
+               currentPageNodes = [];
+               currentHeight = 0;
+            }
+            
+            // If the element itself is larger than max height, we just have to put it on a new page
+            // (Note: Ideally we would split the block, but that's complex. For now, pushing to next page is safer)
+            currentPageNodes.push(node);
+            currentHeight += height;
+          } else {
+            currentPageNodes.push(node);
+            currentHeight += height;
+          }
+        }
+      });
+    };
+
+    processNodes(tempDiv.childNodes);
+
+    // Push remaining nodes
+    if (currentPageNodes.length > 0) {
+      const pageDiv = document.createElement('div');
+      currentPageNodes.forEach(n => pageDiv.appendChild(n.cloneNode(true)));
+      pages.push(pageDiv.innerHTML);
+    }
+
+    document.body.removeChild(container);
+    return pages.length > 0 ? pages : [html];
+  };
+
+const getFileIcon = (filename: string) => {
+  const ext = filename.split('.').pop()?.toLowerCase();
+  if (['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg'].includes(ext || '')) {
+    return <Image size={16} className="text-purple-500" />;
+  }
+  if (['pdf', 'doc', 'docx', 'txt', 'xls', 'xlsx'].includes(ext || '')) {
+    return <FileText size={16} className="text-blue-500" />;
+  }
+  if (['mp4', 'mov', 'avi', 'webm'].includes(ext || '')) {
+    return <Film size={16} className="text-pink-500" />;
+  }
+  return <File size={16} className="text-gray-500" />;
+};
 
 const ApproverSpeedDial: React.FC<{ messageId: string; channelId: string }> = ({ messageId }) => {
   const [open, setOpen] = useState(false);
@@ -153,6 +304,7 @@ const ApproverSpeedDial: React.FC<{ messageId: string; channelId: string }> = ({
                         <Clock size={12} /> Pendiente
                       </span>
                     )}
+
                   </div>
                 ))
               )}
@@ -294,6 +446,73 @@ const IconView: React.FC<{ name?: string; size?: number; className?: string }> =
   return <Comp size={size} className={className} />;
 };
 
+const MaterialInput = ({ 
+  label, 
+  value, 
+  onChange, 
+  placeholder = " ", 
+  type = "text",
+  className = "",
+  disabled = false
+}: {
+  label: string;
+  value: string;
+  onChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  placeholder?: string;
+  type?: string;
+  className?: string;
+  disabled?: boolean;
+}) => (
+  <div className={`relative ${className}`}>
+    <input
+      type={type}
+      value={value}
+      onChange={onChange}
+      className={`peer w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none transition-all placeholder-transparent disabled:bg-gray-50 disabled:text-gray-400 ${value ? 'border-gray-400' : ''}`}
+      placeholder={placeholder}
+      disabled={disabled}
+    />
+    <label className="absolute -top-2 left-2 bg-white px-1 text-xs text-gray-500 transition-all peer-placeholder-shown:top-3 peer-placeholder-shown:text-sm peer-placeholder-shown:text-gray-400 peer-focus:-top-2 peer-focus:text-xs peer-focus:text-indigo-600 font-medium pointer-events-none">
+      {label}
+    </label>
+  </div>
+);
+
+const FontSizeSelector = ({ 
+  value, 
+  onChange 
+}: { 
+  value: string; 
+  onChange: (val: string) => void; 
+}) => {
+  const sizes = [
+    { id: 'xs', icon: Heading5, label: 'Muy Pequeño' },
+    { id: 'sm', icon: Heading4, label: 'Pequeño' },
+    { id: 'base', icon: Heading3, label: 'Normal' },
+    { id: 'lg', icon: Heading2, label: 'Grande' },
+    { id: 'xl', icon: Heading1, label: 'Muy Grande' },
+  ];
+
+  return (
+    <div className="flex bg-white rounded-lg border border-gray-200 p-1 gap-1">
+      {sizes.map((s) => (
+        <button
+          key={s.id}
+          onClick={() => onChange(s.id)}
+          className={`flex-1 flex flex-col items-center justify-center py-1.5 px-1 rounded transition-all ${
+            value === s.id 
+              ? 'bg-indigo-50 text-indigo-700 shadow-sm ring-1 ring-indigo-200' 
+              : 'text-gray-400 hover:bg-gray-50 hover:text-gray-600'
+          }`}
+          title={s.label}
+        >
+          <s.icon size={18} strokeWidth={2.5} />
+        </button>
+      ))}
+    </div>
+  );
+};
+
 const ChannelManager: React.FC = () => {
   const { t } = useI18n();
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
@@ -348,11 +567,260 @@ const ChannelManager: React.FC = () => {
   const [composeEventAt, setComposeEventAt] = useState<string>('');
   const [composeExpiresAt, setComposeExpiresAt] = useState<string>('');
   const [sendPickerOpen, setSendPickerOpen] = useState(false);
+  const [addMenuOpen, setAddMenuOpen] = useState(false);
   const [eventPickerOpen, setEventPickerOpen] = useState(false);
   const [expiresPickerOpen, setExpiresPickerOpen] = useState(false);
   const [composeAttachments, setComposeAttachments] = useState<
-    Array<{ name: string; size: number; type: string }>
+    { name: string; size: number; type: string; url?: string; uploading?: boolean; error?: string }[]
   >([]);
+  const [composeComunicado, setComposeComunicado] = useState<string | null>(null);
+  const [comunicadoTitle, setComunicadoTitle] = useState('');
+  const [isComunicadoModalOpen, setIsComunicadoModalOpen] = useState(false);
+  const [showLocationPicker, setShowLocationPicker] = useState(false);
+  const [composeLocationData, setComposeLocationData] = useState<{
+    markers: [number, number][];
+    polylines: [number, number][][];
+  } | null>(null);
+
+  const handleLocationSave = (data: { markers: [number, number][]; polylines: [number, number][][] }) => {
+    setComposeLocationData(data);
+    setShowLocationPicker(false);
+  };
+  
+  // Header/Footer State
+  const [isHeaderFooterModalOpen, setIsHeaderFooterModalOpen] = useState(false);
+  const [headerFooterTab, setHeaderFooterTab] = useState<'header' | 'footer'>('header');
+  
+  interface TemplateStructure {
+    layout: 'full' | 'split';
+    alignment: 'left' | 'center' | 'right';
+    columns: { 
+      left: string; center: string; right: string;
+      leftImage?: string; centerImage?: string; rightImage?: string;
+    };
+    options: {
+      fontSize: 'xs' | 'sm' | 'base' | 'lg' | 'xl';
+      showDate: boolean;
+      dateFormat: string;
+      showPage: boolean;
+      showVersion: boolean;
+      versionText: string;
+      backgroundImage?: string;
+    };
+  }
+
+  interface Template {
+    id: string;
+    name: string;
+    content: string;
+    type: 'text' | 'image' | 'html';
+    structure?: TemplateStructure;
+  }
+
+  const [savedHeaders, setSavedHeaders] = useState<Template[]>([]);
+  const [savedFooters, setSavedFooters] = useState<Template[]>([]);
+  const [selectedHeader, setSelectedHeader] = useState<Template | null>(null);
+  const [selectedFooter, setSelectedFooter] = useState<Template | null>(null);
+  const [newTemplateName, setNewTemplateName] = useState('');
+  const [newTemplateContent, setNewTemplateContent] = useState('');
+  const [newTemplateType, setNewTemplateType] = useState<'text' | 'image' | 'html'>('text');
+  const [isCreatingTemplate, setIsCreatingTemplate] = useState(false);
+  const [editingTemplateId, setEditingTemplateId] = useState<string | null>(null);
+
+  // Advanced Builder State
+  const [newTemplateLayout, setNewTemplateLayout] = useState<'full' | 'split'>('full');
+  const [newTemplateAlignment, setNewTemplateAlignment] = useState<'left' | 'center' | 'right'>('center');
+  const [newTemplateColumns, setNewTemplateColumns] = useState<{
+    left: string; center: string; right: string;
+    leftImage?: string; centerImage?: string; rightImage?: string;
+  }>({ left: '', center: '', right: '', leftImage: undefined, centerImage: undefined, rightImage: undefined });
+  const [newTemplateOptions, setNewTemplateOptions] = useState<TemplateStructure['options']>({
+    fontSize: 'base',
+    showDate: false,
+    dateFormat: 'DD/MM/YYYY',
+    showPage: false,
+    showVersion: false,
+    versionText: 'v1.0',
+    backgroundImage: undefined
+  });
+
+  // Load saved templates on mount
+  useEffect(() => {
+    const headers = localStorage.getItem('tify_saved_headers');
+    const footers = localStorage.getItem('tify_saved_footers');
+    if (headers) setSavedHeaders(JSON.parse(headers));
+    if (footers) setSavedFooters(JSON.parse(footers));
+  }, []);
+
+  const [isUploadingTemplateImage, setIsUploadingTemplateImage] = useState(false);
+  const [isUploadingBgImage, setIsUploadingBgImage] = useState(false);
+
+  const handleTemplateImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setIsUploadingTemplateImage(true);
+    try {
+      const { url } = await uploadFile(file);
+      setNewTemplateContent(url);
+    } catch (error) {
+      console.error('Error uploading image:', error);
+      alert('Error al subir la imagen');
+    } finally {
+      setIsUploadingTemplateImage(false);
+    }
+  };
+
+  const handleBgImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setIsUploadingBgImage(true);
+    try {
+      const { url } = await uploadFile(file);
+      setNewTemplateOptions(prev => ({ ...prev, backgroundImage: url }));
+    } catch (error) {
+      console.error('Error uploading bg image:', error);
+      alert('Error al subir la imagen de fondo');
+    } finally {
+      setIsUploadingBgImage(false);
+    }
+  };
+
+  const handleColumnImageUpload = async (e: React.ChangeEvent<HTMLInputElement>, col: 'left' | 'center' | 'right') => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    
+    setIsUploadingTemplateImage(true);
+    try {
+      const { url } = await uploadFile(file);
+      setNewTemplateColumns(prev => ({
+        ...prev,
+        [`${col}Image`]: url
+      }));
+    } catch (error) {
+      console.error(`Error uploading ${col} image:`, error);
+      alert('Error al subir la imagen de la columna');
+    } finally {
+      setIsUploadingTemplateImage(false);
+    }
+  };
+
+  const saveTemplate = (forceNew: any = false) => {
+    // Handle event object being passed as first arg if called directly
+    const isNew = typeof forceNew === 'boolean' ? forceNew : false;
+
+    if (!newTemplateName) return;
+    
+    // Validation
+    if (newTemplateType === 'image' && !newTemplateContent) return;
+    if (newTemplateType === 'html' && !newTemplateContent) return;
+    if (newTemplateType === 'text') {
+       if (newTemplateLayout === 'full' && !newTemplateContent) return;
+       if (newTemplateLayout === 'split' && !newTemplateColumns.left && !newTemplateColumns.center && !newTemplateColumns.right && !newTemplateColumns.leftImage && !newTemplateColumns.centerImage && !newTemplateColumns.rightImage) return;
+    }
+    
+    // Construct content for list view / fallback
+    let contentToSave = newTemplateContent;
+    if (newTemplateType === 'text' && newTemplateLayout === 'split') {
+        contentToSave = [newTemplateColumns.left, newTemplateColumns.center, newTemplateColumns.right].filter(Boolean).join(' | ');
+    }
+    
+    const newItem: Template = {
+      id: (editingTemplateId && !isNew) ? editingTemplateId : Date.now().toString(),
+      name: newTemplateName,
+      content: contentToSave,
+      type: newTemplateType,
+      structure: newTemplateType === 'text' ? {
+        layout: newTemplateLayout,
+        alignment: newTemplateAlignment,
+        columns: newTemplateColumns,
+        options: newTemplateOptions
+      } : undefined
+    };
+    
+    if (headerFooterTab === 'header') {
+      let newHeaders;
+      if (editingTemplateId && !isNew) {
+        newHeaders = savedHeaders.map(h => h.id === editingTemplateId ? newItem : h);
+      } else {
+        newHeaders = [...savedHeaders, newItem];
+      }
+      setSavedHeaders(newHeaders);
+      localStorage.setItem('tify_saved_headers', JSON.stringify(newHeaders));
+    } else {
+      let newFooters;
+      if (editingTemplateId && !isNew) {
+        newFooters = savedFooters.map(f => f.id === editingTemplateId ? newItem : f);
+      } else {
+        newFooters = [...savedFooters, newItem];
+      }
+      setSavedFooters(newFooters);
+      localStorage.setItem('tify_saved_footers', JSON.stringify(newFooters));
+    }
+    
+    setNewTemplateName('');
+    setNewTemplateContent('');
+    setNewTemplateColumns({ left: '', center: '', right: '', leftImage: undefined, centerImage: undefined, rightImage: undefined });
+    setNewTemplateOptions({
+      fontSize: 'base',
+      showDate: false,
+      dateFormat: 'DD/MM/YYYY',
+      showPage: false,
+      showVersion: false,
+      versionText: 'v1.0',
+      backgroundImage: undefined
+    });
+    setEditingTemplateId(null);
+    setIsCreatingTemplate(false);
+  };
+
+  const [expandedComunicados, setExpandedComunicados] = useState<Record<string, boolean>>({});
+  const [viewingComunicado, setViewingComunicado] = useState<any>(null);
+  const [pdfBlobUrl, setPdfBlobUrl] = useState<string | null>(null);
+  const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
+  const pdfContainerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (viewingComunicado && viewingComunicado.extra?.comunicado && pdfContainerRef.current && !pdfBlobUrl) {
+      setIsGeneratingPdf(true);
+      // Small delay to ensure rendering is complete
+      const timer = setTimeout(() => {
+        const element = pdfContainerRef.current;
+        const opt: any = {
+          margin: 0,
+          filename: `${viewingComunicado.extra.comunicado.title || 'comunicado'}.pdf`,
+          image: { type: 'jpeg', quality: 0.98 },
+          html2canvas: { scale: 2, useCORS: true, logging: false },
+          jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
+          pagebreak: { mode: ['css', 'legacy'] }
+        };
+
+        html2pdf().set(opt).from(element).output('bloburl').then((pdfUrl: string) => {
+          setPdfBlobUrl(pdfUrl);
+          setIsGeneratingPdf(false);
+        }).catch((err: any) => {
+          console.error('PDF Generation Error:', err);
+          setIsGeneratingPdf(false);
+        });
+      }, 1000);
+
+      return () => clearTimeout(timer);
+    }
+  }, [viewingComunicado, pdfBlobUrl]);
+
+  // Reset PDF state when closing preview
+  useEffect(() => {
+    if (!viewingComunicado) {
+      setPdfBlobUrl(null);
+      setIsGeneratingPdf(false);
+    }
+  }, [viewingComunicado]);
+  const [composeSchedule, setComposeSchedule] = useState<{ date: string; time?: string; activity: string }[]>([]);
+  const [isScheduleModalOpen, setIsScheduleModalOpen] = useState(false);
+  const [scheduleWeekMode, setScheduleWeekMode] = useState(true);
+  const [scheduleStartDate, setScheduleStartDate] = useState(new Date().toISOString().split('T')[0]);
+  const [designProposal, setDesignProposal] = useState<'A' | 'B'>('B');
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const sendAnchorRef = useRef<HTMLButtonElement | null>(null);
   const eventAnchorRef = useRef<HTMLButtonElement | null>(null);
@@ -360,6 +828,7 @@ const ChannelManager: React.FC = () => {
   const sendButtonRef = useRef<HTMLButtonElement | null>(null);
   const [composeIsGenerating, setComposeIsGenerating] = useState(false);
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
+  const [previewZoom, setPreviewZoom] = useState(1);
 
   const [previewSub, setPreviewSub] = useState<Channel | null>(null);
   const [previewApprovers, setPreviewApprovers] = useState<any[]>([]);
@@ -403,6 +872,8 @@ const ChannelManager: React.FC = () => {
   const [filterText, setFilterText] = useState('');
   const [viewMode, setViewMode] = useState<'table' | 'cards'>('table');
   const [activeTab, setActiveTab] = useState<'details' | 'stats' | 'content' | 'messages'>('details');
+  const [refreshKey, setRefreshKey] = useState(0);
+  const [lastVisitedSubchannelId, setLastVisitedSubchannelId] = useState<string | null>(null);
 
   useEffect(() => {
     const handleResize = () => {
@@ -419,7 +890,13 @@ const ChannelManager: React.FC = () => {
 
   useEffect(() => {
     if (selectedChannel) {
-      setActiveTab('messages');
+      if (lastVisitedSubchannelId) {
+        setActiveTab('content');
+        const t = setTimeout(() => setLastVisitedSubchannelId(null), 2500);
+        return () => clearTimeout(t);
+      } else {
+        setActiveTab('messages');
+      }
     }
   }, [selectedChannel?.id]);
 
@@ -512,6 +989,13 @@ const ChannelManager: React.FC = () => {
   }>({});
   const [infoTipOpen, setInfoTipOpen] = useState(true);
   const [statsRange, setStatsRange] = useState<'1h' | '24h' | '7d' | '1m' | 'all'>('24h');
+  const [expandedSchedules, setExpandedSchedules] = useState<Record<string, boolean>>({});
+  const [expandedLocations, setExpandedLocations] = useState<Record<string, boolean>>({});
+  const [expandedAttachments, setExpandedAttachments] = useState<Record<string, boolean>>({});
+  const [expandedApprovers, setExpandedApprovers] = useState<Record<string, boolean>>({});
+  const [calendarConfirmOpen, setCalendarConfirmOpen] = useState(false);
+  const [calendarConfirmEvent, setCalendarConfirmEvent] = useState<{ date: string; time?: string; activity: string } | null>(null);
+
   const resetMessagesFilters = () => {
     setMessagesSearch('');
     setMessagesQuick('all');
@@ -524,6 +1008,55 @@ const ChannelManager: React.FC = () => {
     setMessagesFilterOpen(false);
     setMessagesPage(1);
   };
+  const downloadIcs = (event: { date: string; time?: string; activity: string }) => {
+    const { date, time, activity } = event;
+    let dtStart = date.replace(/-/g, '');
+    let dtEnd = dtStart;
+    let isAllDay = true;
+
+    if (time) {
+      isAllDay = false;
+      const [hours, minutes] = time.split(':');
+      const startDate = new Date(`${date}T${time}:00`);
+      const endDate = new Date(startDate.getTime() + 60 * 60 * 1000); // +1 hour
+
+      const pad = (n: number) => (n < 10 ? '0' + n : n);
+      const format = (d: Date) =>
+        `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}T${pad(d.getHours())}${pad(d.getMinutes())}00`;
+
+      dtStart = format(startDate);
+      dtEnd = format(endDate);
+    } else {
+      const d = new Date(date);
+      d.setDate(d.getDate() + 1);
+      const pad = (n: number) => (n < 10 ? '0' + n : n);
+      dtEnd = `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}`;
+    }
+
+    const icsContent = [
+      'BEGIN:VCALENDAR',
+      'VERSION:2.0',
+      'PRODID:-//Tify//ChannelManager//ES',
+      'BEGIN:VEVENT',
+      `UID:${Date.now()}@tify.com`,
+      `DTSTAMP:${new Date().toISOString().replace(/[-:]/g, '').split('.')[0]}Z`,
+      `DTSTART${isAllDay ? ';VALUE=DATE' : ''}:${dtStart}`,
+      `DTEND${isAllDay ? ';VALUE=DATE' : ''}:${dtEnd}`,
+      `SUMMARY:${activity}`,
+      'END:VEVENT',
+      'END:VCALENDAR',
+    ].join('\r\n');
+
+    const blob = new Blob([icsContent], { type: 'text/calendar;charset=utf-8' });
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', 'evento.ics');
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
   const shareUrl =
     typeof window !== 'undefined' && selectedChannel
       ? `${window.location.origin}/c/${selectedChannel.referenceCode || selectedChannel.id}`
@@ -770,6 +1303,22 @@ const ChannelManager: React.FC = () => {
       .catch(() => setParentChannel(null));
   }, [selectedChannel?.parentId]);
 
+  const prevPendingOpen = useRef(pendingModalOpen);
+  useEffect(() => {
+    if (prevPendingOpen.current && !pendingModalOpen) {
+      setRefreshKey((k) => k + 1);
+    }
+    prevPendingOpen.current = pendingModalOpen;
+  }, [pendingModalOpen]);
+
+  const prevMessagesOpen = useRef(messagesModalOpen);
+  useEffect(() => {
+    if (prevMessagesOpen.current && !messagesModalOpen) {
+      setRefreshKey((k) => k + 1);
+    }
+    prevMessagesOpen.current = messagesModalOpen;
+  }, [messagesModalOpen]);
+
   useEffect(() => {
     if (!selectedChannel || selectedChannel.parentId) return;
     setSubLoading(true);
@@ -784,7 +1333,7 @@ const ChannelManager: React.FC = () => {
         setSubPages(1);
       })
       .finally(() => setSubLoading(false));
-  }, [selectedChannel?.id, subPage, subLimit]);
+  }, [selectedChannel?.id, subPage, subLimit, refreshKey]);
 
   useEffect(() => {
     const items: any[] = [];
@@ -1011,6 +1560,7 @@ const ChannelManager: React.FC = () => {
         setComposeContent(d.content || '');
         setComposePriority(d.priority || MessagePriority.MEDIUM);
         setComposeIsEmergency(!!d.isEmergency);
+        if (d.location) setComposeLocationData(d.location);
       }
     } catch {}
   };
@@ -1024,6 +1574,7 @@ const ChannelManager: React.FC = () => {
         content: composeContent,
         priority: composePriority,
         isEmergency: composeIsEmergency,
+        location: composeLocationData,
       })
     );
   };
@@ -1049,6 +1600,10 @@ const ChannelManager: React.FC = () => {
     setComposeEventAt('');
     setComposeExpiresAt('');
     setComposeAttachments([]);
+    setComposeSchedule([]);
+    setComposeLocationData(null);
+    setComposeComunicado(null);
+    setComunicadoTitle('');
     setComposeIsGenerating(false);
     setSendPickerOpen(false);
     setEventPickerOpen(false);
@@ -1066,6 +1621,10 @@ const ChannelManager: React.FC = () => {
       setComposeEventAt('');
       setComposeExpiresAt('');
       setComposeAttachments([]);
+      setComposeSchedule([]);
+      setComposeLocationData(null);
+      setComposeComunicado(null);
+      setComunicadoTitle('');
       setComposeIsGenerating(false);
       setSendPickerOpen(false);
       setEventPickerOpen(false);
@@ -1074,7 +1633,13 @@ const ChannelManager: React.FC = () => {
   };
 
   const sendCompose = async () => {
-    if (!selectedChannel || !composeContent.trim()) return;
+    if (!selectedChannel) return;
+    if (composeComunicado && !composeContent.trim()) {
+      alert('Para enviar un comunicado, debes incluir un breve resumen o introducción en el campo de mensaje principal.');
+      return;
+    }
+    if (!composeContent.trim()) return;
+
     setComposeSending(true);
     try {
       const targetId = selectedChannel.parentId
@@ -1091,13 +1656,25 @@ const ChannelManager: React.FC = () => {
       if (composeExpiresAt && new Date(composeExpiresAt) <= new Date()) {
         setComposeExpiresAt('');
       }
+
+      let finalContent = composeContent;
+
       const publishedAtISO = composeSendAt ? new Date(composeSendAt).toISOString() : undefined;
-      const eventAtISO = composeEventAt ? new Date(composeEventAt).toISOString() : undefined;
+      let eventAtISO = composeEventAt ? new Date(composeEventAt).toISOString() : undefined;
+
+      // If no explicit event date is set but there is a schedule, use the first schedule date
+      if (!eventAtISO && composeSchedule.length > 0) {
+        const sorted = [...composeSchedule].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+        if (sorted.length > 0) {
+          eventAtISO = new Date(sorted[0].date).toISOString();
+        }
+      }
+
       let expiresAtISO: string | undefined;
       if (composeExpiresAt) {
         let expires = new Date(composeExpiresAt);
-        if (composeEventAt && expires > new Date(composeEventAt)) {
-          expires = new Date(composeEventAt);
+        if (eventAtISO && expires > new Date(eventAtISO)) {
+          expires = new Date(eventAtISO);
         }
         if (composeSendAt && expires <= new Date(composeSendAt)) {
           expires = new Date(new Date(composeSendAt).getTime() + 60000);
@@ -1106,7 +1683,7 @@ const ChannelManager: React.FC = () => {
       }
       await api.createMessage({
         channelId: targetId,
-        content: composeContent,
+        content: finalContent,
         priority: composePriority,
         isEmergency: composeIsEmergency,
         categoryId: composeIsEmergency
@@ -1122,6 +1699,20 @@ const ChannelManager: React.FC = () => {
         publishedAt: publishedAtISO,
         eventAt: eventAtISO,
         expiresAt: expiresAtISO,
+        extra: {
+          ...(composeSchedule.length > 0 ? { schedule: composeSchedule } : {}),
+          ...(composeLocationData ? { location: composeLocationData } : {}),
+          ...(composeAttachments.length > 0 ? { attachments: composeAttachments } : {}),
+          ...(composeComunicado ? {
+            type: 'comunicado',
+            comunicado: {
+              title: comunicadoTitle,
+              content: composeComunicado,
+              header: selectedHeader,
+              footer: selectedFooter
+            }
+          } : {})
+        },
       });
       clearDraft();
       setShowCompose(false);
@@ -1132,6 +1723,9 @@ const ChannelManager: React.FC = () => {
       setComposeEventAt('');
       setComposeExpiresAt('');
       setComposeAttachments([]);
+      setComposeSchedule([]);
+      setComposeComunicado(null);
+      setComunicadoTitle('');
       setComposeIsGenerating(false);
       setSendPickerOpen(false);
       setEventPickerOpen(false);
@@ -1149,6 +1743,66 @@ const ChannelManager: React.FC = () => {
     const draft = await generateMessageDraft(composeContent, channelName);
     setComposeContent(draft);
     setComposeIsGenerating(false);
+  };
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!e.target.files || e.target.files.length === 0) return;
+    
+    // Check file count (max 2)
+    if (composeAttachments.length >= 2) {
+      alert('Solo se pueden subir un máximo de 2 archivos por mensaje.');
+      e.target.value = '';
+      return;
+    }
+
+    const file = e.target.files[0];
+    
+    // Check file size (20MB)
+    if (file.size > 20 * 1024 * 1024) {
+      alert('El archivo excede el tamaño máximo permitido de 20MB');
+      e.target.value = '';
+      return;
+    }
+
+    // Add placeholder for uploading state
+    const tempId = Date.now().toString();
+    setComposeAttachments(prev => [...prev, {
+      name: file.name,
+      size: file.size,
+      type: file.type,
+      uploading: true
+    }]);
+
+    try {
+      const result = await api.uploadFile(file);
+      
+      setComposeAttachments(prev => prev.map(att => {
+        if (att.name === file.name && att.uploading) {
+          return {
+            name: result.originalName || result.filename,
+            size: result.size,
+            type: result.mimetype,
+            url: result.url,
+            uploading: false
+          };
+        }
+        return att;
+      }));
+    } catch (error) {
+      console.error('Upload failed', error);
+      setComposeAttachments(prev => prev.map(att => {
+        if (att.name === file.name && att.uploading) {
+          return {
+            ...att,
+            uploading: false,
+            error: 'Error al subir archivo'
+          };
+        }
+        return att;
+      }));
+    } finally {
+      e.target.value = '';
+    }
   };
 
   const fetchPreviewData = async (id: string) => {
@@ -1646,7 +2300,14 @@ const ChannelManager: React.FC = () => {
         <div className="px-4 py-2 flex items-center justify-between">
           <div className="flex items-center gap-2 min-w-0">
             <button
-              onClick={() => setSelectedChannel(null)}
+              onClick={() => {
+                if (selectedChannel.parentId && parentChannel) {
+                  setLastVisitedSubchannelId(selectedChannel.id);
+                  setSelectedChannel(parentChannel);
+                } else {
+                  setSelectedChannel(null);
+                }
+              }}
               className="p-2 text-gray-500 hover:bg-gray-100 rounded-lg transition-colors shrink-0"
               title="Volver a la lista"
             >
@@ -1658,7 +2319,14 @@ const ChannelManager: React.FC = () => {
               {parentChannel && (
                 <div className="flex items-center gap-1 text-sm text-gray-500 truncate flex shrink-0">
                   <button
-                    onClick={() => setSelectedChannel(parentChannel)}
+                    onClick={() => {
+                      if (selectedChannel.parentId) {
+                        setLastVisitedSubchannelId(selectedChannel.id);
+                        setSelectedChannel(parentChannel);
+                      } else {
+                        setSelectedChannel(parentChannel);
+                      }
+                    }}
                     className="hover:underline hover:text-gray-700 truncate max-w-[150px]"
                   >
                     {parentChannel.title}
@@ -1985,148 +2653,204 @@ const ChannelManager: React.FC = () => {
           {activeTab === 'content' && (
             <>
               <div className="">
-              <div
-                className={`${selectedChannel?.parentId ? 'hidden' : ''} bg-white rounded-lg border border-gray-100 overflow-hidden`}
-              >
-                <table className="w-full text-sm">
-                  <thead className="bg-slate-50">
-                  <tr className="text-left text-gray-600">
-                    <th className="px-4 py-2">Subcanal</th>
-                    <th className="px-4 py-2">
-                      <Users size={18} className="text-indigo-600" />
-                    </th>
-                    <th className="px-4 py-2">
-                      <ShieldCheck size={18} className="text-purple-600" />
-                    </th>
-                    <th className="px-4 py-2">
-                      <Hourglass size={18} className="text-red-400" />
-                    </th>
-                    <th className="px-4 py-2"></th>
-                  </tr>
-                  </thead>
-                  <tbody>
-                  {subLoading ? (
-                    Array.from({ length: 6 }).map((_, i) => (
-                      <tr key={`sk-${i}`} className="border-t border-gray-100">
-                        <td className="px-4 py-2">
-                          <div className="animate-pulse flex items-center gap-2">
-                            <div className="h-4 w-4 bg-gray-200 rounded" />
-                            <div className="h-4 w-40 bg-gray-200 rounded" />
+              <div className={`${selectedChannel?.parentId ? 'hidden' : ''}`}>
+                {subLoading ? (
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {Array.from({ length: 6 }).map((_, i) => (
+                      <div key={`sk-${i}`} className="bg-white p-4 rounded-xl border border-gray-100 shadow-sm animate-pulse">
+                        <div className="flex items-center gap-3 mb-4">
+                          <div className="w-10 h-10 bg-gray-200 rounded-lg" />
+                          <div className="flex-1 space-y-2">
+                            <div className="h-4 w-3/4 bg-gray-200 rounded" />
+                            <div className="h-3 w-1/2 bg-gray-200 rounded" />
                           </div>
-                        </td>
-                        <td className="px-4 py-2">
-                          <div className="h-4 w-16 bg-gray-200 rounded animate-pulse" />
-                        </td>
-                        <td className="px-4 py-2">
-                          <div className="h-8 w-8 bg-gray-200 rounded-full animate-pulse" />
-                        </td>
-                        <td className="px-4 py-2">
-                          <div className="h-4 w-10 bg-gray-200 rounded animate-pulse" />
-                        </td>
-                      </tr>
-                    ))
-                  ) : subItems && subItems.length > 0 ? (
-                    subItems.map((sc) => (
-                      <tr
-                        key={sc.id}
-                        className="border-t border-gray-100 hover:bg-gray-50 cursor-pointer"
-                        onDoubleClick={() => setSelectedChannel(sc as any)}
-                      >
-                        <td className="px-4 py-2">
-                          <div className="flex items-center gap-2">
-                            <IconView name={sc.icon} size={14} className="text-gray-500" />
-                            <span className="text-gray-900">{sc.title}</span>
-                            {selectedChannel.subchannels &&
-                              selectedChannel.subchannels[0]?.id === sc.id && (
-                                <span className="text-[10px] px-1.5 py-0.5 rounded bg-indigo-100 text-indigo-700 border border-indigo-200 inline-flex items-center">
-                                    <Target size={12} />
+                        </div>
+                        <div className="grid grid-cols-3 gap-2 pt-3 border-t border-gray-50">
+                          <div className="h-8 bg-gray-200 rounded" />
+                          <div className="h-8 bg-gray-200 rounded" />
+                          <div className="h-8 bg-gray-200 rounded" />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : subItems && subItems.length > 0 ? (
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    <AnimatePresence>
+                      {subItems.map((sc) => (
+                        <motion.div
+                          key={sc.id}
+                          layout
+                          initial={{ opacity: 0, y: 20 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          exit={{ opacity: 0, scale: 0.95 }}
+                          whileHover={{ y: -2 }}
+                          className={`p-4 rounded-xl border shadow-sm hover:shadow-md transition-all cursor-pointer group relative overflow-hidden ${
+                            lastVisitedSubchannelId === sc.id
+                              ? 'bg-indigo-50/50 border-indigo-200 ring-2 ring-indigo-100'
+                              : 'bg-white border-gray-200'
+                          }`}
+                          onClick={() => setSelectedChannel(sc as any)}
+                        >
+                          <div className="absolute top-0 right-0 p-4 opacity-0 group-hover:opacity-100 transition-opacity z-10">
+                             <ChevronRight size={16} className="text-gray-400" />
+                          </div>
+                          
+                          <div className="flex flex-col space-y-3">
+                            {/* Main Title Row */}
+                            <div className="flex items-center gap-3">
+                              <div className="p-2 bg-indigo-50 rounded-lg group-hover:bg-indigo-100 transition-colors text-indigo-600">
+                                <IconView name={sc.icon} size={24} />
+                              </div>
+                              <div className="min-w-0 flex-1">
+                                <div className="flex items-center gap-2">
+                                  <h4 className="font-semibold text-gray-900 truncate" title={sc.title}>
+                                    {sc.title}
+                                  </h4>
+                                  {selectedChannel.subchannels &&
+                                    selectedChannel.subchannels[0]?.id === sc.id && (
+                                      <span className="shrink-0 text-[10px] px-1.5 py-0.5 rounded bg-indigo-100 text-indigo-700 border border-indigo-200 flex items-center">
+                                        <Target size={10} className="mr-1" /> Defecto
+                                      </span>
+                                    )}
+                                </div>
+                              </div>
+                              <div className="flex gap-1.5 shrink-0">
+                                {(sc.counts?.unread || 0) > 0 && (
+                                  <span className="w-2.5 h-2.5 rounded-full bg-red-500 border border-white shadow-sm" title="Mensajes sin leer" />
+                                )}
+                                {(sc.counts?.pending || 0) > 0 && (
+                                  <span className="w-2.5 h-2.5 rounded-full bg-amber-400 border border-white shadow-sm" title="Pendientes" />
+                                )}
+                              </div>
+                            </div>
+
+                            {/* Stats Rows */}
+                            <div className="grid grid-cols-3 gap-2 mt-4 pt-3 border-t border-gray-50">
+                              {/* Members Row */}
+                              <div 
+                                className="flex items-center gap-2 cursor-pointer hover:bg-gray-50 rounded-lg p-1.5 transition-colors group/stat"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setSubsForSub(sc.id);
+                                  setSubsModalOpen(true);
+                                  setSubsPage(1);
+                                  setSubsSearch('');
+                                }}
+                              >
+                                <div className="text-gray-400 group-hover/stat:text-indigo-600 transition-colors">
+                                  <Users size={20} />
+                                </div>
+                                <div className="h-6 w-px bg-gray-200" />
+                                <div className="flex flex-col min-w-0">
+                                  <span className="text-[10px] text-gray-500 font-medium truncate">Miembros</span>
+                                  <span className="text-sm font-bold text-gray-900 leading-none">
+                                    {sc.memberCount.toLocaleString()}
                                   </span>
-                              )}
+                                </div>
+                              </div>
+
+                              {/* Approvers Row */}
+                              <div 
+                                className="flex items-center gap-2 cursor-pointer hover:bg-gray-50 rounded-lg p-1.5 transition-colors group/stat"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setApproverTipSub(sc as any);
+                                  setApproverModalOpen(true);
+                                  fetchPreviewData(sc.id);
+                                }}
+                              >
+                                <div className="text-gray-400 group-hover/stat:text-purple-600 transition-colors">
+                                  <ShieldCheck size={20} />
+                                </div>
+                                <div className="h-6 w-px bg-gray-200" />
+                                <div className="flex flex-col min-w-0">
+                                  <span className="text-[10px] text-gray-500 font-medium truncate">Aprobadores</span>
+                                  <span className="text-sm font-bold text-gray-900 leading-none">
+                                    {sc.counts?.approvers ?? 0}
+                                  </span>
+                                </div>
+                              </div>
+
+                              {/* Pending Row */}
+                              <div 
+                                className="flex items-center gap-2 cursor-pointer hover:bg-gray-50 rounded-lg p-1.5 transition-colors group/stat"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setPendingForSub(sc.id);
+                                  setPendingModalOpen(true);
+                                  setPendingPage(1);
+                                }}
+                              >
+                                <div className="text-gray-400 group-hover/stat:text-amber-600 transition-colors">
+                                  <Hourglass size={20} />
+                                </div>
+                                <div className="h-6 w-px bg-gray-200" />
+                                <div className="flex flex-col min-w-0">
+                                  <span className="text-[10px] text-gray-500 font-medium truncate">Pendientes</span>
+                                  <span className="text-sm font-bold text-gray-900 leading-none">
+                                    {sc.counts?.pending ?? 0}
+                                  </span>
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* Action Footer */}
+                            <div className="pt-2 mt-1 border-t border-gray-100 flex items-center justify-between">
+                               <div className="text-[10px] text-gray-400 truncate max-w-[100px]">
+                                 ID: {sc.id.slice(0, 8)}
+                               </div>
+                               <button
+                                  className="flex items-center gap-1.5 text-xs font-medium text-indigo-600 hover:text-indigo-700 bg-indigo-50 hover:bg-indigo-100 px-2.5 py-1.5 rounded-lg transition-colors"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setMessagesForSub(sc.id);
+                                    setMessagesModalOpen(true);
+                                    setMessagesPage(1);
+                                    setMessagesLoading(true);
+                                    api
+                                      .getChannelMessages(sc.id, 1, messagesLimit, {
+                                        quick: 'all',
+                                        start:
+                                          statsRange === '1h'
+                                            ? new Date(Date.now() - 3600000).toISOString()
+                                            : statsRange === '24h'
+                                              ? new Date(Date.now() - 86400000).toISOString()
+                                              : statsRange === '7d'
+                                                ? new Date(Date.now() - 7 * 86400000).toISOString()
+                                                : statsRange === '1m'
+                                                  ? new Date(
+                                                      Date.now() - 30 * 86400000
+                                                    ).toISOString()
+                                                  : undefined,
+                                      })
+                                      .then((res) => {
+                                        setMessagesItems(res.messages as any);
+                                        setMessagesPages(res.pagination.pages);
+                                        setMessagesLoading(false);
+                                      })
+                                      .catch(() => setMessagesLoading(false));
+                                  }}
+                               >
+                                 <MessagesSquare size={14} />
+                                 Mensajes
+                               </button>
+                            </div>
                           </div>
-                        </td>
-                        <td className="px-4 py-2">
-                          <button
-                            className="text-indigo-600 hover:underline cursor-pointer"
-                            onClick={() => {
-                              setSubsForSub(sc.id);
-                              setSubsModalOpen(true);
-                              setSubsPage(1);
-                              setSubsSearch('');
-                            }}
-                          >
-                            {sc.memberCount.toLocaleString()}
-                          </button>
-                        </td>
-                        <td className="px-4 py-2">
-                          <button
-                            className="text-indigo-600 hover:underline cursor-pointer"
-                            onClick={() => {
-                              setApproverTipSub(sc as any);
-                              setApproverModalOpen(true);
-                              fetchPreviewData(sc.id);
-                            }}
-                          >
-                            {sc.counts?.approvers ?? 'Ver'}
-                          </button>
-                        </td>
-                        <td className="px-4 py-2">
-                          <button
-                            className="text-indigo-600 hover:underline cursor-pointer"
-                            onClick={() => {
-                              setPendingForSub(sc.id);
-                              setPendingModalOpen(true);
-                              setPendingPage(1);
-                            }}
-                          >
-                            {sc.counts?.pending ?? '—'}
-                          </button>
-                        </td>
-                        <td className="px-4 py-2">
-                          <button
-                            className="w-8 h-8 rounded-full border border-gray-300 flex items-center justify-center text-indigo-600 hover:bg-gray-50 cursor-pointer"
-                            onClick={() => {
-                              setMessagesForSub(sc.id);
-                              setMessagesModalOpen(true);
-                              setMessagesPage(1);
-                              setMessagesLoading(true);
-                              api
-                                .getChannelMessages(sc.id, 1, messagesLimit, {
-                                  quick: 'all',
-                                  start:
-                                    statsRange === '1h'
-                                      ? new Date(Date.now() - 3600000).toISOString()
-                                      : statsRange === '24h'
-                                        ? new Date(Date.now() - 86400000).toISOString()
-                                        : statsRange === '7d'
-                                          ? new Date(Date.now() - 7 * 86400000).toISOString()
-                                          : statsRange === '1m'
-                                            ? new Date(
-                                              Date.now() - 30 * 86400000
-                                            ).toISOString()
-                                            : undefined,
-                                })
-                                .then((res) => {
-                                  setMessagesItems(res.messages as any);
-                                  setMessagesPages(res.pagination.pages);
-                                  setMessagesLoading(false);
-                                })
-                                .catch(() => setMessagesLoading(false));
-                            }}
-                          >
-                            <MessagesSquare size={14} />
-                          </button>
-                        </td>
-                      </tr>
-                    ))
-                  ) : (
-                    <tr>
-                      <td colSpan={5} className="px-4 py-6 text-center text-gray-400">
-                        {t('channels.approvers_empty')}
-                      </td>
-                    </tr>
-                  )}
-                  </tbody>
-                </table>
+                        </motion.div>
+                      ))}
+                    </AnimatePresence>
+                  </div>
+                ) : (
+                  <div className="text-center py-16 bg-white rounded-xl border border-gray-100 border-dashed">
+                    <div className="w-16 h-16 bg-gray-50 rounded-full flex items-center justify-center mx-auto mb-4">
+                      <ListTree size={24} className="text-gray-300" />
+                    </div>
+                    <h3 className="text-lg font-medium text-gray-900">{t('channels.approvers_empty')}</h3>
+                    <p className="text-gray-500 mt-1 max-w-sm mx-auto text-sm">
+                      No hay subcanales en este momento.
+                    </p>
+                  </div>
+                )}
               </div>
 
               {!selectedChannel?.parentId && (
@@ -2220,15 +2944,20 @@ const ChannelManager: React.FC = () => {
         )}
 
             {approverModalOpen && (
-              <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center">
-                <div className="bg-white w-full max-w-4xl rounded-xl shadow-lg border border-gray-200">
-                  <div className="p-4 border-b border-gray-100 flex items-center justify-between">
+              <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
+                <motion.div 
+                  initial={{ opacity: 0, scale: 0.95, y: 10 }}
+                  animate={{ opacity: 1, scale: 1, y: 0 }}
+                  exit={{ opacity: 0, scale: 0.95, y: 10 }}
+                  className="bg-white w-full max-w-lg rounded-2xl shadow-2xl border border-gray-100 overflow-hidden flex flex-col max-h-[85vh]"
+                >
+                  <div className="bg-gradient-to-r from-purple-600 to-indigo-600 p-5 text-white flex items-center justify-between shrink-0">
                     <div>
-                      <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
-                        <ShieldCheck size={18} className="text-purple-600" />
+                      <h3 className="text-lg font-bold flex items-center gap-2">
+                        <ShieldCheck size={20} className="text-purple-200" />
                         {t('channels.approvers')}
                       </h3>
-                      <p className="text-xs text-gray-500">
+                      <p className="text-xs text-indigo-100 opacity-90 mt-1">
                         Gestión de aprobadores del subcanal
                       </p>
                     </div>
@@ -2237,12 +2966,12 @@ const ChannelManager: React.FC = () => {
                         setApproverModalOpen(false);
                         setApproverTipOpen(false);
                       }}
-                      className="text-gray-400 hover:text-gray-600 p-2 hover:bg-gray-50 rounded-full"
+                      className="text-white/80 hover:text-white p-2 hover:bg-white/10 rounded-full transition-colors"
                     >
-                      <X size={18} />
+                      <X size={20} />
                     </button>
                   </div>
-                  <div className="p-6 pt-0">
+                  <div className="p-6 overflow-y-auto custom-scrollbar">
                     <div className="mb-3"></div>
                     <Autocomplete
                       multiple
@@ -2681,7 +3410,7 @@ const ChannelManager: React.FC = () => {
                       </div>
                     )}
                   </div>
-                </div>
+                </motion.div>
               </div>
             )}
 
@@ -2893,10 +3622,10 @@ const ChannelManager: React.FC = () => {
 
             {(messagesModalOpen || activeTab === 'messages') && (
               <div
-                className={`${(activeTab === 'messages') ? 'static bg-transparent z-auto' : 'fixed inset-0 bg-black/40 z-50'} flex items-center justify-center`}
+                className={`${(activeTab === 'messages') ? ' v-full h-full static bg-transparent z-auto' : 'fixed inset-0 bg-black/40 z-50'} flex items-center justify-center`}
               >
                 <div
-                  className={`bg-white w-full ${(activeTab === 'messages') ? '' : 'max-w-3xl'} rounded-xl shadow-lg border border-gray-200`}
+                  className={`bg-white w-full h-full v-full ${(activeTab === 'messages') ? '' : 'max-w-3xl'} rounded-xl`}
                 >
                   <div className="p-4 border-b border-gray-100 flex items-center justify-between">
                     <div className="flex items-center gap-3">
@@ -2982,7 +3711,20 @@ const ChannelManager: React.FC = () => {
                       </div>
                       <span className="h-4 w-px bg-gray-200"></span>
                       <h3 className="text-lg font-semibold text-gray-900">
-                        Mensajes {selectedChannel?.title}
+                        Mensajes {(() => {
+                          const subId = messagesModalOpen
+                            ? messagesForSub
+                            : (selectedChannel?.parentId && activeTab === 'messages')
+                              ? selectedChannel?.id
+                              : (activeTab === 'messages' && selectedChannel && !selectedChannel.parentId)
+                                ? selectedChannel?.subchannels?.[0]?.id
+                                : null;
+
+                          if (!subId) return selectedChannel?.title;
+                          if (subId === selectedChannel?.id) return selectedChannel?.title;
+                          const sub = selectedChannel?.subchannels?.find(s => s.id === subId);
+                          return sub ? sub.title : selectedChannel?.title;
+                        })()}
                       </h3>
                     </div>
                     {selectedChannel?.parentId ? (
@@ -3034,12 +3776,11 @@ const ChannelManager: React.FC = () => {
                           aria-label="Todos"
                           title="Todos"
                         >
-                          <MessagesSquare
-                            size={16}
-                            className={
-                              messagesQuick === 'all' ? 'text-white' : 'text-slate-600'
-                            }
-                          />
+                          <div className="relative w-4 h-4">
+                            <div className={`absolute top-0 left-1/2 -translate-x-1/2 w-1.5 h-1.5 rounded-full ${messagesQuick === 'all' ? 'bg-red-400' : 'bg-red-500'}`} />
+                            <div className={`absolute bottom-0 left-0 w-1.5 h-1.5 rounded-full ${messagesQuick === 'all' ? 'bg-amber-300' : 'bg-amber-500'}`} />
+                            <div className={`absolute bottom-0 right-0 w-1.5 h-1.5 rounded-full ${messagesQuick === 'all' ? 'bg-emerald-300' : 'bg-emerald-500'}`} />
+                          </div>
                           <div className="absolute left-1/2 -translate-x-1/2 top-full mt-1 bg-gray-900 text-white text-xs rounded px-2 py-1 opacity-0 group-hover:opacity-100 pointer-events-none whitespace-nowrap">
                             Todos
                           </div>
@@ -3050,12 +3791,7 @@ const ChannelManager: React.FC = () => {
                           aria-label="Emergentes"
                           title="Emergentes"
                         >
-                          <AlertTriangle
-                            size={16}
-                            className={
-                              messagesQuick === 'emergency' ? 'text-white' : 'text-red-600'
-                            }
-                          />
+                          <div className={`w-2.5 h-2.5 rounded-full mx-auto my-0.5 ${messagesQuick === 'emergency' ? 'bg-red-400 shadow-sm shadow-white/50' : 'bg-red-500'}`} />
                           <div className="absolute left-1/2 -translate-x-1/2 top-full mt-1 bg-gray-900 text-white text-xs rounded px-2 py-1 opacity-0 group-hover:opacity-100 pointer-events-none whitespace-nowrap">
                             Emergentes
                           </div>
@@ -3066,12 +3802,7 @@ const ChannelManager: React.FC = () => {
                           aria-label="Alta"
                           title="Alta"
                         >
-                          <Zap
-                            size={16}
-                            className={
-                              messagesQuick === 'high' ? 'text-white' : 'text-slate-600'
-                            }
-                          />
+                          <div className={`w-2.5 h-2.5 rounded-full mx-auto my-0.5 ${messagesQuick === 'high' ? 'bg-amber-300 shadow-sm shadow-white/50' : 'bg-amber-500'}`} />
                           <div className="absolute left-1/2 -translate-x-1/2 top-full mt-1 bg-gray-900 text-white text-xs rounded px-2 py-1 opacity-0 group-hover:opacity-100 pointer-events-none whitespace-nowrap">
                             Alta
                           </div>
@@ -3082,12 +3813,7 @@ const ChannelManager: React.FC = () => {
                           aria-label="Vigentes"
                           title="Vigentes"
                         >
-                          <Clock
-                            size={16}
-                            className={
-                              messagesQuick === 'vigent' ? 'text-white' : 'text-emerald-600'
-                            }
-                          />
+                          <div className={`w-2.5 h-2.5 rounded-full mx-auto my-0.5 ${messagesQuick === 'vigent' ? 'bg-emerald-300 shadow-sm shadow-white/50' : 'bg-emerald-500'}`} />
                           <div className="absolute left-1/2 -translate-x-1/2 top-full mt-1 bg-gray-900 text-white text-xs rounded px-2 py-1 opacity-0 group-hover:opacity-100 pointer-events-none whitespace-nowrap">
                             Vigentes
                           </div>
@@ -3098,12 +3824,7 @@ const ChannelManager: React.FC = () => {
                           aria-label="Vencidos"
                           title="Vencidos"
                         >
-                          <Hourglass
-                            size={16}
-                            className={
-                              messagesQuick === 'expired' ? 'text-white' : 'text-slate-600'
-                            }
-                          />
+                          <div className={`w-2.5 h-2.5 rounded-full mx-auto my-0.5 ${messagesQuick === 'expired' ? 'bg-gray-400 shadow-sm shadow-white/50' : 'bg-gray-400'}`} />
                           <div className="absolute left-1/2 -translate-x-1/2 top-full mt-1 bg-gray-900 text-white text-xs rounded px-2 py-1 opacity-0 group-hover:opacity-100 pointer-events-none whitespace-nowrap">
                             Vencidos
                           </div>
@@ -3384,6 +4105,12 @@ const ChannelManager: React.FC = () => {
                                       Cancelado
                                     </span>
                                 )}
+                                {m.extra?.type === 'comunicado' && (
+                                  <span className="text-[10px] px-1.5 py-0.5 rounded border bg-amber-50 text-amber-700 border-amber-200 flex items-center gap-1">
+                                    <FileText size={10} />
+                                    Comunicado
+                                  </span>
+                                )}
                                 <span className="text-xs text-gray-500">
                                     hace:{' '}
                                   {(relativeFrom(m.createdAt) || '')
@@ -3399,21 +4126,140 @@ const ChannelManager: React.FC = () => {
                               <div />
                             </div>
 
-                            <div className="mt-2 text-sm text-gray-800">{m.content}</div>
-                            <div className="mt-3 flex items-center gap-2">
+                            <div className="mt-2 text-sm text-gray-800 flex items-start gap-2">
+                              <div className="group relative mt-1.5 shrink-0">
+                                <div className={`w-2 h-2 rounded-full ${m.isEmergency ? 'bg-red-500' : m.priority === 'HIGH' ? 'bg-yellow-500' : m.priority === 'MEDIUM' ? 'bg-sky-500' : 'bg-gray-400'}`} />
+                                <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-gray-900 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-10">
+                                  {m.isEmergency ? 'Emergente' : m.priority === 'HIGH' ? 'Alta' : m.priority === 'MEDIUM' ? 'Media' : 'Baja'}
+                                  <div className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-gray-900"></div>
+                                </div>
+                              </div>
+                              <div className="break-words min-w-0 flex-1">{m.content}</div>
+                            </div>
+                            {m.extra?.type === 'comunicado' && (
+                              <div className="mt-2 mb-2">
+                                <button
+                                  onClick={() => setViewingComunicado(m)}
+                                  className="text-xs flex items-center gap-1 text-amber-600 hover:text-amber-700 font-medium"
+                                >
+                                  <Eye size={14} />
+                                  Ver comunicado oficial
+                                </button>
+                              </div>
+                            )}
+                            {m.extra && m.extra.schedule && Array.isArray(m.extra.schedule) && m.extra.schedule.length > 0 && expandedSchedules[m.id] && (
+                              <div className="mt-3 bg-indigo-50/50 rounded-lg p-3 border border-indigo-100 animate-in slide-in-from-top-2 fade-in duration-200">
+                                <div className="space-y-2">
+                                  {m.extra.schedule
+                                    .sort((a: any, b: any) => new Date(a.date).getTime() - new Date(b.date).getTime())
+                                    .map((item: any, idx: number) => (
+                                      <div key={idx} className="flex gap-3 text-xs group items-center">
+                                        <button
+                                          onClick={() => {
+                                            setCalendarConfirmEvent(item);
+                                            setCalendarConfirmOpen(true);
+                                          }}
+                                          className="p-1.5 text-indigo-600 hover:bg-indigo-100 rounded-full transition-colors opacity-0 group-hover:opacity-100 focus:opacity-100"
+                                          title="Agregar a calendario"
+                                        >
+                                          <CalendarPlus size={14} />
+                                        </button>
+                                        <div className="w-24 shrink-0 flex flex-col">
+                                          <span className="font-medium text-gray-900">
+                                            {new Date(item.date).toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric' })}
+                                          </span>
+                                          {item.time && (
+                                            <span className="text-[10px] text-gray-500 flex items-center gap-1">
+                                              <Clock size={10} />
+                                              {item.time}
+                                            </span>
+                                          )}
+                                        </div>
+                                        <div className="flex-1 text-gray-700 relative">
+                                          <div className="absolute -left-2 top-1.5 w-1 h-1 rounded-full bg-indigo-300"></div>
+                                          {item.activity}
+                                        </div>
+                                      </div>
+                                    ))}
+                                </div>
+                              </div>
+                            )}
+                            {m.extra && m.extra.location && (m.extra.location.markers?.length > 0 || m.extra.location.polylines?.length > 0) && expandedLocations[m.id] && (
+                              <div className="mt-3 bg-indigo-50/50 rounded-lg p-3 border border-indigo-100 animate-in slide-in-from-top-2 fade-in duration-200">
+                                <div className="h-64 w-full rounded-lg overflow-hidden border border-gray-200 relative z-0">
+                                   <MapContainer
+                                    center={
+                                      m.extra.location.markers?.[0] || 
+                                      (Array.isArray(m.extra.location.polylines?.[0]) 
+                                        ? m.extra.location.polylines?.[0]?.[0] 
+                                        : m.extra.location.polylines?.[0]?.points?.[0]) || 
+                                      [0, 0]
+                                    }
+                                    zoom={13}
+                                    style={{ height: '100%', width: '100%' }}
+                                  >
+                                    <TileLayer
+                                      url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                                      attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+                                    />
+                                    {m.extra.location.markers?.map((pos: [number, number], idx: number) => (
+                                      <Marker key={idx} position={pos} />
+                                    ))}
+                                    {m.extra.location.polylines?.map((poly: any, idx: number) => (
+                                      <Polyline 
+                                        key={idx} 
+                                        positions={Array.isArray(poly) ? poly : poly.points} 
+                                        color={Array.isArray(poly) ? "#4F46E5" : poly.color} 
+                                      />
+                                    ))}
+                                  </MapContainer>
+                                </div>
+                              </div>
+                            )}
+                            {m.extra && m.extra.attachments && m.extra.attachments.length > 0 && expandedAttachments[m.id] && (
+                              <div className="mt-3 bg-indigo-50/50 rounded-lg p-3 border border-indigo-100 animate-in slide-in-from-top-2 fade-in duration-200">
+                                <div className="grid grid-cols-1 gap-2">
+                                  {m.extra.attachments.map((att: any, idx: number) => (
+                                    <a
+                                      key={idx}
+                                      href={att.url}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="flex items-center gap-3 p-2 bg-white rounded border border-indigo-100 hover:bg-indigo-50 hover:border-indigo-200 transition-all group"
+                                    >
+                                      <div className="p-2 bg-indigo-50 text-indigo-600 rounded-lg group-hover:bg-indigo-100 group-hover:scale-110 transition-all">
+                                         {getFileIcon(att.name || att.url)}
+                                      </div>
+                                      <div className="flex-1 min-w-0">
+                                        <div className="text-sm font-medium text-gray-900 truncate">
+                                          {att.name || 'Adjunto sin nombre'}
+                                        </div>
+                                        <div className="text-[10px] text-gray-500 uppercase tracking-wider">
+                                          {att.type || 'ARCHIVO'}
+                                        </div>
+                                      </div>
+                                      <div className="text-indigo-400 group-hover:text-indigo-600">
+                                        <Download size={16} />
+                                      </div>
+                                    </a>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+                            <div className="mt-3 -mx-4 -mb-4 px-4 py-2 bg-gray-100 border-t border-gray-200 flex items-center gap-2 flex-wrap">
                               {m.expiresAt && (
-                                <span className="relative inline-flex items-center gap-1">
+                                <span className="relative inline-flex items-center gap-1 mr-2">
                                     <button
                                       type="button"
                                       onClick={() =>
                                         setExpiresTipId(expiresTipId === m.id ? null : m.id)
                                       }
-                                      className="p-1 rounded hover:bg-gray-100 cursor-pointer"
+                                      className="p-1 rounded hover:bg-gray-200 cursor-pointer"
                                       aria-label="Ver fecha exacta"
                                     >
-                                      <Hourglass size={12} className="text-amber-600" />
+                                      <Hourglass size={12} className="text-gray-500" />
                                     </button>
-                                    <span className="text-xs font-semibold text-gray-900">
+                                    <span className="text-xs font-semibold text-gray-500">
                                       {(relativeIn(m.expiresAt) || '')
                                         .replace(/en:\s*/, '')
                                         .replace(/segundos?/, 's')
@@ -3437,7 +4283,46 @@ const ChannelManager: React.FC = () => {
                                   )}
                                   </span>
                               )}
-                              {(m.approvals || []).map((a) =>
+                              {m.extra && m.extra.schedule && Array.isArray(m.extra.schedule) && m.extra.schedule.length > 0 && (
+                                <button
+                                  onClick={() => setExpandedSchedules(prev => ({ ...prev, [m.id]: !prev[m.id] }))}
+                                  className={`inline-flex items-center gap-1 text-[11px] font-bold px-1.5 py-0.5 rounded border transition-colors mr-2 ${expandedSchedules[m.id] ? 'bg-indigo-100 text-indigo-700 border-indigo-200' : 'bg-white text-indigo-600 border-indigo-200 hover:bg-indigo-50'}`}
+                                >
+                                  <Calendar size={12} />
+                                  <span>{expandedSchedules[m.id] ? 'Ocultar Horario' : 'Ver Horario'}</span>
+                                </button>
+                              )}
+                              {m.extra && m.extra.location && (m.extra.location.markers?.length > 0 || m.extra.location.polylines?.length > 0) && (
+                                <button
+                                  onClick={() => setExpandedLocations(prev => ({ ...prev, [m.id]: !prev[m.id] }))}
+                                  className={`inline-flex items-center gap-1 text-[11px] font-bold px-1.5 py-0.5 rounded border transition-colors mr-2 ${expandedLocations[m.id] ? 'bg-indigo-100 text-indigo-700 border-indigo-200' : 'bg-white text-indigo-600 border-indigo-200 hover:bg-indigo-50'}`}
+                                >
+                                  <MapPin size={12} />
+                                  <span>{expandedLocations[m.id] ? 'Ocultar Mapa' : 'Ver Mapa'}</span>
+                                </button>
+                              )}
+                              {m.extra && m.extra.attachments && m.extra.attachments.length > 0 && (
+                                <button
+                                  onClick={() => setExpandedAttachments(prev => ({ ...prev, [m.id]: !prev[m.id] }))}
+                                  className={`inline-flex items-center gap-1 text-[11px] font-bold px-1.5 py-0.5 rounded border transition-colors mr-2 ${expandedAttachments[m.id] ? 'bg-indigo-100 text-indigo-700 border-indigo-200' : 'bg-white text-indigo-600 border-indigo-200 hover:bg-indigo-50'}`}
+                                >
+                                  <Paperclip size={12} />
+                                  <span>{expandedAttachments[m.id] ? 'Ocultar Adjuntos' : 'Ver Adjuntos'}</span>
+                                </button>
+                              )}
+                              {(m.approvals || []).length > 0 && (
+  <button
+    onClick={() => setExpandedApprovers(prev => ({ ...prev, [m.id]: !prev[m.id] }))}
+    className="ml-auto mr-1 inline-flex items-center gap-1 text-purple-600 transition-all hover:text-purple-700 hover:scale-110"
+  >
+    <Shield 
+      size={14} 
+      className={`${expandedApprovers[m.id] ? 'animate-pulse' : 'animate-[pulse_2s_ease-in-out_infinite]'}`}
+      strokeWidth={2.5}
+    />
+  </button>
+)}
+                              {expandedApprovers[m.id] && (m.approvals || []).map((a) =>
                                 a.status === 'APPROVED' ? (
                                   <span
                                     key={a.userId}
@@ -3665,121 +4550,308 @@ const ChannelManager: React.FC = () => {
               </button>
 
           {showCompose && (
-                        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
-                        <div className="bg-white w-full max-w-2xl rounded-xl shadow-lg border border-gray-200">
-                        <div className="p-4 border-b border-gray-100 flex items-center justify-between">
-                        <h3 className="text-lg font-semibold text-gray-900">{t('compose.title')}</h3>
-                    <button
-                      onClick={closeComposeAutoSave}
-                      className="text-gray-400 hover:text-gray-600 p-2 hover:bg-gray-50 rounded-full"
-                    >
-                      <X size={18} />
-                    </button>
-                    </div>
-                <div className="p-6 space-y-6">
-                  <div className="relative">
-                    <div className="mb-2 flex items-center justify-between gap-6">
-                      <div className="flex items-center gap-3">
-                        <div className="relative group">
-                          <button
-                            type="button"
-                            className="p-1.5 rounded-md hover:bg-gray-100 text-indigo-600"
-                          >
-                            <Zap size={16} />
-                          </button>
-                          <div className="absolute left-1/2 -translate-x-1/2 top-full mt-1 whitespace-nowrap rounded bg-gray-900 text-white text-xs px-2 py-1 opacity-0 group-hover:opacity-100 pointer-events-none">
-                            {t('priority')}
-                          </div>
-                        </div>
-                        <div className="flex rounded-md shadow-sm" role="group">
-                          {[
-                            MessagePriority.LOW,
-                            MessagePriority.MEDIUM,
-                            MessagePriority.HIGH,
-                          ].map((p) => (
-                            <button
-                              key={p}
-                              type="button"
-                              disabled={composeIsEmergency}
-                              onClick={() => setComposePriority(p)}
-                              className={`px-3 py-1.5 text-xs font-medium border first:rounded-l-lg last:rounded-r-lg ${composePriority === p ? 'bg-slate-800 text-white border-slate-800' : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'} ${composeIsEmergency ? 'opacity-50 cursor-not-allowed' : ''}`}
-                            >
-                              {p === MessagePriority.LOW
-                                ? t('priority.low')
-                                : p === MessagePriority.MEDIUM
-                                  ? t('priority.medium')
-                                  : t('priority.high')}
-                            </button>
-                          ))}
-                        </div>
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+              <motion.div
+                initial={{ opacity: 0, scale: 0.95, y: 10 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.95, y: 10 }}
+                className="bg-white w-full max-w-2xl rounded-2xl shadow-2xl overflow-hidden max-h-[90vh] flex flex-col"
+              >
+                <div className="bg-gradient-to-br from-indigo-500 to-purple-600 p-6 text-white relative shrink-0">
+                  <button
+                    onClick={closeComposeAutoSave}
+                    className="absolute top-4 right-4 text-white/80 hover:text-white p-1 hover:bg-white/10 rounded-full transition-colors"
+                  >
+                    <X size={20} />
+                  </button>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-4">
+                      <div className="w-12 h-12 bg-white/20 backdrop-blur-md rounded-2xl flex items-center justify-center shadow-inner">
+                        <Send size={24} className="text-white" />
                       </div>
-                      <label className="flex items-center cursor-pointer relative">
-                        <input
-                          type="checkbox"
-                          checked={composeIsEmergency}
-                          onChange={(e) => setComposeIsEmergency(e.target.checked)}
-                          className="sr-only peer"
-                        />
-                        <div className="w-11 h-6 bg-gray-200 rounded-full peer peer-checked:bg-red-500 relative after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:after:translate-x-full"></div>
-                        <div className="ml-3 relative group">
-                          <button
-                            type="button"
-                            className="p-1.5 rounded-md hover:bg-gray-100 text-red-600"
-                          >
-                            <AlertTriangle size={16} />
-                          </button>
-                          <div className="absolute left-1/2 -translate-x-1/2 top-full mt-1 whitespace-nowrap rounded bg-gray-900 text-white text-xs px-2 py-1 opacity-0 group-hover:opacity-100 pointer-events-none">
-                            {t('emergencyBroadcast')}
-                          </div>
-                        </div>
-                      </label>
+                      <div className="flex flex-col text-left">
+                         <h3 className="text-xl font-bold">{t('compose.title')}</h3>
+                         {selectedChannel && (
+                           <div className="flex items-center gap-1.5 text-indigo-100 text-sm mt-0.5">
+                              {selectedChannel.parentId && (
+                                <>
+                                  <span className="opacity-80 font-medium">
+                                    {channels.find(c => c.id === selectedChannel.parentId)?.title || 'Canal Principal'}
+                                  </span>
+                                  <ChevronRight size={12} className="opacity-60" />
+                                </>
+                              )}
+                              <span className="font-bold text-white tracking-wide">
+                                {selectedChannel.title}
+                              </span>
+                           </div>
+                         )}
+                      </div>
                     </div>
-                    <textarea
-                      value={composeContent}
-                      onChange={(e) => setComposeContent(e.target.value)}
-                      rows={6}
-                      className={`w-full p-4 bg-white border-indigo-200 ring-indigo-200 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none resize-none text-gray-900 placeholder-gray-400`}
-                      placeholder={t('content.placeholder')}
-                    />
-                    <button
-                      onClick={handleComposeAIAssist}
-                      disabled={composeIsGenerating}
-                      className="absolute bottom-3 right-3 flex items-center gap-1.5 px-3 py-1.5 bg-indigo-50 text-indigo-600 hover:bg-indigo-100 rounded-md text-sm font-medium transition-colors disabled:opacity-50"
-                    >
-                      <Sparkles size={14} />
-                      {composeIsGenerating ? t('ai.drafting') : t('ai.polish')}
-                    </button>
+                  </div>
+                </div>
+
+                <div className="p-6 pt-3 space-y-6 overflow-y-auto flex-1">
+                  <div className="mb-6 -mx-6 bg-gray-50 border-b border-gray-100">
+                    <div className="p-4 pt-0 flex flex-col gap-4">
+                        {/* Header: Add Actions & Audience */}
+                        <div className="flex items-center justify-between relative z-20">
+                            <div className="relative">
+                                <button
+                                    onClick={() => setAddMenuOpen(!addMenuOpen)}
+                                    className="flex items-center gap-2 px-3 py-2 bg-indigo-600 text-white rounded-xl shadow-md hover:bg-indigo-700 transition-all active:scale-95"
+                                >
+                                    <Plus size={18} />
+                                    <span className="text-xs font-bold uppercase tracking-wide">Añadir</span>
+                                    <ChevronDown size={14} className={`transition-transform ${addMenuOpen ? 'rotate-180' : ''}`} />
+                                </button>
+                                {addMenuOpen && (
+                                    <>
+                                        <div className="fixed inset-0 z-10" onClick={() => setAddMenuOpen(false)}></div>
+                                        <div className="absolute top-full left-0 mt-2 w-56 bg-white rounded-xl shadow-xl border border-gray-100 z-20 overflow-hidden animate-in fade-in zoom-in-95 duration-100">
+                                            <div className="p-1.5 flex flex-col gap-0.5">
+                                                <button onClick={() => { setIsScheduleModalOpen(true); setAddMenuOpen(false); }} className="flex items-center gap-3 px-3 py-2 hover:bg-gray-50 rounded-lg text-left transition-colors text-gray-700">
+                                                    <div className="p-1.5 bg-indigo-50 text-indigo-600 rounded-lg"><Calendar size={16} /></div>
+                                                    <div className="flex flex-col"><span className="text-sm font-semibold">Horario</span><span className="text-[10px] text-gray-500">Adjuntar eventos</span></div>
+                                                </button>
+                                                <button onClick={() => { fileInputRef.current?.click(); setAddMenuOpen(false); }} className="flex items-center gap-3 px-3 py-2 hover:bg-gray-50 rounded-lg text-left transition-colors text-gray-700">
+                                                    <div className="p-1.5 bg-emerald-50 text-emerald-600 rounded-lg"><Paperclip size={16} /></div>
+                                                    <div className="flex flex-col"><span className="text-sm font-semibold">Archivo</span><span className="text-[10px] text-gray-500">Fotos, docs, pdf</span></div>
+                                                </button>
+                                                <button onClick={() => { setIsComunicadoModalOpen(true); setAddMenuOpen(false); }} className="flex items-center gap-3 px-3 py-2 hover:bg-gray-50 rounded-lg text-left transition-colors text-gray-700">
+                                                    <div className="p-1.5 bg-amber-50 text-amber-600 rounded-lg"><FileText size={16} /></div>
+                                                    <div className="flex flex-col"><span className="text-sm font-semibold">Comunicado</span><span className="text-[10px] text-gray-500">Plantilla oficial</span></div>
+                                                </button>
+                                                <button onClick={() => setAddMenuOpen(false)} className="flex items-center gap-3 px-3 py-2 hover:bg-gray-50 rounded-lg text-left transition-colors text-gray-700">
+                                                    <div className="p-1.5 bg-blue-50 text-blue-600 rounded-lg"><Link size={16} /></div>
+                                                    <div className="flex flex-col"><span className="text-sm font-semibold">Enlace</span><span className="text-[10px] text-gray-500">URL externa</span></div>
+                                                </button>
+                                                <button onClick={() => { setShowLocationPicker(true); setAddMenuOpen(false); }} className="flex items-center gap-3 px-3 py-2 hover:bg-gray-50 rounded-lg text-left transition-colors text-gray-700">
+                                                    <div className="p-1.5 bg-rose-50 text-rose-600 rounded-lg"><MapPin size={16} /></div>
+                                                    <div className="flex flex-col"><span className="text-sm font-semibold">Ubicación</span><span className="text-[10px] text-gray-500">Compartir sitio</span></div>
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </>
+                                )}
+                            </div>
+                            
+                            <button
+                               type="button"
+                               onClick={() => {
+                                 if (selectedChannel) setApproverTipSub(selectedChannel as any);
+                                 setApproverModalOpen(true);
+                               }}
+                               className="group flex items-center gap-2 px-3 py-2 bg-white border border-gray-200 rounded-xl shadow-sm hover:bg-gray-50 hover:border-indigo-200 transition-all"
+                            >
+                               <div className="p-1 bg-gray-100 rounded-md group-hover:bg-indigo-50 transition-colors">
+                                   <Users size={14} className="text-gray-500 group-hover:text-indigo-600" />
+                               </div>
+                               <span className="text-xs font-bold text-gray-700 group-hover:text-indigo-700">Configurar Audiencia</span>
+                            </button>
+                        </div>
+
+                        {/* Controls: Priority & Schedule */}
+                        <div className="flex flex-wrap items-center justify-between gap-4">
+                            {/* Priority - Proposal 1 Style */}
+                            <div className="flex items-center bg-white p-1.5 rounded-xl border border-gray-200 shadow-sm">
+                                <div className="flex rounded-lg bg-gray-100 p-1" role="group">
+                                    {[MessagePriority.LOW, MessagePriority.MEDIUM, MessagePriority.HIGH].map((p) => (
+                                      <button
+                                        key={p}
+                                        type="button"
+                                        disabled={composeIsEmergency}
+                                        onClick={() => setComposePriority(p)}
+                                        className={`px-3 py-1.5 text-xs font-bold rounded-md transition-all ${composePriority === p ? 'bg-white text-indigo-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'} ${composeIsEmergency ? 'opacity-50 cursor-not-allowed' : ''}`}
+                                      >
+                                        <div className="flex items-center gap-2">
+                                          {p === MessagePriority.HIGH && <div className="w-1.5 h-1.5 rounded-full bg-amber-400" />}
+                                          {p === MessagePriority.LOW ? t('priority.low') : p === MessagePriority.MEDIUM ? t('priority.medium') : t('priority.high')}
+                                        </div>
+                                      </button>
+                                    ))}
+                                </div>
+                                <div className="w-px h-5 bg-gray-200 mx-3"></div>
+                                <div className="flex items-center gap-2 pr-2">
+                                    <span className={`text-[10px] font-bold uppercase tracking-wider ${composeIsEmergency ? 'text-red-600' : 'text-gray-500'}`}>Urgente</span>
+                                    <button
+                                       onClick={() => setComposeIsEmergency(!composeIsEmergency)}
+                                       className={`w-9 h-5 rounded-full transition-colors relative ${composeIsEmergency ? 'bg-red-500' : 'bg-gray-200'}`}
+                                    >
+                                       <div className={`absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full transition-transform ${composeIsEmergency ? 'translate-x-4' : 'translate-x-0'} shadow-sm`}></div>
+                                    </button>
+                                </div>
+                            </div>
+
+                            {/* Schedule - Compact Proposal 2 Style */}
+                            <div className="flex-1 min-w-[200px] flex items-center justify-between bg-white rounded-xl border border-gray-200 p-2 pl-3 shadow-sm relative overflow-hidden group">
+                               <div className="absolute top-0 right-0 w-16 h-full bg-gradient-to-l from-indigo-50 to-transparent opacity-50"></div>
+                               <div className="flex items-center gap-3 relative z-10">
+                                   <div className={`p-1.5 rounded-lg ${composeSendAt ? 'bg-indigo-100 text-indigo-600' : 'bg-gray-100 text-gray-500'}`}>
+                                       <Clock size={16} />
+                                   </div>
+                                   <div className="flex flex-col">
+                                       <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wider leading-none mb-1">Programación</span>
+                                       <span className="text-xs font-bold text-gray-900 leading-none">
+                                           {composeSendAt ? dayjs(composeSendAt).format('D MMM, HH:mm') : 'Enviar Ahora'}
+                                       </span>
+                                       {composeSendAt && (
+                                            <span className="text-[10px] font-medium text-indigo-600 mt-0.5">
+                                                {relativeIn(composeSendAt)}
+                                            </span>
+                                       )}
+                                   </div>
+                               </div>
+                               <button 
+                                 ref={sendAnchorRef}
+                                 onClick={() => setSendPickerOpen(true)} 
+                                 className="relative z-10 px-3 py-1.5 bg-gray-50 hover:bg-indigo-50 text-gray-600 hover:text-indigo-600 rounded-lg text-xs font-bold transition-colors"
+                               >
+                                  {composeSendAt ? 'Cambiar' : 'Programar'}
+                               </button>
+                            </div>
+                        </div>
+                    </div>
                   </div>
 
                   <div
-                    className={`relative overflow-hidden bg-gradient-to-br ${composeIsEmergency ? 'from-red-50 via-white to-rose-100 border-red-200' : 'from-indigo-50 via-white to-emerald-50 border-gray-200'} p-5 rounded-lg border`}
+                    className={`relative overflow-hidden bg-gradient-to-br ${composeIsEmergency ? 'from-red-50 via-white to-rose-100 border-red-200' : 'from-indigo-50 via-white to-emerald-50 border-gray-200'} p-5 rounded-lg border min-h-[200px]`}
                   >
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <IconView
-                          name={selectedChannel?.icon}
-                          size={16}
-                          className="text-indigo-600"
-                        />
-                        <span className="text-sm font-semibold text-gray-900">
-                                    {selectedChannel?.title}
-                                  </span>
-                      </div>
-                      <div className="relative">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            if (selectedChannel) setApproverTipSub(selectedChannel as any);
-                            setApproverModalOpen(true);
-                          }}
-                          className="p-1.5 rounded-full text-indigo-600 hover:bg-indigo-50"
-                        >
-                          <Users size={14} />
-                        </button>
-                      </div>
+                    <div className="relative mt-4">
+                      {(!composeContent) && (
+                        <div className="absolute inset-0 pointer-events-none text-xl font-bold text-gray-400">
+                          Escribe tu mensaje
+                          <span className="animate-pulse">|</span>
+                        </div>
+                      )}
+                      <textarea
+                        value={composeContent}
+                        onChange={(e) => setComposeContent(e.target.value)}
+                        placeholder=""
+                        rows={4}
+                        className="w-full bg-transparent border-none p-0 text-xl font-bold text-gray-900 focus:ring-0 focus:outline-none resize-none placeholder-transparent"
+                      />
+                      {composeComunicado && (
+                        <div className="mt-4 bg-amber-50/50 rounded-lg p-4 border border-amber-100 relative group">
+                          <div className="flex items-start gap-3">
+                            <div className="p-2 bg-amber-100 rounded-lg text-amber-600 shrink-0">
+                              <FileText size={20} />
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <h4 className="text-sm font-bold text-gray-900 mb-1">
+                                {comunicadoTitle || 'Comunicado sin título'}
+                              </h4>
+                              <div className="text-xs text-gray-500 line-clamp-2" dangerouslySetInnerHTML={{ __html: composeComunicado }} />
+                            </div>
+                            <div className="flex flex-col gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                              <button
+                                onClick={() => setIsComunicadoModalOpen(true)}
+                                className="p-1.5 text-indigo-600 hover:bg-indigo-50 rounded"
+                                title="Editar"
+                              >
+                                <Settings size={14} />
+                              </button>
+                              <button
+                                onClick={() => {
+                                  setComposeComunicado(null);
+                                  setComunicadoTitle('');
+                                }}
+                                className="p-1.5 text-red-600 hover:bg-red-50 rounded"
+                                title="Eliminar"
+                              >
+                                <Trash size={14} />
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                      {composeLocationData && (composeLocationData.markers.length > 0 || composeLocationData.polylines.length > 0) && (
+                        <div className="mt-4 bg-emerald-50/50 rounded-lg p-4 border border-emerald-100 relative group">
+                          <div className="flex items-start gap-3">
+                            <div className="p-2 bg-emerald-100 rounded-lg text-emerald-600 shrink-0">
+                              <MapPin size={20} />
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <h4 className="text-sm font-bold text-gray-900 mb-1">
+                                Ubicación Adjunta
+                              </h4>
+                              <div className="text-xs text-gray-500">
+                                {composeLocationData.markers.length} marcadores, {composeLocationData.polylines.length} rutas
+                              </div>
+                              <button
+                                onClick={() => setShowLocationPicker(true)}
+                                className="text-xs text-indigo-600 font-medium hover:underline mt-1 flex items-center gap-1"
+                              >
+                                <Eye size={12} />
+                                Vista Previa
+                              </button>
+                            </div>
+                            <div className="flex flex-col gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                              <button
+                                onClick={() => setShowLocationPicker(true)}
+                                className="p-1.5 text-indigo-600 hover:bg-indigo-50 rounded"
+                                title="Editar"
+                              >
+                                <Settings size={14} />
+                              </button>
+                              <button
+                                onClick={() => setComposeLocationData(null)}
+                                className="p-1.5 text-red-600 hover:bg-red-50 rounded"
+                                title="Eliminar"
+                              >
+                                <Trash size={14} />
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                      {composeSchedule.length > 0 && (
+                        <div className="mt-4 bg-indigo-50/50 rounded-lg p-4 border border-indigo-100">
+                          <h4 className="text-xs font-semibold text-indigo-900 mb-3 flex items-center gap-1.5">
+                            <Calendar size={14} className="text-indigo-600" />
+                            Horario Adjunto
+                          </h4>
+                          <div className="space-y-3">
+                            {composeSchedule
+                              .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
+                              .map((item, idx) => (
+                                <div key={idx} className="flex gap-4 text-sm group">
+                                  <div className="w-32 shrink-0 flex flex-col">
+                                    <span className="font-medium text-gray-900">
+                                      {new Date(item.date).toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric' })}
+                                    </span>
+                                    {item.time && (
+                                      <span className="text-xs text-gray-500 flex items-center gap-1">
+                                        <Clock size={10} />
+                                        {item.time}
+                                      </span>
+                                    )}
+                                  </div>
+                                  <div className="flex-1 text-gray-700 relative">
+                                    <div className="absolute -left-2 top-1.5 w-1 h-1 rounded-full bg-indigo-300"></div>
+                                    {item.activity}
+                                  </div>
+                                  <button
+                                    onClick={() => setComposeSchedule(prev => prev.filter((_, i) => i !== idx))}
+                                    className="opacity-0 group-hover:opacity-100 text-red-500 hover:text-red-700 transition-opacity"
+                                  >
+                                    <X size={14} />
+                                  </button>
+                                </div>
+                              ))}
+                          </div>
+                        </div>
+                      )}
                     </div>
-                    <div className="mt-4 text-xl font-bold text-gray-900 whitespace-pre-wrap">
-                      {composeContent || t('content.placeholder')}
+                    <div className="flex justify-end mt-2">
+                      <button
+                        onClick={handleComposeAIAssist}
+                        disabled={composeIsGenerating}
+                        className="flex items-center gap-1.5 px-3 py-1.5 bg-white/50 hover:bg-white text-indigo-600 rounded-md text-sm font-medium transition-colors disabled:opacity-50 shadow-sm backdrop-blur-sm"
+                      >
+                        <Sparkles size={14} />
+                        {composeIsGenerating ? t('ai.drafting') : t('ai.polish')}
+                      </button>
                     </div>
                     <div className="mt-4 flex flex-wrap items-center gap-3 text-xs text-gray-600">
                       {composeIsEmergency ? (
@@ -3833,17 +4905,7 @@ const ChannelManager: React.FC = () => {
                       <LocalizationProvider dateAdapter={AdapterDayjs}>
                         <div className="flex items-center gap-6 text-xs text-gray-700">
                           {!composeIsEmergency && (
-                            <div className="flex flex-col gap-1">
-                              <div className="flex items-center gap-2">
-                                <span className="font-medium">{t('schedule.sendAt')}</span>
-                                <button
-                                  ref={sendAnchorRef}
-                                  onClick={() => setSendPickerOpen(true)}
-                                  className="p-1.5 rounded-md hover:bg-gray-100 text-gray-600"
-                                >
-                                  <Clock size={14} />
-                                </button>
-                              </div>
+                            <>
                               <DateTimePicker
                                 value={composeSendAt ? dayjs(composeSendAt) : null}
                                 onChange={(v) => setComposeSendAt(v ? v.toISOString() : '')}
@@ -3869,10 +4931,7 @@ const ChannelManager: React.FC = () => {
                                   textField: { sx: { display: 'none' } },
                                 }}
                               />
-                              <div className="text-[11px] text-gray-500">
-                                -- {composeSendAt ? formatLocal(composeSendAt) : ''}
-                              </div>
-                            </div>
+                            </>
                           )}
                           <div className="flex flex-col gap-1">
                             <div className="flex items-center gap-2">
@@ -3954,37 +5013,6 @@ const ChannelManager: React.FC = () => {
                         <div className="flex items-center justify-between">
                           <span className="text-xs font-semibold text-gray-700"></span>
                           <div className="flex items-center gap-2">
-                            <input
-                              ref={fileInputRef}
-                              type="file"
-                              multiple
-                              className="hidden"
-                              onChange={(e) => {
-                                const files = Array.from(e.target.files || []);
-                                setComposeAttachments((prev) => [
-                                  ...prev,
-                                  ...files.map((f) => ({
-                                    name: f.name,
-                                    size: f.size,
-                                    type: f.type,
-                                  })),
-                                ]);
-                              }}
-                            />
-                            <button
-                              onClick={() => fileInputRef.current?.click()}
-                              className={`px-2 py-1 text-xs rounded border ${selectedChannel?.verificationStatus === VerificationStatus.VERIFIED ? 'border-indigo-300 text-indigo-600 hover:bg-indigo-50' : 'border-gray-300 text-gray-400 cursor-not-allowed'}`}
-                              disabled={
-                                selectedChannel?.verificationStatus !==
-                                VerificationStatus.VERIFIED
-                              }
-                            >
-                              <Paperclip size={12} className="inline mr-1" />
-                              {selectedChannel?.verificationStatus ===
-                              VerificationStatus.VERIFIED
-                                ? 'Adjuntar'
-                                : 'Solo canal verificado'}
-                            </button>
                           </div>
                         </div>
                         {composeAttachments.length > 0 && (
@@ -3992,53 +5020,113 @@ const ChannelManager: React.FC = () => {
                             {composeAttachments.map((a, i) => (
                               <li
                                 key={`${a.name}-${i}`}
-                                className="text-xs text-gray-600 flex items-center justify-between"
+                                className="text-xs text-gray-600 flex items-center justify-between gap-3 p-2 bg-gray-50/50 rounded-lg hover:bg-gray-50 border border-transparent hover:border-gray-200 transition-all"
                               >
-                                <span className="truncate max-w-[16rem]">{a.name}</span>
+                                <div className="flex items-center gap-2 flex-1 min-w-0">
+                                  <div className="shrink-0 p-1.5 bg-white rounded-md border border-gray-100 shadow-sm">
+                                    {a.uploading ? (
+                                      <Loader2 size={16} className="animate-spin text-indigo-500" />
+                                    ) : (
+                                      getFileIcon(a.name)
+                                    )}
+                                  </div>
+                                  <div className="flex flex-col flex-1 min-w-0">
+                                    <span className="truncate font-medium text-gray-700" title={a.name}>{a.name}</span>
+                                    {a.uploading ? (
+                                      <span className="text-[10px] text-indigo-600 flex items-center gap-1 animate-pulse">
+                                        Subiendo...
+                                      </span>
+                                    ) : (
+                                      <span className="text-[10px] text-gray-400">
+                                        {a.size ? (a.size / 1024).toFixed(0) + ' KB' : ''}
+                                      </span>
+                                    )}
+                                  </div>
+                                </div>
                                 <button
-                                  className="text-red-600 hover:underline"
+                                  className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+                                  title="Quitar archivo"
                                   onClick={() =>
                                     setComposeAttachments((prev) =>
                                       prev.filter((_, idx) => idx !== i)
                                     )
                                   }
                                 >
-                                  Quitar
+                                  <Trash size={14} />
                                 </button>
                               </li>
                             ))}
                           </ul>
                         )}
+                        {
+                        /*composeComunicado && (
+                          <div className="mt-3 bg-amber-50 rounded-lg p-3 border border-amber-100 flex items-center justify-between group animate-in fade-in slide-in-from-top-1 duration-200">
+                            <div className="flex items-center gap-3">
+                              <div className="p-2 bg-amber-100 text-amber-600 rounded-lg">
+                                <FileText size={18} />
+                              </div>
+                              <div>
+                                <h4 className="text-sm font-semibold text-gray-900">{comunicadoTitle || 'Sin título'}</h4>
+                                <span className="text-xs text-amber-600 font-medium flex items-center gap-1">
+                                  Comunicado adjunto
+                                </span>
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <button
+                                onClick={() => setIsComunicadoModalOpen(true)}
+                                className="p-1.5 text-amber-600 hover:bg-amber-100 rounded-lg transition-colors"
+                                title="Editar comunicado"
+                              >
+                                <Settings size={16} />
+                              </button>
+                              <button
+                                onClick={() => {
+                                  setComposeComunicado(null);
+                                  setComunicadoTitle('');
+                                }}
+                                className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+                                title="Quitar comunicado"
+                              >
+                                <Trash size={16} />
+                              </button>
+                            </div>
+                          </div>
+                        )
+                          */}
                       </div>
                     </div>
                   </div>
 
-                  <div className="pt-4 flex items-center justify-end gap-3 border-t border-gray-100">
+                  <div className="p-6 bg-gray-50 border-t border-gray-100 flex items-center justify-between shrink-0">
                     <button
                       onClick={saveDraft}
-                      className="px-6 py-2.5 border border-gray-300 text-gray-700 font-medium rounded-lg hover:bg-gray-50 transition-colors"
+                      className="px-4 py-2.5 text-gray-600 hover:bg-gray-200 font-medium rounded-xl transition-colors flex items-center gap-2"
                     >
-                      {t('saveDraft')}
+                      <Save size={18} />
+                      <span className="hidden sm:inline">Guardar Borrador</span>
                     </button>
-                    <button
-                      onClick={cancelCompose}
-                      className="px-6 py-2.5 border border-gray-300 text-gray-700 font-medium rounded-lg hover:bg-gray-50 transition-colors"
-                    >
-                      Cancelar
-                    </button>
-                    <button
-                      ref={sendButtonRef}
-                      onClick={sendCompose}
-                      disabled={composeSending}
-                      className={`px-6 py-2.5 ${composeIsEmergency ? 'bg-red-600 hover:bg-red-700 shadow-red-200' : 'bg-indigo-600 hover:bg-indigo-700 shadow-indigo-200'} text-white font-medium rounded-lg transition-colors flex items-center gap-2 disabled:opacity-50 relative`}
-                    >
-                      {composeSending ? (
-                        <Loader2 className="animate-spin" size={18} />
-                      ) : (
-                        <Send size={18} />
-                      )}
-                      {t('sendMessage')}
-                    </button>
+                    <div className="flex gap-3">
+                      <button
+                        onClick={cancelCompose}
+                        className="px-6 py-2.5 bg-white border border-gray-200 text-gray-700 font-medium rounded-xl hover:bg-gray-50 hover:border-gray-300 transition-colors shadow-sm"
+                      >
+                        Cancelar
+                      </button>
+                      <button
+                        ref={sendButtonRef}
+                        onClick={sendCompose}
+                        disabled={composeSending}
+                        className={`px-8 py-2.5 ${composeIsEmergency ? 'bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-700 hover:to-rose-700 shadow-red-200' : 'bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 shadow-indigo-200'} text-white font-bold rounded-xl shadow-lg transition-all flex items-center gap-2 disabled:opacity-50 relative transform hover:-translate-y-0.5`}
+                      >
+                        {composeSending ? (
+                          <Loader2 className="animate-spin" size={18} />
+                        ) : (
+                          <Send size={18} />
+                        )}
+                        Enviar Mensaje
+                      </button>
+                    </div>
                     {composeIsEmergency && sendButtonRef?.current && (
                       <span
                         className="fixed z-[100] pointer-events-none rounded-lg bg-red-300/10 animate-ping"
@@ -4052,11 +5140,253 @@ const ChannelManager: React.FC = () => {
                     )}
                   </div>
                 </div>
-                </div>
+                </motion.div>
                 </div>
               )}
         
         </div>
+        {isScheduleModalOpen && (
+          <div className="fixed inset-0 z-[160] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 10 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 10 }}
+              className="bg-white w-full max-w-lg rounded-2xl shadow-2xl border border-gray-100 overflow-hidden flex flex-col max-h-[85vh]"
+            >
+              <div className="bg-gradient-to-r from-purple-600 to-indigo-600 p-5 text-white flex items-center justify-between shrink-0">
+                <div>
+                  <h3 className="text-lg font-bold flex items-center gap-2">
+                    <Calendar size={20} className="text-purple-200" />
+                    Adjuntar Horario
+                  </h3>
+                  <p className="text-xs text-indigo-100 opacity-90 mt-1">
+                    Define la disponibilidad o agenda
+                  </p>
+                </div>
+                <button
+                  onClick={() => setIsScheduleModalOpen(false)}
+                  className="text-white/80 hover:text-white p-2 hover:bg-white/10 rounded-full transition-colors"
+                >
+                  <X size={20} />
+                </button>
+              </div>
+
+              <div className="p-6 overflow-y-auto space-y-6 flex-1 custom-scrollbar">
+                <div className="flex p-1 bg-gray-100 rounded-lg">
+                  <button
+                    onClick={() => setScheduleWeekMode(true)}
+                    className={`flex-1 py-2 text-sm font-medium rounded-md transition-all ${
+                      scheduleWeekMode
+                        ? 'bg-white text-indigo-600 shadow-sm'
+                        : 'text-gray-500 hover:text-gray-700'
+                    }`}
+                  >
+                    Semana Completa
+                  </button>
+                  <button
+                    onClick={() => setScheduleWeekMode(false)}
+                    className={`flex-1 py-2 text-sm font-medium rounded-md transition-all ${
+                      !scheduleWeekMode
+                        ? 'bg-white text-indigo-600 shadow-sm'
+                        : 'text-gray-500 hover:text-gray-700'
+                    }`}
+                  >
+                    Fechas Específicas
+                  </button>
+                </div>
+
+                {scheduleWeekMode ? (
+                  <div className="space-y-6">
+                    <div className="flex flex-col gap-2">
+                      <label className="text-sm font-medium text-gray-700">Inicio de la semana</label>
+                      <input
+                        type="date"
+                        value={scheduleStartDate}
+                        onChange={(e) => setScheduleStartDate(e.target.value)}
+                        className="p-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all"
+                      />
+                    </div>
+                    <div className="space-y-3">
+                      {Array.from({ length: 7 }).map((_, i) => {
+                        const d = new Date(scheduleStartDate);
+                        d.setDate(d.getDate() + i + 1); // Adjust roughly to avoid timezone issues, or better:
+                        // Proper way: treat scheduleStartDate as YYYY-MM-DD local.
+                        const [y, m, day] = scheduleStartDate.split('-').map(Number);
+                        const dateObj = new Date(y, m - 1, day + i);
+                        const dateStr = dateObj.toLocaleDateString('sv').split('T')[0]; // ISO YYYY-MM-DD local
+
+                        const existing = composeSchedule.find((s) => s.date === dateStr);
+
+                        return (
+                          <div
+                            key={i}
+                            className="flex gap-4 items-start p-3 bg-gray-50 rounded-lg border border-gray-100 hover:border-indigo-200 transition-colors"
+                          >
+                            <div className="w-28 shrink-0 pt-2 text-sm font-medium text-gray-900 capitalize">
+                              {dateObj.toLocaleDateString('es-ES', {
+                                weekday: 'short',
+                                day: 'numeric',
+                              })}
+                            </div>
+                            <div className="flex-1 space-y-2">
+                              <input
+                                type="text"
+                                placeholder="Actividad (ej. Reunión)"
+                                className="w-full p-2 text-sm border border-gray-200 rounded-md focus:ring-1 focus:ring-indigo-500 outline-none bg-white"
+                                value={existing?.activity || ''}
+                                onChange={(e) => {
+                                  const val = e.target.value;
+                                  setComposeSchedule((prev) => {
+                                    const filtered = prev.filter((p) => p.date !== dateStr);
+                                    if (!val) return filtered;
+                                    return [
+                                      ...filtered,
+                                      { date: dateStr, time: existing?.time, activity: val },
+                                    ];
+                                  });
+                                }}
+                              />
+                              <div className="flex items-center gap-2">
+                                <Clock size={14} className="text-gray-400" />
+                                <input
+                                  type="time"
+                                  className="p-1 text-xs border border-gray-200 rounded-md text-gray-600 bg-white"
+                                  value={existing?.time || ''}
+                                  onChange={(e) => {
+                                    const val = e.target.value;
+                                    setComposeSchedule((prev) => {
+                                      const curr = prev.find((p) => p.date === dateStr);
+                                      if (!curr && !val) return prev;
+                                      const filtered = prev.filter((p) => p.date !== dateStr);
+                                      // If no activity yet but time is set, create entry
+                                      if (!curr) {
+                                          return [...filtered, { date: dateStr, time: val, activity: '' }];
+                                      }
+                                      return [...filtered, { ...curr, time: val }];
+                                    });
+                                  }}
+                                />
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="space-y-6">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <label className="text-sm font-medium text-gray-700">Fecha</label>
+                        <input
+                          type="date"
+                          min={new Date().toISOString().split('T')[0]}
+                          className="w-full p-2 border border-gray-200 rounded-lg"
+                          id="custom-date-input"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <label className="text-sm font-medium text-gray-700">
+                          Hora (Opcional)
+                        </label>
+                        <input
+                          type="time"
+                          className="w-full p-2 border border-gray-200 rounded-lg"
+                          id="custom-time-input"
+                        />
+                      </div>
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium text-gray-700">Actividad</label>
+                      <textarea
+                        className="w-full p-2 border border-gray-200 rounded-lg h-24 resize-none focus:ring-2 focus:ring-indigo-500 outline-none"
+                        placeholder="Describe la actividad..."
+                        id="custom-activity-input"
+                      />
+                    </div>
+                    <button
+                      onClick={() => {
+                        const d = (
+                          document.getElementById('custom-date-input') as HTMLInputElement
+                        ).value;
+                        const t = (
+                          document.getElementById('custom-time-input') as HTMLInputElement
+                        ).value;
+                        const a = (
+                          document.getElementById('custom-activity-input') as HTMLInputElement
+                        ).value;
+                        if (d && a) {
+                          setComposeSchedule((prev) => [
+                            ...prev,
+                            { date: d, time: t, activity: a },
+                          ]);
+                          (
+                            document.getElementById('custom-activity-input') as HTMLInputElement
+                          ).value = '';
+                          // Optional: Clear date/time or keep for convenience
+                        }
+                      }}
+                      className="w-full py-2.5 bg-indigo-50 text-indigo-700 rounded-lg hover:bg-indigo-100 font-medium transition-colors border border-indigo-100"
+                    >
+                      + Agregar al Horario
+                    </button>
+
+                    <div className="space-y-3 mt-6">
+                      <h4 className="text-sm font-medium text-gray-900 border-b border-gray-100 pb-2">
+                        Items Agregados ({composeSchedule.length})
+                      </h4>
+                      {composeSchedule.length === 0 && (
+                          <div className="text-center py-4 text-gray-400 text-sm">No hay items agregados</div>
+                      )}
+                      {composeSchedule
+                        .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
+                        .map((item, idx) => (
+                          <div
+                            key={idx}
+                            className="flex justify-between items-start p-3 bg-white rounded-lg border border-gray-100 shadow-sm"
+                          >
+                            <div className="text-sm">
+                              <div className="flex items-center gap-2 mb-1">
+                                <span className="font-semibold text-gray-900">
+                                  {new Date(item.date).toLocaleDateString('es-ES', {
+                                    weekday: 'short',
+                                    day: 'numeric',
+                                    month: 'short',
+                                  })}
+                                </span>
+                                {item.time && (
+                                  <span className="text-xs text-gray-500 bg-gray-100 px-1.5 py-0.5 rounded">
+                                    {item.time}
+                                  </span>
+                                )}
+                              </div>
+                              <div className="text-gray-600">{item.activity}</div>
+                            </div>
+                            <button
+                              onClick={() =>
+                                setComposeSchedule((prev) => prev.filter((_, i) => i !== idx))
+                              }
+                              className="text-gray-400 hover:text-red-500 p-1 hover:bg-red-50 rounded transition-colors"
+                            >
+                              <X size={14} />
+                            </button>
+                          </div>
+                        ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+              <div className="p-4 border-t border-gray-100 flex justify-end bg-gray-50 shrink-0">
+                <button
+                  onClick={() => setIsScheduleModalOpen(false)}
+                  className="px-6 py-2 bg-indigo-600 text-white font-medium rounded-lg hover:bg-indigo-700 shadow-indigo-200 shadow-lg transition-all"
+                >
+                  Confirmar y Volver
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
         {isSettingsModalOpen && selectedChannel && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
             <div className="bg-white w-full max-w-lg rounded-xl shadow-2xl border border-gray-100 overflow-hidden max-h-[90vh] flex flex-col">
@@ -4157,6 +5487,1191 @@ const ChannelManager: React.FC = () => {
             </div>
           </div>
         </div>
+      )}
+      {calendarConfirmOpen && calendarConfirmEvent && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95, y: 10 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.95, y: 10 }}
+            className="bg-white w-full max-w-md rounded-2xl shadow-2xl overflow-hidden"
+          >
+            <div className="bg-gradient-to-br from-indigo-500 to-purple-600 p-6 text-white text-center relative">
+              <button
+                 onClick={() => setCalendarConfirmOpen(false)}
+                 className="absolute top-4 right-4 text-white/80 hover:text-white p-1 hover:bg-white/10 rounded-full transition-colors"
+              >
+                <X size={20} />
+              </button>
+              <div className="w-16 h-16 bg-white/20 backdrop-blur-md rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-inner">
+                <CalendarPlus size={32} className="text-white" />
+              </div>
+              <h3 className="text-xl font-bold">Agregar al Calendario</h3>
+              <p className="text-indigo-100 text-sm mt-1">Descarga y sincroniza tu evento</p>
+            </div>
+            
+            <div className="p-6">
+              <div className="bg-indigo-50 rounded-xl p-4 border border-indigo-100 mb-6">
+                <div className="flex items-start gap-3">
+                  <div className="flex flex-col items-center bg-white rounded-lg border border-indigo-100 p-2 min-w-[60px] shadow-sm">
+                     <span className="text-xs font-bold text-indigo-600 uppercase">
+                       {new Date(calendarConfirmEvent.date).toLocaleDateString('es-ES', { month: 'short' })}
+                     </span>
+                     <span className="text-xl font-bold text-gray-900">
+                       {new Date(calendarConfirmEvent.date).getDate()}
+                     </span>
+                  </div>
+                  <div>
+                    <h4 className="font-semibold text-gray-900 line-clamp-2">{calendarConfirmEvent.activity}</h4>
+                    <div className="flex items-center gap-2 text-sm text-gray-500 mt-1">
+                      {calendarConfirmEvent.time && (
+                        <span className="flex items-center gap-1 bg-white px-2 py-0.5 rounded border border-gray-200">
+                          <Clock size={12} /> {calendarConfirmEvent.time}
+                        </span>
+                      )}
+                      <span className="flex items-center gap-1">
+                         <Calendar size={12} /> {new Date(calendarConfirmEvent.date).toLocaleDateString('es-ES', { weekday: 'long' })}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <p className="text-sm text-gray-600 text-center mb-6 px-4">
+                Se descargará un archivo <strong>.ics</strong>. Al abrirlo, el evento se añadirá automáticamente a tu calendario predeterminado (Google Calendar, Outlook, iCal).
+              </p>
+
+              <div className="flex gap-3">
+                <button
+                  onClick={() => setCalendarConfirmOpen(false)}
+                  className="flex-1 py-2.5 px-4 bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium rounded-xl transition-colors"
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={() => {
+                    if (calendarConfirmEvent) {
+                      downloadIcs(calendarConfirmEvent);
+                      setCalendarConfirmOpen(false);
+                    }
+                  }}
+                  className="flex-1 py-2.5 px-4 bg-indigo-600 hover:bg-indigo-700 text-white font-medium rounded-xl shadow-lg shadow-indigo-200 transition-all flex items-center justify-center gap-2"
+                >
+                  <CalendarPlus size={18} />
+                  Confirmar
+                </button>
+              </div>
+            </div>
+          </motion.div>
+        </div>
+      )}
+      
+      {isComunicadoModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="bg-white w-full max-w-4xl h-[80vh] rounded-xl shadow-2xl border border-gray-100 overflow-hidden flex flex-col animate-in fade-in zoom-in-95 duration-200">
+            <div className="p-4 border-b border-gray-100 flex items-center justify-between bg-gray-50">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-amber-100 rounded-lg text-amber-600">
+                  <FileText size={20} />
+                </div>
+                <div>
+                  <h3 className="text-lg font-semibold text-gray-900">Redactar Comunicado</h3>
+                  <p className="text-xs text-gray-500">Documento oficial con formato enriquecido</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setIsComunicadoModalOpen(false)}
+                className="text-gray-400 hover:text-gray-600 p-2 hover:bg-gray-200 rounded-full transition-colors"
+              >
+                <X size={20} />
+              </button>
+            </div>
+            
+            <div className="flex-1 overflow-y-auto p-6 bg-gray-50/30 flex flex-col gap-4">
+              <div className="flex justify-between items-end gap-4">
+                <div className="flex-1 space-y-2">
+                  <label className="text-sm font-medium text-gray-700">Título del Comunicado</label>
+                  <input
+                    type="text"
+                    value={comunicadoTitle}
+                    onChange={(e) => setComunicadoTitle(e.target.value)}
+                    placeholder="Ej. Actualización de Políticas de Seguridad"
+                    className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-amber-500 outline-none transition-all"
+                  />
+                </div>
+                <button
+                  onClick={() => setIsHeaderFooterModalOpen(true)}
+                  className="px-4 py-2 bg-white border border-gray-200 text-gray-700 font-medium rounded-lg hover:bg-gray-50 hover:border-gray-300 transition-colors flex items-center gap-2 h-[42px]"
+                  title="Personalizar Encabezado y Pie de Página"
+                >
+                  <LayoutTemplate size={18} />
+                  <span className="hidden sm:inline">Diseño</span>
+                </button>
+              </div>
+              
+              <div className="flex-1 flex flex-col space-y-2 min-h-[300px] items-center bg-gray-100 p-4 rounded-lg">
+                <label className="text-sm font-medium text-gray-700 w-full max-w-[21cm]">Contenido</label>
+                <div className="flex-1 flex flex-col w-full max-w-[21cm] shadow-xl">
+                  <RichTextEditor
+                    value={composeComunicado || ''}
+                    onChange={setComposeComunicado}
+                    placeholder="Escribe el contenido del comunicado aquí..."
+                    className="h-full"
+                    enablePagination={true}
+                    pageHeight={750} // Match the content split height (approx A4 content area minus header/footer)
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div className="p-4 border-t border-gray-100 flex justify-end gap-3 bg-gray-50">
+              <button
+                onClick={() => setIsComunicadoModalOpen(false)}
+                className="px-4 py-2 text-gray-700 font-medium hover:bg-gray-200 rounded-lg transition-colors"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={() => {
+                  setViewingComunicado({
+                    id: 'preview',
+                    content: 'preview',
+                    priority: MessagePriority.MEDIUM,
+                    isEmergency: false,
+                    senderId: 'current-user',
+                    channelId: selectedChannel?.id || '',
+                    createdAt: new Date().toISOString(),
+                    updatedAt: new Date().toISOString(),
+                    channel: selectedChannel,
+                    sender: {
+                       id: 'current-user',
+                       fullName: 'Vista Previa',
+                       email: '',
+                       role: 'admin',
+                       avatar: '',
+                       createdAt: '',
+                       updatedAt: ''
+                    },
+                    extra: {
+                      comunicado: {
+                        title: comunicadoTitle || 'Título del Comunicado',
+                        content: composeComunicado || '<p>Contenido del comunicado...</p>',
+                        header: selectedHeader,
+                        footer: selectedFooter
+                      }
+                    }
+                  } as any);
+                }}
+                className="px-4 py-2 bg-indigo-50 text-indigo-700 border border-indigo-100 font-medium rounded-lg hover:bg-indigo-100 transition-colors flex items-center gap-2"
+              >
+                <Eye size={18} />
+                Vista Previa
+              </button>
+              <button
+                onClick={() => setIsComunicadoModalOpen(false)}
+                className="px-6 py-2 bg-amber-500 text-white font-medium rounded-lg hover:bg-amber-600 shadow-lg shadow-amber-200 transition-all flex items-center gap-2"
+              >
+                <CheckIcon size={18} />
+                Guardar Comunicado
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      
+      {/* Hidden file input */}
+      <input
+        type="file"
+        ref={fileInputRef}
+        onChange={handleFileUpload}
+        className="hidden"
+        accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,image/*,video/*"
+      />
+
+      {/* Comunicado Document View Modal */}
+      {isHeaderFooterModalOpen && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4">
+          <div className="bg-white w-full max-w-4xl h-[80vh] rounded-xl shadow-2xl border border-gray-100 overflow-hidden flex flex-col animate-in fade-in zoom-in-95 duration-200">
+            <div className="p-4 border-b border-gray-100 flex items-center justify-between bg-gray-50">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-indigo-100 rounded-lg text-indigo-600">
+                  <LayoutTemplate size={20} />
+                </div>
+                <div>
+                  <h3 className="text-lg font-semibold text-gray-900">Personalizar Diseño</h3>
+                  <p className="text-xs text-gray-500">Encabezados y Pies de Página</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setIsHeaderFooterModalOpen(false)}
+                className="text-gray-400 hover:text-gray-600 p-2 hover:bg-gray-200 rounded-full transition-colors"
+              >
+                <X size={20} />
+              </button>
+            </div>
+            
+            <div className="flex border-b border-gray-100">
+              <button
+                onClick={() => {
+                  setHeaderFooterTab('header');
+                  setIsCreatingTemplate(false);
+                }}
+                className={`flex-1 py-3 text-sm font-medium border-b-2 transition-colors ${headerFooterTab === 'header' ? 'border-indigo-600 text-indigo-600 bg-indigo-50/50' : 'border-transparent text-gray-500 hover:text-gray-700 hover:bg-gray-50'}`}
+              >
+                Encabezados
+              </button>
+              <button
+                onClick={() => {
+                  setHeaderFooterTab('footer');
+                  setIsCreatingTemplate(false);
+                }}
+                className={`flex-1 py-3 text-sm font-medium border-b-2 transition-colors ${headerFooterTab === 'footer' ? 'border-indigo-600 text-indigo-600 bg-indigo-50/50' : 'border-transparent text-gray-500 hover:text-gray-700 hover:bg-gray-50'}`}
+              >
+                Pies de Página
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-hidden flex">
+              {/* Sidebar - List of Templates */}
+              <div className="w-1/3 border-r border-gray-100 bg-gray-50/30 overflow-y-auto p-4 flex flex-col gap-3">
+                <button
+                  onClick={() => {
+                    setEditingTemplateId(null);
+                    setNewTemplateName('');
+                    setNewTemplateContent('');
+                    setNewTemplateType('text');
+                    setNewTemplateLayout('full');
+                    setNewTemplateAlignment('center');
+                    setNewTemplateColumns({ left: '', center: '', right: '', leftImage: undefined, centerImage: undefined, rightImage: undefined });
+                    setNewTemplateOptions({
+                      fontSize: 'base',
+                      showDate: false,
+                      dateFormat: 'DD/MM/YYYY',
+                      showPage: false,
+                      showVersion: false,
+                      versionText: 'v1.0',
+                      backgroundImage: undefined
+                    });
+                    setIsCreatingTemplate(true);
+                  }}
+                  className="w-full py-2 px-3 bg-white border border-dashed border-gray-300 rounded-lg text-gray-500 hover:text-indigo-600 hover:border-indigo-300 hover:bg-indigo-50 transition-all flex items-center justify-center gap-2 text-sm font-medium"
+                >
+                  <Plus size={16} />
+                  Crear Nuevo
+                </button>
+                
+                {(headerFooterTab === 'header' ? savedHeaders : savedFooters).map((item) => (
+                  <div 
+                    key={item.id}
+                    onClick={() => headerFooterTab === 'header' ? setSelectedHeader(item) : setSelectedFooter(item)}
+                    className={`p-3 rounded-lg border cursor-pointer transition-all ${
+                      (headerFooterTab === 'header' ? selectedHeader?.id : selectedFooter?.id) === item.id
+                        ? 'bg-white border-indigo-500 ring-1 ring-indigo-500 shadow-sm'
+                        : 'bg-white border-gray-200 hover:border-indigo-300'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="font-medium text-gray-900 text-sm truncate">{item.name}</span>
+                      <div className="flex items-center gap-1">
+                        {item.type === 'image' && <Image size={14} className="text-gray-400" />}
+                        {item.type === 'text' && <Type size={14} className="text-gray-400" />}
+                        {item.type === 'html' && <Code size={14} className="text-gray-400" />}
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setEditingTemplateId(item.id);
+                            setNewTemplateName(item.name);
+                            setNewTemplateContent(item.content);
+                            setNewTemplateType(item.type);
+                            if (item.structure) {
+                              setNewTemplateLayout(item.structure.layout);
+                              setNewTemplateAlignment(item.structure.alignment);
+                              setNewTemplateColumns(item.structure.columns);
+                              setNewTemplateOptions(item.structure.options);
+                            } else {
+                               setNewTemplateLayout('full');
+                               setNewTemplateAlignment('center');
+                               setNewTemplateColumns({ left: '', center: '', right: '', leftImage: undefined, centerImage: undefined, rightImage: undefined });
+                               setNewTemplateOptions({
+                                 fontSize: 'base',
+                                 showDate: false,
+                                 dateFormat: 'DD/MM/YYYY',
+                                 showPage: false,
+                                 showVersion: false,
+                                 versionText: 'v1.0',
+                                 backgroundImage: undefined
+                               });
+                            }
+                            setIsCreatingTemplate(true);
+                          }}
+                          className="p-1 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded"
+                          title="Editar"
+                        >
+                          <Edit size={12} />
+                        </button>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (confirm('¿Eliminar plantilla?')) {
+                              if (headerFooterTab === 'header') {
+                                const newHeaders = savedHeaders.filter(h => h.id !== item.id);
+                                setSavedHeaders(newHeaders);
+                                localStorage.setItem('tify_saved_headers', JSON.stringify(newHeaders));
+                                if (selectedHeader?.id === item.id) setSelectedHeader(null);
+                              } else {
+                                const newFooters = savedFooters.filter(f => f.id !== item.id);
+                                setSavedFooters(newFooters);
+                                localStorage.setItem('tify_saved_footers', JSON.stringify(newFooters));
+                                if (selectedFooter?.id === item.id) setSelectedFooter(null);
+                              }
+                            }
+                          }}
+                          className="p-1 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded"
+                        >
+                          <Trash size={12} />
+                        </button>
+                      </div>
+                    </div>
+                    <div className="text-xs text-gray-500 line-clamp-2 h-8 overflow-hidden bg-gray-50 rounded p-1 border border-gray-100">
+                       {item.type === 'image' ? 'Imagen' : item.content.replace(/<[^>]*>?/gm, '')}
+                    </div>
+                  </div>
+                ))}
+                
+                {(headerFooterTab === 'header' ? savedHeaders : savedFooters).length === 0 && (
+                  <div className="text-center py-8 text-gray-400 text-sm">
+                    No hay plantillas guardadas
+                  </div>
+                )}
+              </div>
+
+              {/* Main Area - Preview / Editor */}
+              <div className="flex-1 overflow-y-auto p-6 bg-white">
+                {isCreatingTemplate ? (
+                  <div className="h-full flex flex-col bg-white animate-in fade-in duration-200">
+                     {/* 1. Top Bar: Back */}
+                     <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between bg-white shrink-0 z-20">
+                        <button 
+                          onClick={() => setIsCreatingTemplate(false)}
+                          className="text-gray-500 hover:text-gray-700 flex items-center gap-1 text-sm font-medium transition-colors"
+                        >
+                          <ArrowLeft size={16} />
+                          Volver
+                        </button>
+                     </div>
+
+                     {/* 2. Live Preview (Header) - Only if editing Header */}
+                     {headerFooterTab === 'header' && (
+                        <div className="shrink-0 bg-gray-100/50 border-b border-gray-200 p-4 flex flex-col items-center justify-center relative overflow-hidden group" style={{ minHeight: '160px' }}>
+                           <div className="absolute top-2 left-2 text-[10px] font-bold text-indigo-400 uppercase tracking-widest bg-indigo-50 px-2 py-1 rounded border border-indigo-100">Vista Previa (Encabezado)</div>
+                           
+                           {/* Zoom Controls Overlay */}
+                           <div className="absolute bottom-2 right-2 flex items-center gap-1 bg-white/90 backdrop-blur shadow-sm border border-gray-200 rounded-lg p-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                              <button onClick={() => setPreviewZoom(Math.max(0.3, previewZoom - 0.1))} className="p-1 hover:bg-gray-100 rounded"><ZoomOut size={14} /></button>
+                              <span className="text-[10px] font-mono w-8 text-center">{Math.round(previewZoom * 100)}%</span>
+                              <button onClick={() => setPreviewZoom(Math.min(2, previewZoom + 0.1))} className="p-1 hover:bg-gray-100 rounded"><ZoomIn size={14} /></button>
+                           </div>
+
+                           <div className="w-full max-w-[210mm] bg-white shadow-lg border border-gray-200 min-h-[100px] transition-transform origin-top flex items-center justify-center overflow-hidden relative" style={{ transform: `scale(${previewZoom})` }}>
+                               <div className="w-full bg-white text-gray-800 text-sm relative" style={{ 
+                                  backgroundImage: newTemplateOptions.backgroundImage ? `url(${newTemplateOptions.backgroundImage})` : 'none',
+                                  backgroundSize: 'cover',
+                                  backgroundPosition: 'center'
+                               }}>
+                                   {newTemplateType === 'image' && newTemplateContent && (
+                                      <img src={newTemplateContent} alt="Header" className="w-full h-full object-contain max-h-[150px]" />
+                                   )}
+                                   {newTemplateType === 'html' && (
+                                      <div dangerouslySetInnerHTML={{ __html: newTemplateContent }} />
+                                   )}
+                                   {newTemplateType === 'text' && (
+                                      <div className={`flex flex-col gap-1 w-full p-4 ${newTemplateOptions.fontSize === 'xs' ? 'text-xs' : newTemplateOptions.fontSize === 'sm' ? 'text-sm' : newTemplateOptions.fontSize === 'lg' ? 'text-lg' : newTemplateOptions.fontSize === 'xl' ? 'text-xl' : 'text-base'}`}>
+                                         {newTemplateLayout === 'full' ? (
+                                            <div className={`w-full whitespace-pre-wrap ${newTemplateAlignment === 'center' ? 'text-center' : newTemplateAlignment === 'right' ? 'text-right' : 'text-left'}`}>
+                                               {newTemplateContent || 'Contenido...'}
+                                            </div>
+                                         ) : (
+                                            <div className="flex justify-between items-start w-full gap-4">
+                                               <div className="flex-1 flex flex-col items-start gap-1">
+                                                  {newTemplateColumns.leftImage && <img src={newTemplateColumns.leftImage} alt="" className="max-w-full h-auto max-h-[80px] object-contain" />}
+                                                  <div className="text-left whitespace-pre-wrap w-full">{newTemplateColumns.left}</div>
+                                               </div>
+                                               <div className="flex-1 flex flex-col items-center gap-1">
+                                                  {newTemplateColumns.centerImage && <img src={newTemplateColumns.centerImage} alt="" className="max-w-full h-auto max-h-[80px] object-contain" />}
+                                                  <div className="text-center whitespace-pre-wrap w-full">{newTemplateColumns.center}</div>
+                                               </div>
+                                               <div className="flex-1 flex flex-col items-end gap-1">
+                                                  {newTemplateColumns.rightImage && <img src={newTemplateColumns.rightImage} alt="" className="max-w-full h-auto max-h-[80px] object-contain" />}
+                                                  <div className="text-right whitespace-pre-wrap w-full">{newTemplateColumns.right}</div>
+                                               </div>
+                                            </div>
+                                         )}
+                                         
+                                         {(newTemplateOptions.showDate || newTemplateOptions.showPage || newTemplateOptions.showVersion) && (
+                                            <div className="flex justify-between text-[10px] text-gray-400 mt-2 pt-2 border-t border-gray-100">
+                                                <div className="flex gap-2">
+                                                   {newTemplateOptions.showDate && <span>{dayjs().format(newTemplateOptions.dateFormat)}</span>}
+                                                   {newTemplateOptions.showVersion && <span>{newTemplateOptions.versionText}</span>}
+                                                </div>
+                                                {newTemplateOptions.showPage && <span>Pág. 1</span>}
+                                            </div>
+                                         )}
+                                      </div>
+                                   )}
+                                </div>
+                           </div>
+                        </div>
+                     )}
+
+                     {/* 3. Editor Area */}
+                     <div className="flex-1 overflow-y-auto bg-gray-50/30">
+                           {/* PROPOSAL B: Visual Toolbar */}
+                           <div className="flex flex-col h-full bg-white">
+                              {/* Toolbar */}
+                              <div className="px-4 py-2 border-b border-gray-100 flex items-center gap-4 bg-white sticky top-0 z-10 shadow-sm">
+                                 <input
+                                    type="text"
+                                    value={newTemplateName}
+                                    onChange={(e) => setNewTemplateName(e.target.value)}
+                                    placeholder="Nombre de Plantilla..."
+                                    className="text-sm font-medium border-none outline-none placeholder-gray-400 w-48 hover:bg-gray-50 rounded px-2 py-1 focus:bg-white focus:ring-1 focus:ring-indigo-200 transition-all"
+                                 />
+                                 
+                                 <div className="flex bg-gray-100 rounded-lg p-0.5">
+                                    <button onClick={() => setNewTemplateType('text')} className={`p-1.5 rounded ${newTemplateType === 'text' ? 'bg-white shadow-sm text-indigo-600' : 'text-gray-500 hover:text-gray-700'}`} title="Texto"><Type size={14} /></button>
+                                    <button onClick={() => setNewTemplateType('image')} className={`p-1.5 rounded ${newTemplateType === 'image' ? 'bg-white shadow-sm text-indigo-600' : 'text-gray-500 hover:text-gray-700'}`} title="Imagen"><Image size={14} /></button>
+                                    <button onClick={() => setNewTemplateType('html')} className={`p-1.5 rounded ${newTemplateType === 'html' ? 'bg-white shadow-sm text-indigo-600' : 'text-gray-500 hover:text-gray-700'}`} title="HTML"><Code size={14} /></button>
+                                 </div>
+
+                                 <div className="h-4 w-px bg-gray-200"></div>
+                                 
+                                 {newTemplateType === 'text' && (
+                                    <>
+                                       <div className="flex bg-gray-100 rounded-lg p-0.5">
+                                          <button onClick={() => setNewTemplateLayout('full')} className={`p-1.5 rounded ${newTemplateLayout === 'full' ? 'bg-white shadow-sm text-indigo-600' : 'text-gray-500 hover:text-gray-700'}`} title="Bloque"><LayoutTemplate size={14} /></button>
+                                          <button onClick={() => setNewTemplateLayout('split')} className={`p-1.5 rounded ${newTemplateLayout === 'split' ? 'bg-white shadow-sm text-indigo-600' : 'text-gray-500 hover:text-gray-700'}`} title="Columnas"><Columns size={14} /></button>
+                                       </div>
+                                       {newTemplateLayout === 'full' && (
+                                          <div className="flex bg-gray-100 rounded-lg p-0.5">
+                                             <button onClick={() => setNewTemplateAlignment('left')} className={`p-1.5 rounded ${newTemplateAlignment === 'left' ? 'bg-white shadow-sm text-indigo-600' : 'text-gray-500 hover:text-gray-700'}`}><AlignLeft size={14} /></button>
+                                             <button onClick={() => setNewTemplateAlignment('center')} className={`p-1.5 rounded ${newTemplateAlignment === 'center' ? 'bg-white shadow-sm text-indigo-600' : 'text-gray-500 hover:text-gray-700'}`}><AlignCenter size={14} /></button>
+                                             <button onClick={() => setNewTemplateAlignment('right')} className={`p-1.5 rounded ${newTemplateAlignment === 'right' ? 'bg-white shadow-sm text-indigo-600' : 'text-gray-500 hover:text-gray-700'}`}><AlignRight size={14} /></button>
+                                          </div>
+                                       )}
+                                       <select 
+                                          value={newTemplateOptions.fontSize}
+                                          onChange={(e) => setNewTemplateOptions({...newTemplateOptions, fontSize: e.target.value as any})}
+                                          className="text-xs border-none bg-gray-100 rounded-lg py-1 pl-2 pr-6 focus:ring-0 cursor-pointer"
+                                       >
+                                          <option value="xs">Muy Pequeño</option>
+                                          <option value="sm">Pequeño</option>
+                                          <option value="base">Normal</option>
+                                          <option value="lg">Grande</option>
+                                          <option value="xl">Muy Grande</option>
+                                       </select>
+                                    </>
+                                 )}
+                              </div>
+                              
+                              {/* Content Canvas */}
+                              <div className="flex-1 p-8 bg-gray-50/50 flex flex-col items-center overflow-y-auto">
+                                 <div className="w-full max-w-xl bg-white shadow-sm border border-gray-200 rounded-xl p-8 min-h-[200px] relative group">
+                                    <div className="absolute -top-3 left-4 bg-white px-2 text-xs font-medium text-gray-400">Editor Visual</div>
+                                    
+                                    {newTemplateType === 'text' ? (
+                                       newTemplateLayout === 'full' ? (
+                                          <textarea
+                                             value={newTemplateContent}
+                                             onChange={(e) => setNewTemplateContent(e.target.value)}
+                                             placeholder="Escribe aquí..."
+                                             className={`w-full h-full min-h-[100px] border-none outline-none resize-none bg-transparent ${newTemplateAlignment === 'center' ? 'text-center' : newTemplateAlignment === 'right' ? 'text-right' : 'text-left'}`}
+                                          />
+                                       ) : (
+                                          <div className="grid grid-cols-3 gap-4 h-full">
+                                             {/* Column Left */}
+                                             <div className="flex flex-col h-full border-r border-gray-100 pr-2">
+                                                {newTemplateColumns.leftImage && (
+                                                   <div className="relative mb-2 group/img">
+                                                      <img src={newTemplateColumns.leftImage} alt="Left" className="w-full h-20 object-contain bg-gray-50 rounded" />
+                                                      <button onClick={() => setNewTemplateColumns(prev => ({...prev, leftImage: undefined}))} className="absolute top-1 right-1 p-1 bg-white/80 rounded-full text-red-500 hover:bg-white opacity-0 group-hover/img:opacity-100 transition-opacity"><X size={12} /></button>
+                                                   </div>
+                                                )}
+                                                <div className="flex items-center gap-2 mb-2">
+                                                   <label className="cursor-pointer text-gray-400 hover:text-indigo-600 transition-colors p-1 hover:bg-gray-100 rounded" title="Subir imagen a columna izquierda">
+                                                      <input type="file" className="hidden" onChange={(e) => handleColumnImageUpload(e, 'left')} accept="image/*" />
+                                                      <Image size={14} />
+                                                   </label>
+                                                   <span className="text-[10px] font-bold text-gray-300 uppercase">Izq</span>
+                                                </div>
+                                                <textarea value={newTemplateColumns.left} onChange={(e) => setNewTemplateColumns({...newTemplateColumns, left: e.target.value})} placeholder="Texto..." className="flex-1 resize-none outline-none text-sm w-full" />
+                                             </div>
+
+                                             {/* Column Center */}
+                                             <div className="flex flex-col h-full border-r border-gray-100 px-2">
+                                                {newTemplateColumns.centerImage && (
+                                                   <div className="relative mb-2 group/img">
+                                                      <img src={newTemplateColumns.centerImage} alt="Center" className="w-full h-20 object-contain bg-gray-50 rounded" />
+                                                      <button onClick={() => setNewTemplateColumns(prev => ({...prev, centerImage: undefined}))} className="absolute top-1 right-1 p-1 bg-white/80 rounded-full text-red-500 hover:bg-white opacity-0 group-hover/img:opacity-100 transition-opacity"><X size={12} /></button>
+                                                   </div>
+                                                )}
+                                                <div className="flex items-center gap-2 mb-2 justify-center">
+                                                   <span className="text-[10px] font-bold text-gray-300 uppercase">Centro</span>
+                                                   <label className="cursor-pointer text-gray-400 hover:text-indigo-600 transition-colors p-1 hover:bg-gray-100 rounded" title="Subir imagen a columna central">
+                                                      <input type="file" className="hidden" onChange={(e) => handleColumnImageUpload(e, 'center')} accept="image/*" />
+                                                      <Image size={14} />
+                                                   </label>
+                                                </div>
+                                                <textarea value={newTemplateColumns.center} onChange={(e) => setNewTemplateColumns({...newTemplateColumns, center: e.target.value})} placeholder="Texto..." className="flex-1 resize-none outline-none text-center text-sm w-full" />
+                                             </div>
+
+                                             {/* Column Right */}
+                                             <div className="flex flex-col h-full pl-2">
+                                                {newTemplateColumns.rightImage && (
+                                                   <div className="relative mb-2 group/img">
+                                                      <img src={newTemplateColumns.rightImage} alt="Right" className="w-full h-20 object-contain bg-gray-50 rounded" />
+                                                      <button onClick={() => setNewTemplateColumns(prev => ({...prev, rightImage: undefined}))} className="absolute top-1 right-1 p-1 bg-white/80 rounded-full text-red-500 hover:bg-white opacity-0 group-hover/img:opacity-100 transition-opacity"><X size={12} /></button>
+                                                   </div>
+                                                )}
+                                                <div className="flex items-center gap-2 mb-2 justify-end">
+                                                   <span className="text-[10px] font-bold text-gray-300 uppercase">Der</span>
+                                                   <label className="cursor-pointer text-gray-400 hover:text-indigo-600 transition-colors p-1 hover:bg-gray-100 rounded" title="Subir imagen a columna derecha">
+                                                      <input type="file" className="hidden" onChange={(e) => handleColumnImageUpload(e, 'right')} accept="image/*" />
+                                                      <Image size={14} />
+                                                   </label>
+                                                </div>
+                                                <textarea value={newTemplateColumns.right} onChange={(e) => setNewTemplateColumns({...newTemplateColumns, right: e.target.value})} placeholder="Texto..." className="flex-1 resize-none outline-none text-right text-sm w-full" />
+                                             </div>
+                                          </div>
+                                       )
+                                    ) : newTemplateType === 'image' ? (
+                                       <div className="flex flex-col items-center justify-center h-full min-h-[150px] border-2 border-dashed border-gray-100 rounded-lg hover:border-indigo-200 transition-colors">
+                                           <button className="bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-indigo-700 transition-colors flex items-center gap-2 relative overflow-hidden">
+                                              <input type="file" className="absolute inset-0 opacity-0 cursor-pointer" onChange={handleTemplateImageUpload} />
+                                              <Image size={16} /> Subir Imagen
+                                           </button>
+                                       </div>
+                                    ) : (
+                                       <textarea value={newTemplateContent} onChange={(e) => setNewTemplateContent(e.target.value)} className="w-full h-full font-mono text-xs border-none outline-none resize-none" placeholder="HTML..." />
+                                    )}
+                                 </div>
+                                 
+                                 {/* Toolbar Bottom - Dynamic Fields */}
+                                 {newTemplateType === 'text' && (
+                                    <div className="mt-6 flex items-center gap-4 bg-white px-4 py-2 rounded-full shadow-sm border border-gray-200">
+                                       <label className="flex items-center gap-2 text-xs text-gray-600 cursor-pointer hover:text-indigo-600 transition-colors">
+                                          <input type="checkbox" checked={newTemplateOptions.showDate} onChange={(e) => setNewTemplateOptions({...newTemplateOptions, showDate: e.target.checked})} className="rounded text-indigo-600 focus:ring-0" />
+                                          <Calendar size={14} /> Fecha
+                                       </label>
+                                       <div className="w-px h-3 bg-gray-200"></div>
+                                       <label className="flex items-center gap-2 text-xs text-gray-600 cursor-pointer hover:text-indigo-600 transition-colors">
+                                          <input type="checkbox" checked={newTemplateOptions.showPage} onChange={(e) => setNewTemplateOptions({...newTemplateOptions, showPage: e.target.checked})} className="rounded text-indigo-600 focus:ring-0" />
+                                          <Hash size={14} /> Paginación
+                                       </label>
+                                       <div className="w-px h-3 bg-gray-200"></div>
+                                       <label className="flex items-center gap-2 text-xs text-gray-600 cursor-pointer hover:text-indigo-600 transition-colors">
+                                          <input type="checkbox" checked={newTemplateOptions.showVersion} onChange={(e) => setNewTemplateOptions({...newTemplateOptions, showVersion: e.target.checked})} className="rounded text-indigo-600 focus:ring-0" />
+                                          <GitBranch size={14} /> Versión
+                                       </label>
+                                       <div className="w-px h-3 bg-gray-200"></div>
+                                       <div className="flex items-center gap-2">
+                                          <div className="relative">
+                                             <button className={`flex items-center gap-2 text-xs cursor-pointer transition-colors ${newTemplateOptions.backgroundImage ? 'text-indigo-600 font-medium' : 'text-gray-600 hover:text-indigo-600'}`}>
+                                                {isUploadingBgImage ? <Loader2 size={14} className="animate-spin" /> : <Image size={14} />}
+                                                {newTemplateOptions.backgroundImage ? 'Cambiar Fondo' : 'Fondo'}
+                                                <input type="file" accept="image/*" onChange={handleBgImageUpload} className="absolute inset-0 opacity-0 cursor-pointer" />
+                                             </button>
+                                          </div>
+                                          {newTemplateOptions.backgroundImage && (
+                                             <button onClick={() => setNewTemplateOptions({...newTemplateOptions, backgroundImage: undefined})} className="text-red-500 hover:bg-red-50 p-1 rounded-full transition-colors" title="Eliminar Fondo">
+                                                <X size={12} />
+                                             </button>
+                                          )}
+                                       </div>
+                                    </div>
+                                 )}
+                              </div>
+                           </div>
+                     </div>
+
+                     {/* Footer Preview (Bottom) - Only if editing Footer */}
+                     {headerFooterTab === 'footer' && (
+                        <div className="shrink-0 bg-gray-100/50 border-t border-gray-200 p-4 flex flex-col items-center justify-center relative overflow-hidden group" style={{ minHeight: '160px' }}>
+                           <div className="absolute bottom-2 left-2 text-[10px] font-bold text-indigo-400 uppercase tracking-widest bg-indigo-50 px-2 py-1 rounded border border-indigo-100">Vista Previa (Pie de Página)</div>
+                           
+                           {/* Zoom Controls Overlay */}
+                           <div className="absolute top-2 right-2 flex items-center gap-1 bg-white/90 backdrop-blur shadow-sm border border-gray-200 rounded-lg p-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                              <button onClick={() => setPreviewZoom(Math.max(0.3, previewZoom - 0.1))} className="p-1 hover:bg-gray-100 rounded"><ZoomOut size={14} /></button>
+                              <span className="text-[10px] font-mono w-8 text-center">{Math.round(previewZoom * 100)}%</span>
+                              <button onClick={() => setPreviewZoom(Math.min(2, previewZoom + 0.1))} className="p-1 hover:bg-gray-100 rounded"><ZoomIn size={14} /></button>
+                           </div>
+
+                           <div className="w-full max-w-[210mm] bg-white shadow-lg border border-gray-200 min-h-[100px] transition-transform origin-bottom flex items-center justify-center overflow-hidden relative" style={{ transform: `scale(${previewZoom})` }}>
+                               <div className="w-full bg-white text-gray-800 text-sm relative" style={{ 
+                                  backgroundImage: newTemplateOptions.backgroundImage ? `url(${newTemplateOptions.backgroundImage})` : 'none',
+                                  backgroundSize: 'cover',
+                                  backgroundPosition: 'center'
+                               }}>
+                                   {newTemplateType === 'image' && newTemplateContent && (
+                                      <img src={newTemplateContent} alt="Footer" className="w-full h-full object-contain max-h-[150px]" />
+                                   )}
+                                   {newTemplateType === 'html' && (
+                                      <div dangerouslySetInnerHTML={{ __html: newTemplateContent }} />
+                                   )}
+                                   {newTemplateType === 'text' && (
+                                      <div className={`flex flex-col gap-1 w-full p-4 ${newTemplateOptions.fontSize === 'xs' ? 'text-xs' : newTemplateOptions.fontSize === 'sm' ? 'text-sm' : newTemplateOptions.fontSize === 'lg' ? 'text-lg' : newTemplateOptions.fontSize === 'xl' ? 'text-xl' : 'text-base'}`}>
+                                         {newTemplateLayout === 'full' ? (
+                                            <div className={`w-full whitespace-pre-wrap ${newTemplateAlignment === 'center' ? 'text-center' : newTemplateAlignment === 'right' ? 'text-right' : 'text-left'}`}>
+                                               {newTemplateContent || 'Contenido...'}
+                                            </div>
+                                         ) : (
+                                            <div className="flex justify-between items-start w-full gap-4">
+                                               <div className="flex-1 flex flex-col items-start gap-1">
+                                                  {newTemplateColumns.leftImage && <img src={newTemplateColumns.leftImage} alt="" className="max-w-full h-auto max-h-[80px] object-contain" />}
+                                                  <div className="text-left whitespace-pre-wrap w-full">{newTemplateColumns.left}</div>
+                                               </div>
+                                               <div className="flex-1 flex flex-col items-center gap-1">
+                                                  {newTemplateColumns.centerImage && <img src={newTemplateColumns.centerImage} alt="" className="max-w-full h-auto max-h-[80px] object-contain" />}
+                                                  <div className="text-center whitespace-pre-wrap w-full">{newTemplateColumns.center}</div>
+                                               </div>
+                                               <div className="flex-1 flex flex-col items-end gap-1">
+                                                  {newTemplateColumns.rightImage && <img src={newTemplateColumns.rightImage} alt="" className="max-w-full h-auto max-h-[80px] object-contain" />}
+                                                  <div className="text-right whitespace-pre-wrap w-full">{newTemplateColumns.right}</div>
+                                               </div>
+                                            </div>
+                                         )}
+                                         
+                                         {(newTemplateOptions.showDate || newTemplateOptions.showPage || newTemplateOptions.showVersion) && (
+                                            <div className="flex justify-between text-[10px] text-gray-400 mt-2 pt-2 border-t border-gray-100">
+                                                <div className="flex gap-2">
+                                                   {newTemplateOptions.showDate && <span>{dayjs().format(newTemplateOptions.dateFormat)}</span>}
+                                                   {newTemplateOptions.showVersion && <span>{newTemplateOptions.versionText}</span>}
+                                                </div>
+                                                {newTemplateOptions.showPage && <span>Pág. 1</span>}
+                                            </div>
+                                         )}
+                                      </div>
+                                   )}
+                                </div>
+                           </div>
+                        </div>
+                     )}
+                     
+                     {/* Footer Actions */}
+                     <div className="p-4 bg-white border-t border-gray-100 flex justify-end gap-3 shrink-0">
+                        <button
+                           onClick={() => setIsCreatingTemplate(false)}
+                           className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg transition-colors font-medium text-sm"
+                        >
+                           Cancelar
+                        </button>
+
+                        {editingTemplateId && (
+                           <button
+                              onClick={() => saveTemplate(true)}
+                              disabled={!newTemplateName || (newTemplateType === 'text' && newTemplateLayout === 'split' ? (!newTemplateColumns.left && !newTemplateColumns.center && !newTemplateColumns.right && !newTemplateColumns.leftImage && !newTemplateColumns.centerImage && !newTemplateColumns.rightImage) : !newTemplateContent)}
+                              className="px-4 py-2 bg-white text-indigo-600 border border-indigo-200 rounded-lg hover:bg-indigo-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed font-medium text-sm"
+                           >
+                              Guardar como Nueva
+                           </button>
+                        )}
+
+                        <button
+                           onClick={() => saveTemplate(false)}
+                           disabled={!newTemplateName || (newTemplateType === 'text' && newTemplateLayout === 'split' ? (!newTemplateColumns.left && !newTemplateColumns.center && !newTemplateColumns.right && !newTemplateColumns.leftImage && !newTemplateColumns.centerImage && !newTemplateColumns.rightImage) : !newTemplateContent)}
+                           className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed font-medium text-sm shadow-lg shadow-indigo-200"
+                        >
+                           {editingTemplateId ? 'Guardar Cambios' : 'Guardar Plantilla'}
+                        </button>
+                     </div>
+                  </div>
+                ) : (
+                  <div className="h-full flex flex-col">
+                     <h4 className="font-semibold text-gray-900 pb-2 border-b border-gray-100 mb-4">
+                        Vista Previa
+                     </h4>
+                     <div className="flex-1 bg-gray-100 border border-gray-200 rounded-lg overflow-hidden flex flex-col relative group">
+                        {/* Zoom Controls */}
+                        <div className="absolute top-4 right-4 z-10 flex items-center gap-1 bg-white/90 backdrop-blur-sm p-1 rounded-lg shadow-sm border border-gray-200 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+                            <button 
+                                onClick={() => setPreviewZoom(z => Math.max(0.3, z - 0.1))}
+                                className="p-1.5 text-gray-500 hover:text-indigo-600 hover:bg-indigo-50 rounded-md transition-colors"
+                                title="Reducir"
+                            >
+                                <ZoomOut size={16} />
+                            </button>
+                            <span className="text-xs font-medium w-12 text-center text-gray-700 font-mono select-none">
+                                {Math.round(previewZoom * 100)}%
+                            </span>
+                            <button 
+                                onClick={() => setPreviewZoom(z => Math.min(2.0, z + 0.1))}
+                                className="p-1.5 text-gray-500 hover:text-indigo-600 hover:bg-indigo-50 rounded-md transition-colors"
+                                title="Aumentar"
+                            >
+                                <ZoomIn size={16} />
+                            </button>
+                            <div className="w-px h-4 bg-gray-200 mx-1"></div>
+                            <button 
+                                onClick={() => setPreviewZoom(1)}
+                                className="p-1.5 text-gray-500 hover:text-indigo-600 hover:bg-indigo-50 rounded-md transition-colors"
+                                title="Restablecer (100%)"
+                            >
+                                <RotateCcw size={14} />
+                            </button>
+                        </div>
+
+                        <div className="flex-1 overflow-auto p-8 flex items-start justify-center bg-slate-100/50">
+                           <div 
+                              style={{ transform: `scale(${previewZoom})`, transformOrigin: 'top center' }}
+                              className="w-[21cm] bg-white shadow-xl min-h-[10cm] flex flex-col relative aspect-[1/1.414] transition-transform duration-200 ease-out"
+                           >
+                           {/* Decorative Header Bar */}
+                           <div className="h-2 bg-gradient-to-r from-amber-500 to-amber-300 w-full"></div>
+
+                           <div className="p-12 flex-1 flex flex-col">
+                             {/* Header */}
+                             {(() => {
+                               const headerToUse = headerFooterTab === 'header' && isCreatingTemplate 
+                                  ? { 
+                                      type: newTemplateType, 
+                                      content: newTemplateContent,
+                                      structure: newTemplateType === 'text' ? {
+                                        layout: newTemplateLayout,
+                                        alignment: newTemplateAlignment,
+                                        columns: newTemplateColumns,
+                                        options: newTemplateOptions
+                                      } : undefined
+                                    } 
+                                  : selectedHeader;
+                               
+                               if (headerToUse) {
+                                  return (
+                                     <div className="mb-8 w-full">
+                                        {headerToUse.type === 'image' ? (
+                                           <img src={headerToUse.content} alt="Header" className="w-full max-h-32 object-contain" />
+                                        ) : headerToUse.type === 'html' ? (
+                                           <div dangerouslySetInnerHTML={{ __html: headerToUse.content }} />
+                                        ) : (
+                                          <div 
+                                            className={`w-full ${
+                                             headerToUse.structure?.options?.fontSize === 'xs' ? 'text-xs' :
+                                             headerToUse.structure?.options?.fontSize === 'sm' ? 'text-sm' :
+                                             headerToUse.structure?.options?.fontSize === 'lg' ? 'text-lg' :
+                                             headerToUse.structure?.options?.fontSize === 'xl' ? 'text-xl' : 'text-base'
+                                          } font-serif text-gray-900 border-b-2 border-gray-900 pb-2`}
+                                            style={{ 
+                                               backgroundImage: headerToUse.structure?.options?.backgroundImage ? `url(${headerToUse.structure.options.backgroundImage})` : 'none',
+                                               backgroundSize: 'cover',
+                                               backgroundPosition: 'center'
+                                            }}
+                                          >
+                                             {headerToUse.structure?.layout === 'split' ? (
+                                                <div className="grid grid-cols-3 gap-4 items-end">
+                                                    <div className="flex flex-col items-start gap-1">
+                                                        {headerToUse.structure.columns.leftImage && <img src={headerToUse.structure.columns.leftImage} alt="" className="max-w-full h-auto max-h-[80px] object-contain" />}
+                                                        <div className="text-left whitespace-pre-wrap">{headerToUse.structure.columns.left}</div>
+                                                    </div>
+                                                    <div className="flex flex-col items-center gap-1">
+                                                        {headerToUse.structure.columns.centerImage && <img src={headerToUse.structure.columns.centerImage} alt="" className="max-w-full h-auto max-h-[80px] object-contain" />}
+                                                        <div className="text-center whitespace-pre-wrap">{headerToUse.structure.columns.center}</div>
+                                                    </div>
+                                                    <div className="flex flex-col items-end gap-1">
+                                                        {headerToUse.structure.columns.rightImage && <img src={headerToUse.structure.columns.rightImage} alt="" className="max-w-full h-auto max-h-[80px] object-contain" />}
+                                                        <div className="text-right whitespace-pre-wrap">{headerToUse.structure.columns.right}</div>
+                                                    </div>
+                                                </div>
+                                              ) : (
+                                                <div className={
+                                                    headerToUse.structure?.alignment === 'center' ? 'text-center' : 
+                                                    headerToUse.structure?.alignment === 'right' ? 'text-right' : 'text-left'
+                                                }>
+                                                    <div className="whitespace-pre-wrap">{headerToUse.content}</div>
+                                                </div>
+                                              )}
+                                              
+                                              {(headerToUse.structure?.options?.showDate || headerToUse.structure?.options?.showPage || headerToUse.structure?.options?.showVersion) && (
+                                                <div className="flex justify-between items-center mt-2 pt-1 border-t border-gray-200 text-[10px] text-gray-500 font-sans uppercase tracking-wider">
+                                                    <div>
+                                                        {headerToUse.structure.options.showVersion && <span>{headerToUse.structure.options.versionText}</span>}
+                                                    </div>
+                                                    <div className="flex gap-4">
+                                                        {headerToUse.structure.options.showDate && <span>{dayjs().format(headerToUse.structure.options.dateFormat)}</span>}
+                                                        {headerToUse.structure.options.showPage && <span>Página 1</span>}
+                                                    </div>
+                                                </div>
+                                              )}
+                                           </div>
+                                        )}
+                                     </div>
+                                  );
+                               }
+                               return (
+                                  <div className="flex justify-between items-start border-b-2 border-gray-900 pb-8 mb-8 opacity-50 grayscale">
+                                    <div className="flex items-center gap-4">
+                                      <div className="w-16 h-16 bg-amber-100 rounded-lg flex items-center justify-center text-amber-600">
+                                        <FileText size={32} />
+                                      </div>
+                                      <div>
+                                        <h2 className="text-xl font-bold text-gray-900 uppercase tracking-widest">
+                                          Comunicado Oficial
+                                        </h2>
+                                        <p className="text-sm text-gray-500 font-medium">Documento Corporativo</p>
+                                      </div>
+                                    </div>
+                                    <div className="text-right">
+                                      <div className="text-sm font-bold text-gray-400 uppercase tracking-wider mb-1">Fecha</div>
+                                      <div className="text-lg font-serif text-gray-900">
+                                        {new Date().toLocaleDateString('es-ES', { day: 'numeric', month: 'long', year: 'numeric' })}
+                                      </div>
+                                    </div>
+                                  </div>
+                               );
+                             })()}
+
+                             {/* Title & Content Placeholder */}
+                             <div className="text-center mb-8">
+                               <span className="inline-block px-4 py-1 bg-amber-100 text-amber-800 text-xs font-bold uppercase tracking-[0.2em] rounded-full mb-4">
+                                 Comunicado
+                               </span>
+                               <h1 className="text-2xl font-serif font-bold text-gray-900 leading-tight">
+                                 {comunicadoTitle || 'Título del Comunicado'}
+                               </h1>
+                             </div>
+                             
+                             <div className="prose prose-sm max-w-none font-serif text-gray-800 leading-relaxed text-justify flex-1">
+                                {composeComunicado ? (
+                                   <div dangerouslySetInnerHTML={{ __html: composeComunicado }} />
+                                ) : (
+                                   <>
+                                     <p>Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.</p>
+                                     <p>Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.</p>
+                                   </>
+                                )}
+                             </div>
+
+                             {/* Footer */}
+                             <div className="mt-auto pt-8">
+                               {(() => {
+                                 const footerToUse = headerFooterTab === 'footer' && isCreatingTemplate
+                                    ? { 
+                                        type: newTemplateType, 
+                                        content: newTemplateContent,
+                                        structure: newTemplateType === 'text' ? {
+                                          layout: newTemplateLayout,
+                                          alignment: newTemplateAlignment,
+                                          columns: newTemplateColumns,
+                                          options: newTemplateOptions
+                                        } : undefined
+                                      }
+                                    : selectedFooter;
+
+                                 if (footerToUse) {
+                                    return (
+                                       <div className="mt-8 pt-8 border-t border-gray-200 w-full">
+                                          {footerToUse.type === 'image' ? (
+                                             <img src={footerToUse.content} alt="Footer" className="w-full max-h-24 object-contain" />
+                                          ) : footerToUse.type === 'html' ? (
+                                             <div dangerouslySetInnerHTML={{ __html: footerToUse.content }} />
+                                          ) : (
+                                           <div 
+                                             className={`w-full ${
+                                               footerToUse.structure?.options?.fontSize === 'xs' ? 'text-xs' :
+                                               footerToUse.structure?.options?.fontSize === 'sm' ? 'text-sm' :
+                                               footerToUse.structure?.options?.fontSize === 'lg' ? 'text-lg' :
+                                               footerToUse.structure?.options?.fontSize === 'xl' ? 'text-xl' : 'text-base'
+                                            } font-serif text-gray-900`}
+                                            style={{ 
+                                               backgroundImage: footerToUse.structure?.options?.backgroundImage ? `url(${footerToUse.structure.options.backgroundImage})` : 'none',
+                                               backgroundSize: 'cover',
+                                               backgroundPosition: 'center'
+                                            }}
+                                           >
+                                               {(footerToUse.structure?.options?.showDate || footerToUse.structure?.options?.showPage || footerToUse.structure?.options?.showVersion) && (
+                                                 <div className="flex justify-between items-center mb-2 pb-1 border-b border-gray-200 text-[10px] text-gray-500 font-sans uppercase tracking-wider">
+                                                     <div>
+                                                         {footerToUse.structure.options.showVersion && <span>{footerToUse.structure.options.versionText}</span>}
+                                                     </div>
+                                                     <div className="flex gap-4">
+                                                         {footerToUse.structure.options.showDate && <span>{dayjs().format(footerToUse.structure.options.dateFormat)}</span>}
+                                                         {footerToUse.structure.options.showPage && <span>Página 1</span>}
+                                                     </div>
+                                                 </div>
+                                               )}
+
+                                               {footerToUse.structure?.layout === 'split' ? (
+                                                 <div className="grid grid-cols-3 gap-4 items-start">
+                                                     <div className="text-left whitespace-pre-wrap">{footerToUse.structure.columns.left}</div>
+                                                     <div className="text-center whitespace-pre-wrap">{footerToUse.structure.columns.center}</div>
+                                                     <div className="text-right whitespace-pre-wrap">{footerToUse.structure.columns.right}</div>
+                                                 </div>
+                                               ) : (
+                                                 <div className={
+                                                     footerToUse.structure?.alignment === 'center' ? 'text-center' : 
+                                                     footerToUse.structure?.alignment === 'right' ? 'text-right' : 'text-left'
+                                                 }>
+                                                     <div className="whitespace-pre-wrap">{footerToUse.content}</div>
+                                                 </div>
+                                               )}
+                                            </div>
+                                          )}
+                                       </div>
+                                    );
+                                 }
+                                 return (
+                                    <div className="mt-8 pt-8 border-t border-gray-200 flex justify-between items-end opacity-50 grayscale">
+                                      <div>
+                                        <div className="font-bold text-gray-900 text-base font-serif">
+                                          Administración
+                                        </div>
+                                        <div className="text-xs text-gray-500 uppercase tracking-wider mt-1">
+                                          Autorizado
+                                        </div>
+                                      </div>
+                                      <div className="flex flex-col items-end">
+                                        <div className="w-20 h-20 border-4 border-amber-200 rounded-full flex items-center justify-center opacity-50 rotate-[-12deg]">
+                                          <span className="text-[10px] font-bold text-amber-800 uppercase text-center leading-tight">
+                                            Documento<br/>Oficial<br/>Verificado
+                                          </span>
+                                        </div>
+                                      </div>
+                                    </div>
+                                 );
+                               })()}
+                             </div>
+                           </div>
+                           
+                           {/* Decorative Footer Bar */}
+                           <div className="h-4 bg-gray-900 w-full mt-auto"></div>
+                        </div>
+                     </div>
+                  </div>
+               </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {viewingComunicado && viewingComunicado.extra?.comunicado && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4 overflow-y-auto">
+          {/* Close Button */}
+          <button
+            onClick={() => setViewingComunicado(null)}
+            className="absolute top-4 right-4 p-2 bg-white/10 hover:bg-white/20 rounded-full text-white transition-colors z-[60]"
+          >
+            <X size={24} />
+          </button>
+
+          {/* Loading State */}
+          {isGeneratingPdf && (
+            <div className="absolute inset-0 z-[55] flex flex-col items-center justify-center text-white pointer-events-none">
+               <div className="animate-spin rounded-full h-12 w-12 border-4 border-white border-t-transparent mb-4"></div>
+               <p className="text-lg font-medium">Generando PDF...</p>
+            </div>
+          )}
+
+          {/* PDF Preview - Shown when ready */}
+          {pdfBlobUrl && !isGeneratingPdf && (
+             <iframe 
+               src={pdfBlobUrl} 
+               className="w-full max-w-5xl h-[85vh] bg-white rounded-lg shadow-2xl animate-in zoom-in-95 duration-300"
+               title="Vista Previa PDF"
+             />
+          )}
+
+          {/* HTML Content - Used for generation, hidden if PDF is ready */}
+          <div 
+             ref={pdfContainerRef}
+             className={`${pdfBlobUrl ? 'absolute left-[-9999px] top-0' : 'relative'} w-full max-w-[21cm] bg-white shadow-2xl animate-in zoom-in-95 duration-200 my-8 mx-auto`}
+          >
+             {/* Paper Container (A4 Ratio approx) */}
+            {splitHtmlContent(viewingComunicado.extra.comunicado.content, 200).map((pageHtml, pageIndex) => (
+            <div 
+              key={pageIndex} 
+              className="flex flex-col relative bg-white mb-8 last:mb-0 shadow-sm html2pdf__page-break"
+              style={{ width: '21cm', height: '29.6cm', paddingBottom: '0' }}
+            >
+              {/* Decorative Header Bar */}
+              <div className="h-2 bg-gradient-to-r from-amber-500 to-amber-300 w-full shrink-0"></div>
+              
+              <div className="p-12 md:p-16 flex-1 flex flex-col overflow-hidden">
+                {/* Header */}
+                {viewingComunicado.extra.comunicado.header ? (
+                   <div className="mb-8 w-full">
+                      {viewingComunicado.extra.comunicado.header.type === 'image' ? (
+                         <img src={viewingComunicado.extra.comunicado.header.content} alt="Header" className="w-full max-h-48 object-contain" />
+                      ) : viewingComunicado.extra.comunicado.header.type === 'html' ? (
+                         <div dangerouslySetInnerHTML={{ __html: viewingComunicado.extra.comunicado.header.content }} />
+                      ) : (
+                         <div className={`w-full ${
+                            viewingComunicado.extra.comunicado.header.structure?.options?.fontSize === 'xs' ? 'text-xs' :
+                            viewingComunicado.extra.comunicado.header.structure?.options?.fontSize === 'sm' ? 'text-sm' :
+                            viewingComunicado.extra.comunicado.header.structure?.options?.fontSize === 'lg' ? 'text-lg' :
+                            viewingComunicado.extra.comunicado.header.structure?.options?.fontSize === 'xl' ? 'text-xl' : 'text-base'
+                         } font-serif text-gray-900 border-b-2 border-gray-900 pb-2`}>
+                            {viewingComunicado.extra.comunicado.header.structure?.layout === 'split' ? (
+                              <div className="grid grid-cols-3 gap-4 items-end">
+                                  <div className="flex flex-col items-start gap-1">
+                                      {viewingComunicado.extra.comunicado.header.structure.columns.leftImage && <img src={viewingComunicado.extra.comunicado.header.structure.columns.leftImage} alt="" className="max-w-full h-auto max-h-[80px] object-contain" />}
+                                      <div className="text-left whitespace-pre-wrap">{viewingComunicado.extra.comunicado.header.structure.columns.left}</div>
+                                  </div>
+                                  <div className="flex flex-col items-center gap-1">
+                                      {viewingComunicado.extra.comunicado.header.structure.columns.centerImage && <img src={viewingComunicado.extra.comunicado.header.structure.columns.centerImage} alt="" className="max-w-full h-auto max-h-[80px] object-contain" />}
+                                      <div className="text-center whitespace-pre-wrap">{viewingComunicado.extra.comunicado.header.structure.columns.center}</div>
+                                  </div>
+                                  <div className="flex flex-col items-end gap-1">
+                                      {viewingComunicado.extra.comunicado.header.structure.columns.rightImage && <img src={viewingComunicado.extra.comunicado.header.structure.columns.rightImage} alt="" className="max-w-full h-auto max-h-[80px] object-contain" />}
+                                      <div className="text-right whitespace-pre-wrap">{viewingComunicado.extra.comunicado.header.structure.columns.right}</div>
+                                  </div>
+                              </div>
+                            ) : (
+                              <div className={
+                                  viewingComunicado.extra.comunicado.header.structure?.alignment === 'center' ? 'text-center' : 
+                                  viewingComunicado.extra.comunicado.header.structure?.alignment === 'right' ? 'text-right' : 'text-left'
+                              }>
+                                  <div className="whitespace-pre-wrap">{viewingComunicado.extra.comunicado.header.content}</div>
+                              </div>
+                            )}
+                            
+                            {(viewingComunicado.extra.comunicado.header.structure?.options?.showDate || viewingComunicado.extra.comunicado.header.structure?.options?.showPage || viewingComunicado.extra.comunicado.header.structure?.options?.showVersion) && (
+                              <div className="flex justify-between items-center mt-2 pt-1 border-t border-gray-200 text-[10px] text-gray-500 font-sans uppercase tracking-wider">
+                                  <div>
+                                      {viewingComunicado.extra.comunicado.header.structure.options.showVersion && <span>{viewingComunicado.extra.comunicado.header.structure.options.versionText}</span>}
+                                  </div>
+                                  <div className="flex gap-4">
+                                      {viewingComunicado.extra.comunicado.header.structure.options.showDate && <span>{dayjs().format(viewingComunicado.extra.comunicado.header.structure.options.dateFormat)}</span>}
+                                      {viewingComunicado.extra.comunicado.header.structure.options.showPage && <span>Página {pageIndex + 1}</span>}
+                                  </div>
+                              </div>
+                            )}
+                         </div>
+                      )}
+                   </div>
+                ) : (
+                <div className="flex justify-between items-start border-b-2 border-gray-900 pb-8 mb-8">
+                  <div className="flex items-center gap-4">
+                    <div className="w-16 h-16 bg-amber-100 rounded-lg flex items-center justify-center text-amber-600">
+                      {viewingComunicado.channel?.icon ? (
+                        <img src={viewingComunicado.channel.icon} alt="" className="w-full h-full object-cover rounded-lg" />
+                      ) : (
+                        <FileText size={32} />
+                      )}
+                    </div>
+                    <div>
+                      <h2 className="text-xl font-bold text-gray-900 uppercase tracking-widest">
+                        {viewingComunicado.channel?.title || 'Comunicado Oficial'}
+                      </h2>
+                      <p className="text-sm text-gray-500 font-medium">Documento Corporativo</p>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <div className="text-sm font-bold text-gray-400 uppercase tracking-wider mb-1">Fecha</div>
+                    <div className="text-lg font-serif text-gray-900">
+                      {new Date(viewingComunicado.createdAt).toLocaleDateString('es-ES', {
+                        year: 'numeric',
+                        month: 'long',
+                        day: 'numeric'
+                      })}
+                    </div>
+                  </div>
+                </div>
+                )}
+
+                {/* Title - Only on first page */}
+                {pageIndex === 0 && (
+                <div className="text-center mb-12">
+                  <span className="inline-block px-4 py-1 bg-amber-100 text-amber-800 text-xs font-bold uppercase tracking-[0.2em] rounded-full mb-4">
+                    Comunicado
+                  </span>
+                  <h1 className="text-3xl md:text-4xl font-serif font-bold text-gray-900 leading-tight">
+                    {viewingComunicado.extra.comunicado.title}
+                  </h1>
+                </div>
+                )}
+
+                {/* Content */}
+                <div 
+                  className="prose prose-lg max-w-none font-serif text-gray-800 leading-relaxed text-justify flex-1"
+                  dangerouslySetInnerHTML={{ __html: pageHtml }}
+                />
+
+                {/* Footer / Signature */}
+                {viewingComunicado.extra.comunicado.footer ? (
+                   <div className="mt-16 pt-12 border-t border-gray-200 w-full">
+                      {viewingComunicado.extra.comunicado.footer.type === 'image' ? (
+                         <img src={viewingComunicado.extra.comunicado.footer.content} alt="Footer" className="w-full max-h-32 object-contain" />
+                      ) : viewingComunicado.extra.comunicado.footer.type === 'html' ? (
+                         <div dangerouslySetInnerHTML={{ __html: viewingComunicado.extra.comunicado.footer.content }} />
+                      ) : (
+                         <div className={`w-full ${
+                            viewingComunicado.extra.comunicado.footer.structure?.options?.fontSize === 'xs' ? 'text-xs' :
+                            viewingComunicado.extra.comunicado.footer.structure?.options?.fontSize === 'sm' ? 'text-sm' :
+                            viewingComunicado.extra.comunicado.footer.structure?.options?.fontSize === 'lg' ? 'text-lg' :
+                            viewingComunicado.extra.comunicado.footer.structure?.options?.fontSize === 'xl' ? 'text-xl' : 'text-base'
+                         } font-serif text-gray-900`}>
+                            {(viewingComunicado.extra.comunicado.footer.structure?.options?.showDate || viewingComunicado.extra.comunicado.footer.structure?.options?.showPage || viewingComunicado.extra.comunicado.footer.structure?.options?.showVersion) && (
+                              <div className="flex justify-between items-center mb-2 pb-1 border-b border-gray-200 text-[10px] text-gray-500 font-sans uppercase tracking-wider">
+                                  <div>
+                                      {viewingComunicado.extra.comunicado.footer.structure.options.showVersion && <span>{viewingComunicado.extra.comunicado.footer.structure.options.versionText}</span>}
+                                  </div>
+                                  <div className="flex gap-4">
+                                      {viewingComunicado.extra.comunicado.footer.structure.options.showDate && <span>{dayjs().format(viewingComunicado.extra.comunicado.footer.structure.options.dateFormat)}</span>}
+                                      {viewingComunicado.extra.comunicado.footer.structure.options.showPage && <span>Página {pageIndex + 1}</span>}
+                                  </div>
+                              </div>
+                            )}
+
+                            {viewingComunicado.extra.comunicado.footer.structure?.layout === 'split' ? (
+                              <div className="grid grid-cols-3 gap-4 items-start">
+                                  <div className="text-left whitespace-pre-wrap">{viewingComunicado.extra.comunicado.footer.structure.columns.left}</div>
+                                  <div className="text-center whitespace-pre-wrap">{viewingComunicado.extra.comunicado.footer.structure.columns.center}</div>
+                                  <div className="text-right whitespace-pre-wrap">{viewingComunicado.extra.comunicado.footer.structure.columns.right}</div>
+                              </div>
+                            ) : (
+                              <div className={
+                                  viewingComunicado.extra.comunicado.footer.structure?.alignment === 'center' ? 'text-center' : 
+                                  viewingComunicado.extra.comunicado.footer.structure?.alignment === 'right' ? 'text-right' : 'text-left'
+                              }>
+                                  <div className="whitespace-pre-wrap">{viewingComunicado.extra.comunicado.footer.content}</div>
+                              </div>
+                            )}
+                         </div>
+                      )}
+                   </div>
+                ) : (
+                <div className="mt-16 pt-12 border-t border-gray-200 flex justify-between items-end">
+                  <div>
+                    <div className="font-bold text-gray-900 text-lg font-serif">
+                      {viewingComunicado.sender?.fullName || 'Administración'}
+                    </div>
+                    <div className="text-sm text-gray-500 uppercase tracking-wider mt-1">
+                      Autorizado
+                    </div>
+                  </div>
+                  <div className="flex flex-col items-end">
+                    <div className="w-24 h-24 border-4 border-amber-200 rounded-full flex items-center justify-center opacity-50 rotate-[-12deg]">
+                      <span className="text-xs font-bold text-amber-800 uppercase text-center leading-tight">
+                        Documento<br/>Oficial<br/>Verificado
+                      </span>
+                    </div>
+                  </div>
+                </div>
+                )}
+              </div>
+
+              {/* Decorative Footer Bar */}
+              <div className="h-4 bg-gray-900 w-full mt-auto"></div>
+            </div>
+            ))}
+          </div>
+        </div>
+      )}
+      {showLocationPicker && (
+        <LocationPicker
+          onSave={handleLocationSave}
+          onClose={() => setShowLocationPicker(false)}
+          initialData={composeLocationData}
+        />
       )}
     </div>
   )};

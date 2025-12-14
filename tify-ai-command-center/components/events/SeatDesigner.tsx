@@ -42,6 +42,8 @@ export default function SeatDesigner({ event, onUpdate, onSaveStart }: SeatDesig
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const [isDraggingCanvas, setIsDraggingCanvas] = useState(false);
   const [lastEditedZoneId, setLastEditedZoneId] = useState<string | null>(null);
+  const [guides, setGuides] = useState<{ type: 'horizontal' | 'vertical', pos: number }[]>([]);
+  const [dragStartPos, setDragStartPos] = useState({ x: 0, y: 0 });
   const dragStartRef = useRef({ x: 0, y: 0 });
   const containerRef = useRef<HTMLDivElement>(null);
   
@@ -641,6 +643,13 @@ export default function SeatDesigner({ event, onUpdate, onSaveStart }: SeatDesig
                     style={{ backgroundColor: c }}
                   />
                 ))}
+                {/* Transparent Option */}
+                <button
+                    onClick={() => updateZone(selectedZone.id, { color: 'transparent' })}
+                    className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${selectedZone.color === 'transparent' ? 'border-gray-900' : 'border-gray-300'}`}
+                    style={{ background: 'linear-gradient(45deg, #ccc 25%, transparent 25%, transparent 75%, #ccc 75%, #ccc), linear-gradient(45deg, #ccc 25%, transparent 25%, transparent 75%, #ccc 75%, #ccc)', backgroundSize: '4px 4px', backgroundPosition: '0 0, 2px 2px', backgroundColor: '#fff' }}
+                    title="Transparente"
+                />
               </div>
             </div>
 
@@ -668,20 +677,54 @@ export default function SeatDesigner({ event, onUpdate, onSaveStart }: SeatDesig
                     className="w-full px-2 py-1 border border-gray-300 rounded text-xs"
                   />
                </div>
+               <div className="col-span-2">
+                   <label className="block text-[10px] font-medium text-gray-500 mb-1">Rotación (grados)</label>
+                   <div className="flex items-center gap-2">
+                       <span className="text-[10px] text-gray-400 w-6">-180°</span>
+                       <input 
+                           type="range"
+                           min="-180"
+                           max="180"
+                           step="1"
+                           value={selectedZone.rotation || 0}
+                           onChange={(e) => updateZone(selectedZone.id, { rotation: parseInt(e.target.value) || 0 })}
+                           className="flex-1 h-1 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-indigo-600"
+                       />
+                       <span className="text-[10px] text-gray-400 w-6 text-right">180°</span>
+                       <span className="text-xs font-medium text-gray-700 w-10 text-right tabular-nums">{selectedZone.rotation || 0}°</span>
+                   </div>
+               </div>
                {selectedZone.type === 'SALE' && (
-                 <div className="col-span-2 mt-2">
-                    <label className="block text-[10px] font-medium text-gray-500 mb-1">Espacio entre sillas (Gap)</label>
-                    <div className="flex items-center gap-2">
-                      <input 
-                        type="range"
-                        min="0"
-                        max="20"
-                        step="1"
-                        value={selectedZone.seatGap ?? 4}
-                        onChange={(e) => updateZone(selectedZone.id, { seatGap: parseInt(e.target.value) || 0 })}
-                        className="flex-1 h-1 bg-gray-200 rounded-lg appearance-none cursor-pointer"
-                      />
-                      <span className="text-xs text-gray-600 w-8 text-right">{selectedZone.seatGap ?? 4}px</span>
+                 <div className="col-span-2 mt-2 space-y-2">
+                    <div>
+                        <label className="block text-[10px] font-medium text-gray-500 mb-1">Gap Horizontal</label>
+                        <div className="flex items-center gap-2">
+                          <input 
+                            type="range"
+                            min="0"
+                            max="50"
+                            step="1"
+                            value={selectedZone.seatGapX ?? (selectedZone.seatGap ?? 4)}
+                            onChange={(e) => updateZone(selectedZone.id, { seatGapX: parseInt(e.target.value) || 0 })}
+                            className="flex-1 h-1 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+                          />
+                          <span className="text-xs text-gray-600 w-8 text-right">{selectedZone.seatGapX ?? (selectedZone.seatGap ?? 4)}px</span>
+                        </div>
+                    </div>
+                    <div>
+                        <label className="block text-[10px] font-medium text-gray-500 mb-1">Gap Vertical</label>
+                        <div className="flex items-center gap-2">
+                          <input 
+                            type="range"
+                            min="0"
+                            max="50"
+                            step="1"
+                            value={selectedZone.seatGapY ?? (selectedZone.seatGap ?? 4)}
+                            onChange={(e) => updateZone(selectedZone.id, { seatGapY: parseInt(e.target.value) || 0 })}
+                            className="flex-1 h-1 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+                          />
+                          <span className="text-xs text-gray-600 w-8 text-right">{selectedZone.seatGapY ?? (selectedZone.seatGap ?? 4)}px</span>
+                        </div>
                     </div>
                  </div>
                )}
@@ -897,16 +940,64 @@ export default function SeatDesigner({ event, onUpdate, onSaveStart }: SeatDesig
                        key={`${zone.id}-${zone.layout?.x || 0}-${zone.layout?.y || 0}`} // Force remount on drag end to reset transform
                        drag={mode === 'layout'}
                        dragMomentum={false}
+                       onDragStart={() => {
+                          setDragStartPos({ x: zone.layout?.x || 0, y: zone.layout?.y || 0 });
+                       }}
+                       onDrag={(_, info) => {
+                          if (mode !== 'layout') return;
+                          
+                          const x = dragStartPos.x + info.offset.x;
+                          const y = dragStartPos.y + info.offset.y;
+                          const w = zone.layout?.width || 100;
+                          const h = zone.layout?.height || 100;
+                          
+                          const newGuides: { type: 'horizontal' | 'vertical', pos: number }[] = [];
+                          const THRESHOLD = 5;
+                          
+                          zones.forEach(other => {
+                              if (other.id === zone.id) return;
+                              const oLayout = other.layout || { x: 0, y: 0, width: 100, height: 100 };
+                              const ox = oLayout.x;
+                              const oy = oLayout.y;
+                              const ow = oLayout.width || 100;
+                              const oh = oLayout.height || 100;
+                              
+                              // Vertical Alignments (X)
+                              const vPoints = [ox, ox + ow/2, ox + ow]; // Left, Center, Right of other
+                              const myVPoints = [x, x + w/2, x + w];    // Left, Center, Right of me
+                              
+                              vPoints.forEach(vp => {
+                                  if (myVPoints.some(mp => Math.abs(vp - mp) < THRESHOLD)) {
+                                      if (!newGuides.some(g => g.type === 'vertical' && Math.abs(g.pos - vp) < 1)) {
+                                          newGuides.push({ type: 'vertical', pos: vp });
+                                      }
+                                  }
+                              });
+                              
+                              // Horizontal Alignments (Y)
+                              const hPoints = [oy, oy + oh/2, oy + oh]; // Top, Center, Bottom of other
+                              const myHPoints = [y, y + h/2, y + h];    // Top, Center, Bottom of me
+                              
+                              hPoints.forEach(hp => {
+                                  if (myHPoints.some(mp => Math.abs(hp - mp) < THRESHOLD)) {
+                                      if (!newGuides.some(g => g.type === 'horizontal' && Math.abs(g.pos - hp) < 1)) {
+                                          newGuides.push({ type: 'horizontal', pos: hp });
+                                      }
+                                  }
+                              });
+                          });
+                          
+                          setGuides(newGuides);
+                       }}
                        onDragEnd={(_, info) => {
+                          setGuides([]);
                           const currentLayout = zone.layout || { x: 50, y: 50, width: 100, height: 100 };
                           
                           // Calculate new position
                           let newX = currentLayout.x + info.offset.x;
                           let newY = currentLayout.y + info.offset.y;
                           
-                          // Snap to grid
-                          newX = Math.round(newX / GRID_SIZE) * GRID_SIZE;
-                          newY = Math.round(newY / GRID_SIZE) * GRID_SIZE;
+                          // No Grid Snap - Pure position
                           
                           updateZone(zone.id, {
                             layout: {
@@ -924,19 +1015,20 @@ export default function SeatDesigner({ event, onUpdate, onSaveStart }: SeatDesig
                          }
                          setSelectedZoneId(zone.id);
                        }}
-                       className={`absolute border-2 rounded-xl shadow-sm overflow-hidden 
-                         ${selectedZoneId === zone.id ? 'border-indigo-600 ring-2 ring-indigo-200 z-20' : 'border-gray-300 z-10 hover:border-indigo-300'} 
-                         ${isInfo ? 'bg-gray-50 border-dashed' : isStage ? 'bg-gray-800 border-gray-900' : 'bg-white'}
-                       `}
+                       className={`absolute border-2 rounded-xl shadow-sm overflow-hidden flex flex-col group
+                       ${selectedZoneId === zone.id ? 'border-indigo-600 ring-2 ring-indigo-200 z-20' : 'border-gray-300 z-10 hover:border-indigo-300'} 
+                       ${isInfo ? 'bg-gray-50 border-dashed' : isStage ? 'bg-gray-800 border-gray-900' : (zone.color === 'transparent' ? 'bg-transparent' : 'bg-white')}
+                     `}
                        style={{
-                         left: zone.layout?.x || 50,
-                         top: zone.layout?.y || 50,
-                         minWidth: '50px',
-                         minHeight: '50px',
-                         width: zone.layout?.width ? `${zone.layout.width}px` : 'auto',
-                         height: zone.layout?.height ? `${zone.layout.height}px` : 'auto',
-                         transform: zone.rotation ? `rotate(${zone.rotation}deg)` : 'none'
-                       }}
+                        left: zone.layout?.x || 50,
+                        top: zone.layout?.y || 50,
+                        minWidth: '50px',
+                        minHeight: '50px',
+                        width: zone.layout?.width ? `${zone.layout.width}px` : 'auto',
+                        height: zone.layout?.height ? `${zone.layout.height}px` : 'auto',
+                        rotate: zone.rotation || 0,
+                        transformOrigin: 'center center'
+                      }}
                      >
                        {/* Resize Handle */}
                    {selectedZoneId === zone.id && mode === 'layout' && (
@@ -949,10 +1041,10 @@ export default function SeatDesigner({ event, onUpdate, onSaveStart }: SeatDesig
                    )}
 
                    {/* Zone Header */}
-                   <div 
-                     className="px-3 py-1 text-xs font-bold text-white flex justify-between items-center cursor-move"
-                     style={{ backgroundColor: isStage ? '#000' : (isInfo ? '#64748B' : zone.color) }}
-                     onDoubleClick={(e) => {
+                  <div 
+                    className={`px-3 py-1 text-xs font-bold text-white flex justify-center items-center cursor-move ${zone.color === 'transparent' ? 'opacity-0 group-hover:opacity-100 transition-opacity duration-200' : ''}`}
+                    style={{ backgroundColor: isStage ? '#000' : (isInfo ? '#64748B' : (zone.color === 'transparent' ? '#374151' : zone.color)) }}
+                    onDoubleClick={(e) => {
                        e.stopPropagation();
                        if (isInteractive) {
                          setEditingZoneId(zone.id);
@@ -962,16 +1054,16 @@ export default function SeatDesigner({ event, onUpdate, onSaveStart }: SeatDesig
                      }}
                    >
                      <span>{zone.name}</span>
-                     {isInteractive && <span>${zone.price}</span>}
                    </div>
 
                    {/* Content */}
+                   <div className="flex-1 relative min-h-0 w-full">
                    {isStage ? (
-                     <div className="flex items-center justify-center h-[calc(100%-24px)] text-gray-500 font-bold uppercase tracking-widest text-sm p-2 text-center opacity-50">
+                     <div className="flex items-center justify-center h-full text-gray-500 font-bold uppercase tracking-widest text-sm p-2 text-center opacity-50">
                         TARIMA
                      </div>
                    ) : isInfo ? (
-                     <div className="flex items-center justify-center h-[calc(100%-24px)] text-gray-400 font-bold uppercase tracking-wider text-xs p-2 text-center">
+                     <div className="flex items-center justify-center h-full text-gray-400 font-bold uppercase tracking-wider text-xs p-2 text-center">
                        {zone.name}
                      </div>
                    ) : (
@@ -985,30 +1077,31 @@ export default function SeatDesigner({ event, onUpdate, onSaveStart }: SeatDesig
                            {Array.from({ length: zone.rows }).map((_, r) => (
                              Array.from({ length: zone.cols }).map((_, c) => {
                                // Fixed seat size for visualization, gap from props
-                               const seatSize = 24; 
-                               const gap = zone.seatGap ?? 4;
-                               
-                               const rowLabel = String.fromCharCode(65 + r);
-                               // Calculate expected colLabel based on direction/start
-                               const dir = zone.numberingDirection || 'LTR';
-                               const start = zone.startNumber ?? 1;
-                               let colNum = dir === 'LTR' ? (c + start) : (zone.cols - c - 1 + start);
-                               const colLabel = colNum.toString();
-                               
-                               const seat = zoneSeats.find(s => {
-                                 if (s.gridRow !== undefined && s.gridCol !== undefined) {
-                                   return s.gridRow === r && s.gridCol === c;
-                                 }
-                                 return s.rowLabel === rowLabel && s.colLabel === colLabel;
-                               });
-                               
-                               // Calculate position
-                               // Center the grid in the zone? Or top-left? 
-                               // User said "slide a la derecha", probably meaning just gap control.
-                               // Usually top-left aligned with padding is safer.
-                               const padding = 10;
-                               const left = padding + c * (seatSize + gap);
-                               const top = padding + r * (seatSize + gap);
+                              const seatSize = 24; 
+                              const gapX = zone.seatGapX ?? (zone.seatGap ?? 4);
+                              const gapY = zone.seatGapY ?? (zone.seatGap ?? 4);
+                              
+                              const rowLabel = String.fromCharCode(65 + r);
+                              // Calculate expected colLabel based on direction/start
+                              const dir = zone.numberingDirection || 'LTR';
+                              const start = zone.startNumber ?? 1;
+                              let colNum = dir === 'LTR' ? (c + start) : (zone.cols - c - 1 + start);
+                              const colLabel = colNum.toString();
+                              
+                              const seat = zoneSeats.find(s => {
+                                if (s.gridRow !== undefined && s.gridCol !== undefined) {
+                                  return s.gridRow === r && s.gridCol === c;
+                                }
+                                return s.rowLabel === rowLabel && s.colLabel === colLabel;
+                              });
+                              
+                              // Calculate position
+                              // Center the grid in the zone? Or top-left? 
+                              // User said "slide a la derecha", probably meaning just gap control.
+                              // Usually top-left aligned with padding is safer.
+                              const padding = 10;
+                              const left = padding + c * (seatSize + gapX);
+                              const top = padding + r * (seatSize + gapY);
                                
                                return (
                                  <div
@@ -1052,12 +1145,38 @@ export default function SeatDesigner({ event, onUpdate, onSaveStart }: SeatDesig
                              {seat.colLabel}
                            </div>
                          ))
-                       )}
-                     </div>
-                   )}
+                      )}
+                    </div>
+                  )}
+                  </div>
+                  
+                  {/* Zone Footer */}
+                 {isInteractive && (
+                      <div 
+                          className={`px-3 py-1 text-[10px] font-bold text-white flex justify-center items-center ${zone.color === 'transparent' ? 'opacity-0 group-hover:opacity-100 transition-opacity duration-200' : ''}`}
+                          style={{ backgroundColor: isStage ? '#000' : (isInfo ? '#64748B' : (zone.color === 'transparent' ? '#374151' : zone.color)) }}
+                      >
+                          <span>${zone.price}</span>
+                      </div>
+                 )}
                  </motion.div>
                );
-             })}
+              })}
+              
+              {/* Alignment Guides */}
+              {guides.map((g, i) => (
+                  <div
+                      key={i}
+                      className="absolute bg-indigo-500 z-50 pointer-events-none"
+                      style={{
+                          left: g.type === 'vertical' ? g.pos : -10000,
+                          top: g.type === 'horizontal' ? g.pos : -10000,
+                          width: g.type === 'vertical' ? '1px' : '20000px',
+                          height: g.type === 'horizontal' ? '1px' : '20000px',
+                          boxShadow: '0 0 2px rgba(255, 255, 255, 0.5)'
+                      }}
+                  />
+              ))}
           </div>
         </div>
       </div>
@@ -1461,6 +1580,27 @@ export default function SeatDesigner({ event, onUpdate, onSaveStart }: SeatDesig
                                     />
                                   </div>
                                 </div>
+                                
+                                <div className="grid grid-cols-2 gap-2 mt-2">
+                                  <div>
+                                    <label className="text-xs text-gray-600 block mb-1">Gap Horizontal</label>
+                                    <input 
+                                      type="number" 
+                                      value={zone.seatGapX ?? (zone.seatGap ?? 4)}
+                                      onChange={(e) => updateZone(zone.id, { seatGapX: parseInt(e.target.value) || 0 })}
+                                      className="w-full text-sm border-gray-300 rounded"
+                                    />
+                                  </div>
+                                  <div>
+                                    <label className="text-xs text-gray-600 block mb-1">Gap Vertical</label>
+                                    <input 
+                                      type="number" 
+                                      value={zone.seatGapY ?? (zone.seatGap ?? 4)}
+                                      onChange={(e) => updateZone(zone.id, { seatGapY: parseInt(e.target.value) || 0 })}
+                                      className="w-full text-sm border-gray-300 rounded"
+                                    />
+                                  </div>
+                                </div>
                                 <div className="grid grid-cols-2 gap-2 mt-2">
                                     <div>
                                         <label className="text-xs text-gray-600 block mb-1">Dir. Horizontal</label>
@@ -1757,7 +1897,8 @@ export default function SeatDesigner({ event, onUpdate, onSaveStart }: SeatDesig
                                       
                                       if (zone.rows > 0 && zone.cols > 0) {
                                           const seatSize = 24;
-                                          const gap = zone.seatGap ?? 4;
+                                          const gapX = zone.seatGapX ?? (zone.seatGap ?? 4);
+                                          const gapY = zone.seatGapY ?? (zone.seatGap ?? 4);
                                           const padding = 16;
                                           const dir = zone.numberingDirection || 'LTR';
                                           const start = zone.startNumber ?? 1;
@@ -1765,8 +1906,8 @@ export default function SeatDesigner({ event, onUpdate, onSaveStart }: SeatDesig
                                           // Iterate visual slots (0..rows, 0..cols) and find the seat that belongs there
                                           for (let r = 0; r < zone.rows; r++) {
                                               for (let c = 0; c < zone.cols; c++) {
-                                                  const left = padding + c * (seatSize + gap);
-                                                  const top = padding + r * (seatSize + gap);
+                                                  const left = padding + c * (seatSize + gapX);
+                                                  const top = padding + r * (seatSize + gapY);
                                                   
                                                   // Determine expected label for this slot
                                                   const rowLabel = String.fromCharCode(65 + r);
@@ -2001,19 +2142,20 @@ export default function SeatDesigner({ event, onUpdate, onSaveStart }: SeatDesig
                                 const colLabel = colNum.toString();
                                 
                                 // Fixed size logic
-                                const seatSize = 24;
-                                 const gap = zone.seatGap ?? 4;
-                                 const padding = 16;
-                                 const left = padding + col * (seatSize + gap);
-                                 const top = padding + row * (seatSize + gap);
-                                 
-                                 const commonStyle = {
-                                     position: 'absolute' as any,
-                                     left,
-                                     top,
-                                     width: seatSize,
-                                     height: seatSize
-                                 };
+                               const seatSize = 24;
+                                const gapX = zone.seatGapX ?? (zone.seatGap ?? 4);
+                                const gapY = zone.seatGapY ?? (zone.seatGap ?? 4);
+                                const padding = 16;
+                                const left = padding + col * (seatSize + gapX);
+                                const top = padding + row * (seatSize + gapY);
+                                
+                                const commonStyle = {
+                                    position: 'absolute' as any,
+                                    left,
+                                    top,
+                                    width: seatSize,
+                                    height: seatSize
+                                };
                                  
                                  // Find seat at this position
                                 const seat = seats.find(s => {

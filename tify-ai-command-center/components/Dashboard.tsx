@@ -1,14 +1,37 @@
-import React, { useEffect, useState } from 'react';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
-import { Activity, CheckCircle, Users, ArrowRight, AlertTriangle, Loader2 } from 'lucide-react';
-import { api } from '../services/api';
-import { UserStats, Channel, Message } from '../types';
-import { CHART_DATA_PLACEHOLDER } from '../constants';
+import React, { useState, useEffect } from 'react';
+import {
+  Users,
+  CheckCircle,
+  Activity,
+  AlertTriangle,
+  ArrowRight,
+} from 'lucide-react';
+import {
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+} from 'recharts';
 import { useI18n } from '../i18n';
+import { UserStats, Channel } from '../types';
+import { api } from '../services/api';
 
 interface DashboardProps {
-  onChangeView: (view: any) => void;
+  onChangeView: (view: string) => void;
 }
+
+const CHART_DATA_PLACEHOLDER = [
+  { name: 'Lun', sent: 400 },
+  { name: 'Mar', sent: 300 },
+  { name: 'Mie', sent: 550 },
+  { name: 'Jue', sent: 450 },
+  { name: 'Vie', sent: 600 },
+  { name: 'Sab', sent: 200 },
+  { name: 'Dom', sent: 150 },
+];
 
 const Dashboard: React.FC<DashboardProps> = ({ onChangeView }) => {
   const { t } = useI18n();
@@ -96,7 +119,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onChangeView }) => {
 
   if (loading) {
     return (
-      <div className="space-y-6 animate-pulse">
+      <div className="space-y-6 p-4 md:p-8 animate-pulse">
         <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
           <div>
             <div className="h-6 w-40 bg-gray-200 rounded" />

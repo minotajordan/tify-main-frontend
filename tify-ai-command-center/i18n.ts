@@ -79,6 +79,8 @@ const resources: Record<Lang, Record<string, string>> = {
     'dashboard.loading': 'Loading Dashboard...',
 
     'compose.title': 'Compose Message',
+    'compose.addAttachment': 'Attach file',
+    'compose.uploading': 'Uploading...',
     'feedback.sent': 'Message sent successfully!',
     'feedback.failed': 'Failed to send',
     destinationChannel: 'Destination Channel',
@@ -263,7 +265,9 @@ const resources: Record<Lang, Record<string, string>> = {
     'dashboard.loading': 'Cargando Panel...',
 
     'compose.title': 'Redactar Mensaje',
-    'feedback.sent': '¡Mensaje enviado con éxito!',
+    'compose.addAttachment': 'Adjuntar archivo',
+    'compose.uploading': 'Subiendo...',
+    'feedback.sent': '¡Mensaje enviado exitosamente!',
     'feedback.failed': 'Fallo al enviar',
     destinationChannel: 'Canal de destino',
     content: 'Contenido',

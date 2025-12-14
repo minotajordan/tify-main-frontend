@@ -9,10 +9,14 @@ import {
   CreditCard,
   User,
   Mail,
+  Phone,
+  FileText,
   ChevronRight,
   ZoomIn,
   ZoomOut,
-  Maximize
+  Maximize,
+  Share2,
+  ArrowLeft
 } from 'lucide-react';
 import { TifyEvent, EventZone, EventSeat, SeatStatus } from '../../types';
 import { api } from '../../services/api';
@@ -36,9 +40,12 @@ export default function PublicTicketPurchase({ eventId }: PublicTicketPurchasePr
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [cart, setCart] = useState<CartItem[]>([]);
-  const [step, setStep] = useState<'selection' | 'checkout' | 'confirmation'>('selection');
-  const [guestForm, setGuestForm] = useState({ fullName: '', email: '' });
+  const [step, setStep] = useState<'selection' | 'checkout' | 'confirmation' | 'manage'>('selection');
+  const [guestForm, setGuestForm] = useState({ fullName: '', email: '', phone: '', docId: '' });
   const [processing, setProcessing] = useState(false);
+  const [purchasedTickets, setPurchasedTickets] = useState<any[]>([]);
+  const [ticketToTransfer, setTicketToTransfer] = useState<any>(null);
+  const [transferForm, setTransferForm] = useState({ name: '', email: '', phone: '', docId: '' });
 
   // Zoom and Pan State
   const [transform, setTransform] = useState({ scale: 1, x: 0, y: 0 });
@@ -197,6 +204,46 @@ export default function PublicTicketPurchase({ eventId }: PublicTicketPurchasePr
     setCart([...others, ...newItems]);
   };
 
+  const handleTransfer = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!ticketToTransfer) return;
+    
+    setProcessing(true);
+    try {
+      const response = await fetch(`http://localhost:3333/api/tickets/transfer`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ticketId: ticketToTransfer.id,
+          newOwner: transferForm,
+          currentOwnerEmail: guestForm.email
+        })
+      });
+
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.error || 'Error al transferir el boleto');
+      }
+
+      const data = await response.json();
+      
+      // Update local state
+      setPurchasedTickets(prev => prev.map(t => 
+        t.id === ticketToTransfer.id ? { ...t, ...data.ticket } : t
+      ));
+
+      alert('¡Boleto transferido exitosamente! Se ha enviado un correo al nuevo propietario.');
+      setStep('confirmation');
+      setTicketToTransfer(null);
+      setTransferForm({ name: '', email: '', phone: '', docId: '' });
+    } catch (err: any) {
+      console.error(err);
+      alert(err.message || 'Error al transferir el boleto');
+    } finally {
+      setProcessing(false);
+    }
+  };
+
   const handleCheckout = async (e: React.FormEvent) => {
     e.preventDefault();
     setProcessing(true);
@@ -216,6 +263,8 @@ export default function PublicTicketPurchase({ eventId }: PublicTicketPurchasePr
         throw new Error(errorData.error || 'Error en la compra');
       }
 
+      const data = await response.json();
+      setPurchasedTickets(data.tickets || []);
       setStep('confirmation');
     } catch (err: any) {
       console.error(err);
@@ -370,60 +419,66 @@ export default function PublicTicketPurchase({ eventId }: PublicTicketPurchasePr
                   <div
                     key={zone.id}
                     className={`
-                      absolute border-2 rounded-lg p-4 flex flex-col items-center justify-center transition-colors shadow-sm
+                      absolute border-2 rounded-lg p-4 flex flex-col items-center justify-center transition-colors shadow-sm group
                       ${isSoldOut 
                         ? 'bg-gray-100 border-gray-300 cursor-not-allowed opacity-75' 
-                        : 'bg-indigo-50 border-indigo-200 cursor-pointer hover:bg-indigo-100'
+                        : (zone.color === 'transparent' ? 'bg-transparent border-indigo-200 cursor-pointer' : 'bg-indigo-50 border-indigo-200 cursor-pointer hover:bg-indigo-100')
                       }
                     `}
                     style={{
                       left: zone.layout?.x || 50,
                       top: zone.layout?.y || 100,
                       width: zone.layout?.width || 200,
-                      height: zone.layout?.height || 150
+                      height: zone.layout?.height || 150,
+                      backgroundColor: zone.color === 'transparent' ? 'transparent' : (zone.color ? `${zone.color}10` : undefined),
+                      borderColor: zone.color || undefined,
+                      transform: zone.rotation ? `rotate(${zone.rotation}deg)` : 'none',
+                      transformOrigin: 'center center'
                     }}
                   >
-                    <span className={`font-bold ${isSoldOut ? 'text-gray-500' : 'text-indigo-900'}`}>{zone.name}</span>
-                    <span className={`text-xs mb-1 ${isSoldOut ? 'text-gray-400' : 'text-indigo-600'}`}>Entrada General (Ubicación Libre)</span>
-                    <span className="text-sm font-semibold">${zone.price.toLocaleString()}</span>
-                    
-                    {isSoldOut ? (
-                      <div className="mt-2 px-3 py-1 bg-red-100 text-red-600 text-xs font-bold rounded-full border border-red-200">
-                        AGOTADO
-                      </div>
-                    ) : (
-                      <>
-                        <div className="text-xs text-gray-500 mb-2 mt-1">
-                          {available} disponibles
-                        </div>
-                        <div className="flex items-center gap-2 bg-white rounded-lg p-1 border border-indigo-100">
-                          <button 
-                            className="w-6 h-6 flex items-center justify-center bg-indigo-50 text-indigo-600 rounded hover:bg-indigo-100"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              if (currentInCart > 0) updateGeneralAdmission(zone, currentInCart - 1);
-                            }}
-                          >
-                            -
-                          </button>
-                          <span className="w-8 text-center text-sm font-medium">{currentInCart}</span>
-                          <button 
-                            className={`w-6 h-6 flex items-center justify-center rounded text-white ${
-                              currentInCart >= available 
-                                ? 'bg-gray-300 cursor-not-allowed' 
-                                : 'bg-indigo-600 hover:bg-indigo-700'
-                            }`}
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              if (currentInCart < available) updateGeneralAdmission(zone, currentInCart + 1);
-                            }}
-                            disabled={currentInCart >= available}
-                          >
-                            +
-                          </button>
-                        </div>
-                      </>
-                    )}
+                    <div className={`flex flex-col items-center w-full ${zone.color === 'transparent' ? 'opacity-0 group-hover:opacity-100 transition-opacity duration-200' : ''}`}>
+                        <span className={`font-bold ${isSoldOut ? 'text-gray-500' : 'text-indigo-900'}`}>{zone.name}</span>
+                        <span className={`text-xs mb-1 ${isSoldOut ? 'text-gray-400' : 'text-indigo-600'}`}>Entrada General</span>
+                        <span className="text-sm font-semibold">${zone.price.toLocaleString()}</span>
+                        
+                        {isSoldOut ? (
+                          <div className="mt-2 px-3 py-1 bg-red-100 text-red-600 text-xs font-bold rounded-full border border-red-200">
+                            AGOTADO
+                          </div>
+                        ) : (
+                          <>
+                            <div className="text-xs text-gray-500 mb-2 mt-1">
+                              {available} disponibles
+                            </div>
+                            <div className="flex items-center gap-2 bg-white rounded-lg p-1 border border-indigo-100 shadow-sm">
+                              <button 
+                                className="w-6 h-6 flex items-center justify-center bg-indigo-50 text-indigo-600 rounded hover:bg-indigo-100"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  if (currentInCart > 0) updateGeneralAdmission(zone, currentInCart - 1);
+                                }}
+                              >
+                                -
+                              </button>
+                              <span className="w-8 text-center text-sm font-medium">{currentInCart}</span>
+                              <button 
+                                className={`w-6 h-6 flex items-center justify-center rounded text-white ${
+                                  currentInCart >= available 
+                                    ? 'bg-gray-300 cursor-not-allowed' 
+                                    : 'bg-indigo-600 hover:bg-indigo-700'
+                                }`}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  if (currentInCart < available) updateGeneralAdmission(zone, currentInCart + 1);
+                                }}
+                                disabled={currentInCart >= available}
+                              >
+                                +
+                              </button>
+                            </div>
+                          </>
+                        )}
+                    </div>
                   </div>
                 );
               }
@@ -433,26 +488,26 @@ export default function PublicTicketPurchase({ eventId }: PublicTicketPurchasePr
               return (
                 <div 
                   key={zone.id}
-                  className="absolute rounded-lg border-2 border-opacity-50 transition-all hover:border-opacity-100 hover:shadow-sm"
+                  className="absolute border-2 rounded-xl shadow-sm overflow-hidden flex flex-col group"
                   style={{
                     left: zone.layout?.x || 0,
                     top: zone.layout?.y || 0,
                     width: zone.layout?.width || (zone.cols * 40 + 40),
                     height: zone.layout?.height || (zone.rows * 40 + 40),
                     borderColor: zone.color || '#cbd5e1',
-                    backgroundColor: zone.color ? `${zone.color}10` : 'rgba(255,255,255,0.5)',
+                    backgroundColor: zone.color === 'transparent' ? 'transparent' : (zone.color ? `${zone.color}10` : 'rgba(255,255,255,0.5)'),
                     transform: zone.rotation ? `rotate(${zone.rotation}deg)` : 'none',
                     transformOrigin: 'center center'
                   }}
                 >
                   <div 
-                    className="absolute -top-7 left-0 px-2 py-1 rounded text-xs font-bold text-white shadow-sm flex items-center gap-2"
-                    style={{ backgroundColor: zone.color || '#64748b' }}
+                    className={`px-3 py-1 text-xs font-bold text-white flex justify-center items-center ${zone.color === 'transparent' ? 'opacity-0 group-hover:opacity-100 transition-opacity duration-200' : ''}`}
+                    style={{ backgroundColor: zone.color === 'transparent' ? '#374151' : (zone.color || '#64748b') }}
                   >
                     <span>{zone.name}</span>
-                    <span className="bg-white/20 px-1 rounded text-[10px]">${zone.price}</span>
                   </div>
                   
+                  <div className="flex-1 relative w-full">
                   {zoneSeats.map(seat => {
                     const isSelected = cart.some(item => item.id === seat.id);
                     const isAvailable = seat.status === SeatStatus.AVAILABLE;
@@ -467,7 +522,8 @@ export default function PublicTicketPurchase({ eventId }: PublicTicketPurchasePr
                     } else if (zone.rows > 0 && zone.cols > 0) {
                       // Grid calculation - Fixed size with gap
                       const seatSize = 24;
-                      const gap = zone.seatGap ?? 4;
+                      const gapX = zone.seatGapX ?? (zone.seatGap ?? 4);
+                      const gapY = zone.seatGapY ?? (zone.seatGap ?? 4);
                       const padding = 10; // Match SeatDesigner padding (it was 10 in designer, 16 here previously)
                       
                       width = seatSize;
@@ -475,8 +531,8 @@ export default function PublicTicketPurchase({ eventId }: PublicTicketPurchasePr
                       
                       // Use grid coordinates if available (Preferred)
                       if (seat.gridRow !== undefined && seat.gridCol !== undefined) {
-                        left = padding + seat.gridCol * (seatSize + gap);
-                        top = padding + seat.gridRow * (seatSize + gap);
+                        left = padding + seat.gridCol * (seatSize + gapX);
+                        top = padding + seat.gridRow * (seatSize + gapY);
                       } else {
                         // Fallback Legacy Calculation
                         const r = seat.rowLabel.charCodeAt(0) - 65;
@@ -491,8 +547,8 @@ export default function PublicTicketPurchase({ eventId }: PublicTicketPurchasePr
                             c = zone.cols - (labelNum - start) - 1;
                         }
                         
-                        left = padding + c * (seatSize + gap);
-                        top = padding + r * (seatSize + gap);
+                        left = padding + c * (seatSize + gapX);
+                        top = padding + r * (seatSize + gapY);
                       }
                     } else {
                       // Fallback for missing coords/grid
@@ -523,6 +579,15 @@ export default function PublicTicketPurchase({ eventId }: PublicTicketPurchasePr
                       </button>
                     );
                   })}
+                  </div>
+                  
+                  {/* Zone Footer */}
+                  <div 
+                      className={`px-3 py-1 text-[10px] font-bold text-white flex justify-center items-center ${zone.color === 'transparent' ? 'opacity-0 group-hover:opacity-100 transition-opacity duration-200' : ''}`}
+                      style={{ backgroundColor: zone.color === 'transparent' ? '#374151' : (zone.color || '#64748b') }}
+                  >
+                      <span>${zone.price}</span>
+                  </div>
                 </div>
               );
             })}
@@ -692,6 +757,42 @@ export default function PublicTicketPurchase({ eventId }: PublicTicketPurchasePr
                       <p className="text-xs text-slate-500 mt-1">Enviaremos tus entradas a este correo.</p>
                     </div>
 
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium text-slate-700 mb-1">Teléfono</label>
+                        <div className="relative">
+                          <Phone className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+                          <input 
+                            required
+                            type="tel"
+                            value={guestForm.phone}
+                            onChange={e => setGuestForm({...guestForm, phone: e.target.value})}
+                            className="w-full pl-10 pr-4 py-3 border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all"
+                            placeholder="+57 300..."
+                          />
+                        </div>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-slate-700 mb-1">Documento ID</label>
+                        <div className="relative">
+                          <FileText className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+                          <input 
+                            required
+                            type="text"
+                            value={guestForm.docId}
+                            onChange={e => setGuestForm({...guestForm, docId: e.target.value})}
+                            className="w-full pl-10 pr-4 py-3 border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all"
+                            placeholder="123456789"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                    
+                    <div className="bg-blue-50 p-4 rounded-lg border border-blue-100 text-sm text-blue-800">
+                       <p className="font-semibold mb-1">💡 Mejora tu experiencia</p>
+                       <p>Registrar tus datos completos nos permite generar tu factura y asegurar tus boletos. Además, podrás transferirlos fácilmente si no puedes asistir.</p>
+                    </div>
+
                     <div className="pt-4 border-t border-slate-100">
                       <label className="block text-sm font-medium text-slate-700 mb-3">Método de Pago</label>
                       <div className="grid grid-cols-2 gap-3">
@@ -728,30 +829,52 @@ export default function PublicTicketPurchase({ eventId }: PublicTicketPurchasePr
         )}
 
         {step === 'confirmation' && (
-          <div className="max-w-md mx-auto text-center pt-10">
-            <motion.div 
-              initial={{ scale: 0.5, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              className="w-24 h-24 bg-green-100 text-green-600 rounded-full flex items-center justify-center mx-auto mb-6"
-            >
-              <CheckCircle size={48} />
-            </motion.div>
-            <h2 className="text-3xl font-bold text-slate-900 mb-2">¡Compra Exitosa!</h2>
-            <p className="text-slate-500 mb-8">
+          <div className="text-center py-12">
+            <div className="w-20 h-20 bg-green-100 text-green-600 rounded-full flex items-center justify-center mx-auto mb-6">
+              <CheckCircle size={40} />
+            </div>
+            <h2 className="text-2xl font-bold text-slate-900 mb-2">¡Pago Exitoso!</h2>
+            <p className="text-slate-600 mb-8">
               Hemos enviado tus entradas a <strong>{guestForm.email}</strong>
             </p>
             
             <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 mb-8 text-left">
-              <h3 className="font-bold text-slate-900 border-b border-slate-100 pb-2 mb-4">Resumen de Compra</h3>
-              <div className="space-y-2 mb-4">
-                {cart.map((item, idx) => (
-                  <div key={idx} className="flex justify-between text-sm">
-                    <span className="text-slate-600">{item.zoneName} - {item.name}</span>
-                    <span className="font-medium">${item.price.toLocaleString()}</span>
+              <h3 className="font-bold text-slate-900 border-b border-slate-100 pb-2 mb-4">Tus Boletos</h3>
+              <div className="space-y-4">
+                {purchasedTickets.map((ticket) => (
+                  <div key={ticket.id} className="border border-slate-200 rounded-lg p-4 flex flex-col md:flex-row justify-between items-center gap-4">
+                    <div className="flex items-center gap-4">
+                      <div className="w-16 h-16 bg-slate-100 rounded-lg flex items-center justify-center">
+                        <Ticket size={24} className="text-slate-400" />
+                      </div>
+                      <div>
+                        <p className="font-bold text-slate-900">{ticket.zone?.name || 'Zona'}</p>
+                        <p className="text-sm text-slate-600">
+                           {ticket.seat ? `Fila ${ticket.seat.rowLabel} - Asiento ${ticket.seat.colLabel}` : 'Entrada General'}
+                        </p>
+                        <p className="text-xs text-slate-500 mt-1">
+                          Propietario: {ticket.ownerName || guestForm.fullName}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex flex-col items-end gap-2">
+                      <span className="font-bold text-slate-900">${ticket.price.toLocaleString()}</span>
+                      <button
+                        onClick={() => {
+                          setTicketToTransfer(ticket);
+                          setStep('manage');
+                        }}
+                        className="flex items-center gap-1 text-sm text-indigo-600 hover:text-indigo-800 font-medium px-3 py-1 bg-indigo-50 hover:bg-indigo-100 rounded-md transition-colors"
+                      >
+                        <Share2 size={14} />
+                        Transferir
+                      </button>
+                    </div>
                   </div>
                 ))}
               </div>
-              <div className="flex justify-between text-lg font-bold text-slate-900 border-t border-slate-100 pt-2">
+              
+              <div className="flex justify-between text-lg font-bold text-slate-900 border-t border-slate-100 pt-4 mt-6">
                 <span>Total Pagado</span>
                 <span>${totalPrice.toLocaleString()}</span>
               </div>
@@ -763,6 +886,131 @@ export default function PublicTicketPurchase({ eventId }: PublicTicketPurchasePr
             >
               Volver al inicio
             </button>
+          </div>
+        )}
+
+        {step === 'manage' && ticketToTransfer && (
+          <div className="max-w-2xl mx-auto py-8">
+            <button 
+              onClick={() => {
+                setStep('confirmation');
+                setTicketToTransfer(null);
+              }}
+              className="flex items-center text-slate-600 hover:text-slate-900 mb-6"
+            >
+              <ArrowLeft size={20} className="mr-2" />
+              Volver a mis boletos
+            </button>
+            
+            <div className="bg-white p-8 rounded-xl shadow-sm border border-slate-200">
+              <h2 className="text-2xl font-bold text-slate-900 mb-2">Transferir Boleto</h2>
+              <p className="text-slate-600 mb-6">
+                Ingresa los datos de la persona a quien deseas transferir este boleto. Una vez transferido, no podrás recuperarlo.
+              </p>
+              
+              <div className="bg-slate-50 p-4 rounded-lg border border-slate-200 mb-6 flex items-center gap-4">
+                <div className="w-12 h-12 bg-white rounded-lg flex items-center justify-center shadow-sm">
+                  <Ticket size={20} className="text-indigo-600" />
+                </div>
+                <div>
+                   <p className="font-bold text-slate-900">{ticketToTransfer.zone?.name}</p>
+                   <p className="text-sm text-slate-600">
+                      {ticketToTransfer.seat ? `Fila ${ticketToTransfer.seat.rowLabel} - Asiento ${ticketToTransfer.seat.colLabel}` : 'Entrada General'}
+                   </p>
+                </div>
+              </div>
+
+              <form onSubmit={handleTransfer} className="space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-1">Nombre Completo</label>
+                    <div className="relative">
+                      <User className="absolute left-3 top-3 text-slate-400" size={18} />
+                      <input 
+                        type="text" 
+                        required
+                        className="w-full pl-10 pr-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                        placeholder="Nombre del nuevo titular"
+                        value={transferForm.name}
+                        onChange={e => setTransferForm({...transferForm, name: e.target.value})}
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-1">Email</label>
+                    <div className="relative">
+                      <Mail className="absolute left-3 top-3 text-slate-400" size={18} />
+                      <input 
+                        type="email" 
+                        required
+                        className="w-full pl-10 pr-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                        placeholder="correo@ejemplo.com"
+                        value={transferForm.email}
+                        onChange={e => setTransferForm({...transferForm, email: e.target.value})}
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-1">Teléfono</label>
+                    <div className="relative">
+                      <Phone className="absolute left-3 top-3 text-slate-400" size={18} />
+                      <input 
+                        type="tel" 
+                        required
+                        className="w-full pl-10 pr-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                        placeholder="+57 300 123 4567"
+                        value={transferForm.phone}
+                        onChange={e => setTransferForm({...transferForm, phone: e.target.value})}
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-1">Documento ID</label>
+                    <div className="relative">
+                      <FileText className="absolute left-3 top-3 text-slate-400" size={18} />
+                      <input 
+                        type="text" 
+                        required
+                        className="w-full pl-10 pr-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                        placeholder="CC 123456789"
+                        value={transferForm.docId}
+                        onChange={e => setTransferForm({...transferForm, docId: e.target.value})}
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="pt-4 flex gap-3">
+                  <button 
+                    type="button"
+                    onClick={() => {
+                      setStep('confirmation');
+                      setTicketToTransfer(null);
+                    }}
+                    className="flex-1 py-3 bg-white text-slate-700 font-bold rounded-lg border border-slate-300 hover:bg-slate-50 transition-colors"
+                  >
+                    Cancelar
+                  </button>
+                  <button 
+                    type="submit"
+                    disabled={processing}
+                    className="flex-1 py-3 bg-indigo-600 text-white font-bold rounded-lg hover:bg-indigo-700 transition-colors disabled:opacity-50 flex justify-center items-center gap-2"
+                  >
+                    {processing ? (
+                      <>
+                        <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                        Procesando...
+                      </>
+                    ) : (
+                      <>
+                        <Share2 size={18} />
+                        Confirmar Transferencia
+                      </>
+                    )}
+                  </button>
+                </div>
+              </form>
+            </div>
           </div>
         )}
       </main>
