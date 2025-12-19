@@ -83,6 +83,7 @@ import {
   Palette,
   MousePointer2,
   Download,
+  Sidebar,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { api, uploadFile } from '../services/api';
@@ -579,17 +580,29 @@ const ChannelManager: React.FC = () => {
   const [showLocationPicker, setShowLocationPicker] = useState(false);
   const [composeLocationData, setComposeLocationData] = useState<{
     markers: [number, number][];
-    polylines: [number, number][][];
+    polylines: { points: [number, number][]; color: string }[];
   } | null>(null);
 
-  const handleLocationSave = (data: { markers: [number, number][]; polylines: [number, number][][] }) => {
-    setComposeLocationData(data);
+  const handleLocationSave = (data: { markers: [number, number][]; polylines: { points: [number, number][]; color: string }[] }) => {
+    setComposeLocationData({
+      markers: data.markers,
+      polylines: data.polylines
+    });
     setShowLocationPicker(false);
   };
   
   // Header/Footer State
+  const [headerLayout, setHeaderLayout] = useState<'inline' | 'drawer'>('inline');
+  const [drawerOpen, setDrawerOpen] = useState(false);
   const [isHeaderFooterModalOpen, setIsHeaderFooterModalOpen] = useState(false);
   const [headerFooterTab, setHeaderFooterTab] = useState<'header' | 'footer'>('header');
+
+  // Auto-collapse header when switching to drawer mode
+  useEffect(() => {
+    if (headerLayout === 'drawer') {
+      setIsHeaderCompact(true);
+    }
+  }, [headerLayout]);
   
   interface TemplateStructure {
     layout: 'full' | 'split';
@@ -995,6 +1008,20 @@ const ChannelManager: React.FC = () => {
   const [expandedApprovers, setExpandedApprovers] = useState<Record<string, boolean>>({});
   const [calendarConfirmOpen, setCalendarConfirmOpen] = useState(false);
   const [calendarConfirmEvent, setCalendarConfirmEvent] = useState<{ date: string; time?: string; activity: string } | null>(null);
+  const [emergencyCount, setEmergencyCount] = useState(0);
+
+  useEffect(() => {
+    if (!selectedChannel) return;
+    const fetchEmergencyCount = async () => {
+      try {
+        const res = await api.getChannelMessages(selectedChannel.id, 1, 1, { emergency: true });
+        setEmergencyCount(res.pagination.total);
+      } catch {
+        setEmergencyCount(0);
+      }
+    };
+    fetchEmergencyCount();
+  }, [selectedChannel, messagesItems]); // Update when channel changes or messages list updates
 
   const resetMessagesFilters = () => {
     setMessagesSearch('');
@@ -1841,6 +1868,8 @@ const ChannelManager: React.FC = () => {
     }
   }, [selectedChannel?.id]);
 
+  const [isHeaderCompact, setIsHeaderCompact] = useState(true);
+
   const StatusBadge = ({ status }: { status?: VerificationStatus }) => {
     switch (status) {
       case VerificationStatus.VERIFIED_CERTIFIED:
@@ -2314,33 +2343,80 @@ const ChannelManager: React.FC = () => {
               <ArrowLeft size={20} />
             </button>
             
-            {/* Breadcrumbs */}
+            {/* Breadcrumbs or Compact Info */}
             <div className="flex items-center gap-2 overflow-hidden">
-              {parentChannel && (
-                <div className="flex items-center gap-1 text-sm text-gray-500 truncate flex shrink-0">
-                  <button
-                    onClick={() => {
-                      if (selectedChannel.parentId) {
-                        setLastVisitedSubchannelId(selectedChannel.id);
-                        setSelectedChannel(parentChannel);
-                      } else {
-                        setSelectedChannel(parentChannel);
-                      }
-                    }}
-                    className="hover:underline hover:text-gray-700 truncate max-w-[150px]"
-                  >
-                    {parentChannel.title}
-                  </button>
-                  <ChevronRight size={14} className="shrink-0 text-gray-400" />
+              {!isHeaderCompact ? (
+                // Original Breadcrumbs for Expanded Mode
+                <>
+                  {parentChannel && (
+                    <div className="flex items-center gap-1 text-sm text-gray-500 truncate flex shrink-0">
+                      <button
+                        onClick={() => {
+                          if (selectedChannel.parentId) {
+                            setLastVisitedSubchannelId(selectedChannel.id);
+                            setSelectedChannel(parentChannel);
+                          } else {
+                            setSelectedChannel(parentChannel);
+                          }
+                        }}
+                        className="hover:underline hover:text-gray-700 truncate max-w-[150px]"
+                      >
+                        {parentChannel.title}
+                      </button>
+                      <ChevronRight size={14} className="shrink-0 text-gray-400" />
+                    </div>
+                  )}
+                  <h2 className="text-base font-semibold text-gray-900 truncate">
+                    {selectedChannel.parentId ? selectedChannel.title : 'Canales'}
+                  </h2>
+                </>
+              ) : (
+                // Compact Mode Info
+                <div className="flex items-center gap-3">
+                  {selectedChannel.logoUrl ? (
+                    <img
+                      src={selectedChannel.logoUrl}
+                      alt={selectedChannel.title}
+                      className="w-8 h-8 rounded-lg border border-gray-100 object-cover shadow-sm"
+                    />
+                  ) : (
+                    <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-indigo-50 to-white flex items-center justify-center text-indigo-600 font-bold text-sm border border-indigo-100 shadow-sm">
+                      {selectedChannel.title.charAt(0).toUpperCase()}
+                    </div>
+                  )}
+                  <div className="flex flex-col min-w-0">
+                    <div className="flex items-center gap-2">
+                      <h2 className="text-base font-bold text-gray-900 truncate">
+                        {selectedChannel.title}
+                      </h2>
+                      <StatusBadge status={selectedChannel.verificationStatus} />
+                    </div>
+                    <div className="flex items-center gap-2 text-[10px] text-gray-500">
+                      <span className="flex items-center gap-1">
+                        {selectedChannel.isPublic ? <Globe size={10} /> : <Lock size={10} />}
+                        {selectedChannel.isPublic ? 'Público' : 'Privado'}
+                      </span>
+                      <span>•</span>
+                      <span className="flex items-center gap-1">
+                        <Users size={10} />
+                        {selectedChannel.memberCount || 0}
+                      </span>
+                    </div>
+                  </div>
                 </div>
               )}
-              <h2 className="text-base font-semibold text-gray-900 truncate">
-                {selectedChannel.parentId ? selectedChannel.title : 'Canales'}
-              </h2>
             </div>
           </div>
 
           <div className="flex items-center gap-1">
+            <button
+              onClick={() => setHeaderLayout(prev => prev === 'inline' ? 'drawer' : 'inline')}
+              className="hidden md:flex items-center gap-2 px-2 py-1 text-xs font-medium text-gray-600 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors mr-2"
+              title="Cambiar estilo de visualización"
+            >
+              {headerLayout === 'inline' ? <LayoutList size={14} /> : <Sidebar size={14} />}
+              {headerLayout === 'inline' ? 'Expandible' : 'Lateral'}
+            </button>
             <div className="relative">
               <button
                 onClick={() => setSpeedDialOpen((v) => !v)}
@@ -2411,10 +2487,21 @@ const ChannelManager: React.FC = () => {
             >
               <Settings size={20} />
             </button>
+            {/* Header Toggle Button (Only for Inline Mode) */}
+            {headerLayout === 'inline' && (
+              <button
+                onClick={() => setIsHeaderCompact((prev) => !prev)}
+                className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+                title={isHeaderCompact ? "Expandir encabezado" : "Contraer encabezado"}
+              >
+                {isHeaderCompact ? <ChevronDown size={20} /> : <ChevronRight size={20} className="rotate-[-90deg]" />}
+              </button>
+            )}
           </div>
         </div>
 
-        {/* Identity Section */}
+        {/* Identity Section (Only in Expanded Mode and Inline Layout) */}
+        {!isHeaderCompact && headerLayout === 'inline' && (
         <div className="px-6 pb-6 pt-2">
           <div className="flex items-start gap-5">
             <div className="shrink-0">
@@ -2463,6 +2550,7 @@ const ChannelManager: React.FC = () => {
             </div>
           </div>
         </div>
+        )}
       </div>
       
       <div className="flex items-center px-4 border-b border-gray-100 overflow-x-auto shrink-0 scrollbar-hide">
@@ -2513,6 +2601,86 @@ const ChannelManager: React.FC = () => {
           </button>
         )}
       </div>
+
+      {/* Drawer Panel for Proposal 2 */}
+      {headerLayout === 'drawer' && drawerOpen && (
+        <div className="absolute top-0 right-0 bottom-0 w-80 bg-white border-l border-gray-200 shadow-xl z-30 flex flex-col animate-in slide-in-from-right duration-300">
+          <div className="p-4 border-b border-gray-100 flex items-center justify-between bg-gray-50">
+            <h3 className="font-semibold text-gray-900">Detalles del Canal</h3>
+            <button 
+              onClick={() => setDrawerOpen(false)}
+              className="p-1.5 text-gray-500 hover:bg-gray-200 rounded-full"
+            >
+              <X size={18} />
+            </button>
+          </div>
+          <div className="p-6 overflow-y-auto flex-1">
+            <div className="flex flex-col items-center text-center mb-6">
+              {selectedChannel.logoUrl ? (
+                <img
+                  src={selectedChannel.logoUrl}
+                  alt={selectedChannel.title}
+                  className="w-20 h-20 rounded-2xl border border-gray-100 object-cover shadow-sm mb-3"
+                />
+              ) : (
+                <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-indigo-50 to-white flex items-center justify-center text-indigo-600 font-bold text-3xl border border-indigo-100 shadow-sm mb-3">
+                  {selectedChannel.title.charAt(0).toUpperCase()}
+                </div>
+              )}
+              <h2 className="text-xl font-bold text-gray-900 mb-1">
+                {selectedChannel.title}
+              </h2>
+              <StatusBadge status={selectedChannel.verificationStatus} />
+            </div>
+
+            <div className="space-y-6">
+              <div>
+                <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">Información</h4>
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-gray-500">Visibilidad</span>
+                    <span className="flex items-center gap-1.5 font-medium text-gray-900">
+                      {selectedChannel.isPublic ? <Globe size={14} /> : <Lock size={14} />}
+                      {selectedChannel.isPublic ? 'Público' : 'Privado'}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-gray-500">Miembros</span>
+                    <span className="flex items-center gap-1.5 font-medium text-gray-900">
+                      <Users size={14} />
+                      {selectedChannel.memberCount || 0}
+                    </span>
+                  </div>
+                  {selectedChannel.referenceCode && (
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-gray-500">Código</span>
+                      <span className="font-mono bg-gray-50 px-2 py-0.5 rounded border border-gray-200 text-gray-700 text-xs">
+                        {selectedChannel.referenceCode}
+                      </span>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div>
+                <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Descripción</h4>
+                <p className="text-sm text-gray-600 leading-relaxed">
+                  {selectedChannel.description || 'Sin descripción'}
+                </p>
+              </div>
+
+              <div className="pt-4 border-t border-gray-100">
+                 <button
+                   onClick={() => setActiveTab('details')}
+                   className="w-full py-2 px-4 bg-indigo-50 text-indigo-600 font-medium rounded-lg hover:bg-indigo-100 transition-colors text-sm"
+                 >
+                   Ver configuración completa
+                 </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       <>
         <div className="p-3 flex-1 overflow-y-auto">
@@ -3499,7 +3667,7 @@ const ChannelManager: React.FC = () => {
 
             {pendingModalOpen && (
               <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center">
-                <div className="bg-white w-full max-w-3xl rounded-xl shadow-lg border border-gray-200">
+                <div className="bg-white w-full max-w-3xl rounded-xl shadow-lg border border-gray-200 max-h-[90vh] flex flex-col">
                   <div className="p-4 border-b border-gray-100 flex items-center justify-between">
                     <div>
                       <h3 className="text-lg font-semibold text-gray-900">
@@ -3516,7 +3684,7 @@ const ChannelManager: React.FC = () => {
                       <X size={18} />
                     </button>
                   </div>
-                  <div className="p-6">
+                  <div className="p-6 overflow-y-auto">
                     {pendingLoading ? (
                       <div className="animate-pulse space-y-2">
                         {Array.from({ length: 6 }).map((_, i) => (
@@ -3534,7 +3702,7 @@ const ChannelManager: React.FC = () => {
                         </div>
                       </div>
                     ) : (
-                      <div className="max-h-[50vh] overflow-y-auto space-y-3">
+                      <div className="space-y-3">
                         {pendingItems.map((m) => (
                           <div
                             key={m.id}
@@ -3625,93 +3793,13 @@ const ChannelManager: React.FC = () => {
                 className={`${(activeTab === 'messages') ? ' v-full h-full static bg-transparent z-auto' : 'fixed inset-0 bg-black/40 z-50'} flex items-center justify-center`}
               >
                 <div
-                  className={`bg-white w-full h-full v-full ${(activeTab === 'messages') ? '' : 'max-w-3xl'} rounded-xl`}
+                  className={`bg-white w-full h-full v-full flex flex-col overflow-hidden ${(activeTab === 'messages') ? '' : 'max-w-3xl'} rounded-xl`}
                 >
-                  <div className="p-4 border-b border-gray-100 flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <div className="flex flex-col">
-                        <span className="text-xs font-semibold text-gray-900">Mensajes</span>
-                        <div className="text-xs text-gray-500 flex items-center gap-1">
-                          <span>Rango</span>
-                          <button
-                            onClick={(e) => {
-                              setRangeMenuOpen((v) => !v);
-                              setRangeMenuAnchorEl(e.currentTarget as HTMLElement);
-                            }}
-                            className="px-1.5 py-0.5 rounded border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 inline-flex items-center gap-1"
-                          >
-                            {statsRange === '1h'
-                              ? '1H'
-                              : statsRange === '24h'
-                                ? '24H'
-                                : statsRange === '7d'
-                                  ? '1 Semana'
-                                  : statsRange === '1m'
-                                    ? '1 Mes'
-                                    : 'Histórico'}
-                            <ChevronDown size={12} className="text-gray-500" />
-                          </button>
-                          {rangeMenuOpen && (
-                            <Popper
-                              open
-                              placement="bottom-start"
-                              anchorEl={rangeMenuAnchorEl}
-                              style={{ zIndex: 1000 }}
-                            >
-                              <div className="bg-white border border-gray-200 rounded shadow p-1 text-xs">
-                                <button
-                                  onClick={() => {
-                                    setStatsRange('1h');
-                                    setRangeMenuOpen(false);
-                                  }}
-                                  className="block w-full text-left px-2 py-1 rounded hover:bg-gray-50"
-                                >
-                                  1H
-                                </button>
-                                <button
-                                  onClick={() => {
-                                    setStatsRange('24h');
-                                    setRangeMenuOpen(false);
-                                  }}
-                                  className="block w-full text-left px-2 py-1 rounded hover:bg-gray-50"
-                                >
-                                  24H
-                                </button>
-                                <button
-                                  onClick={() => {
-                                    setStatsRange('7d');
-                                    setRangeMenuOpen(false);
-                                  }}
-                                  className="block w-full text-left px-2 py-1 rounded hover:bg-gray-50"
-                                >
-                                  1 Semana
-                                </button>
-                                <button
-                                  onClick={() => {
-                                    setStatsRange('1m');
-                                    setRangeMenuOpen(false);
-                                  }}
-                                  className="block w-full text-left px-2 py-1 rounded hover:bg-gray-50"
-                                >
-                                  1 Mes
-                                </button>
-                                <button
-                                  onClick={() => {
-                                    setStatsRange('all');
-                                    setRangeMenuOpen(false);
-                                  }}
-                                  className="block w-full text-left px-2 py-1 rounded hover:bg-gray-50"
-                                >
-                                  Histórico
-                                </button>
-                              </div>
-                            </Popper>
-                          )}
-                        </div>
-                      </div>
-                      <span className="h-4 w-px bg-gray-200"></span>
-                      <h3 className="text-lg font-semibold text-gray-900">
-                        Mensajes {(() => {
+                  <div className="p-2 border-b border-gray-100 flex items-center justify-between gap-2 bg-white sticky top-0 z-20">
+                    <div className="flex items-center gap-2 shrink-0">
+                      <span className="h-3 w-px bg-gray-200 mx-1"></span>
+                      <h3 className="text-sm font-semibold text-gray-900 truncate max-w-[100px] sm:max-w-[150px]">
+                        {(() => {
                           const subId = messagesModalOpen
                             ? messagesForSub
                             : (selectedChannel?.parentId && activeTab === 'messages')
@@ -3727,254 +3815,160 @@ const ChannelManager: React.FC = () => {
                         })()}
                       </h3>
                     </div>
-                    {selectedChannel?.parentId ? (
-                      <button
-                        onClick={() => setInlineStatsHidden((v) => !v)}
-                        className="text-gray-500 hover:text-gray-700 p-2 hover:bg-gray-50 rounded-full transition-transform duration-200"
-                        aria-label={inlineStatsHidden ? 'Minimizar' : 'Ampliar'}
-                        title={inlineStatsHidden ? 'Minimizar' : 'Ampliar'}
-                      >
-                        {inlineStatsHidden ? (
-                          <Minimize2 size={18} className="transform" />
-                        ) : (
-                          <Maximize2 size={18} className="transform" />
-                        )}
-                      </button>
-                    ) : (
-                      <button
-                        onClick={() => {
-                          setMessagesSearch('');
-                          setMessagesQuick('all');
-                          setMessagesFilter({
-                            priority: undefined,
-                            emergency: undefined,
-                            expired: undefined,
-                            hasApprovals: undefined,
-                          });
-                          setMessagesFilterOpen(false);
-                          setMessagesPage(1);
-                          setMessagesModalOpen(false);
-                        }}
-                        className="text-gray-400 hover:text-gray-600 p-2 hover:bg-gray-50 rounded-full"
-                      >
-                        <X size={18} />
-                      </button>
-                    )}
-                  </div>
-                  <div className="p-6">
-                    <div className="sticky top-0 z-10 bg-white pb-2 mb-3 border-b border-gray-100 flex items-center justify-between gap-3">
-                      <input
-                        value={messagesSearch}
-                        onChange={(e) => setMessagesSearch(e.target.value)}
-                        placeholder="Filtrar mensajes..."
-                        className="flex-1 px-3 py-2 bg-gray-100 border border-gray-200 rounded text-xs"
-                      />
-                      <div className="flex items-center gap-2">
-                        <button
-                          className={`group relative p-2 rounded border ${messagesQuick === 'all' ? 'bg-slate-800 text-white border-slate-800' : 'text-gray-700 border-gray-300 hover:bg-gray-50'}`}
-                          onClick={() => setMessagesQuick('all')}
-                          aria-label="Todos"
-                          title="Todos"
-                        >
-                          <div className="relative w-4 h-4">
-                            <div className={`absolute top-0 left-1/2 -translate-x-1/2 w-1.5 h-1.5 rounded-full ${messagesQuick === 'all' ? 'bg-red-400' : 'bg-red-500'}`} />
-                            <div className={`absolute bottom-0 left-0 w-1.5 h-1.5 rounded-full ${messagesQuick === 'all' ? 'bg-amber-300' : 'bg-amber-500'}`} />
-                            <div className={`absolute bottom-0 right-0 w-1.5 h-1.5 rounded-full ${messagesQuick === 'all' ? 'bg-emerald-300' : 'bg-emerald-500'}`} />
-                          </div>
-                          <div className="absolute left-1/2 -translate-x-1/2 top-full mt-1 bg-gray-900 text-white text-xs rounded px-2 py-1 opacity-0 group-hover:opacity-100 pointer-events-none whitespace-nowrap">
-                            Todos
-                          </div>
-                        </button>
-                        <button
-                          className={`group relative p-2 rounded border ${messagesQuick === 'emergency' ? 'bg-slate-800 text-white border-slate-800' : 'text-gray-700 border-gray-300 hover:bg-gray-50'}`}
-                          onClick={() => setMessagesQuick('emergency')}
-                          aria-label="Emergentes"
-                          title="Emergentes"
-                        >
-                          <div className={`w-2.5 h-2.5 rounded-full mx-auto my-0.5 ${messagesQuick === 'emergency' ? 'bg-red-400 shadow-sm shadow-white/50' : 'bg-red-500'}`} />
-                          <div className="absolute left-1/2 -translate-x-1/2 top-full mt-1 bg-gray-900 text-white text-xs rounded px-2 py-1 opacity-0 group-hover:opacity-100 pointer-events-none whitespace-nowrap">
-                            Emergentes
-                          </div>
-                        </button>
-                        <button
-                          className={`group relative p-2 rounded border ${messagesQuick === 'high' ? 'bg-slate-800 text-white border-slate-800' : 'text-gray-700 border-gray-300 hover:bg-gray-50'}`}
-                          onClick={() => setMessagesQuick('high')}
-                          aria-label="Alta"
-                          title="Alta"
-                        >
-                          <div className={`w-2.5 h-2.5 rounded-full mx-auto my-0.5 ${messagesQuick === 'high' ? 'bg-amber-300 shadow-sm shadow-white/50' : 'bg-amber-500'}`} />
-                          <div className="absolute left-1/2 -translate-x-1/2 top-full mt-1 bg-gray-900 text-white text-xs rounded px-2 py-1 opacity-0 group-hover:opacity-100 pointer-events-none whitespace-nowrap">
+
+                    <div className="flex items-center gap-2 flex-1 justify-end">
+                        <div className="relative group">
+                            <div className="absolute left-2 top-1/2 -translate-y-1/2 text-gray-400">
+                                <Search size={12} />
+                            </div>
+                            <input
+                                value={messagesSearch}
+                                onChange={(e) => setMessagesSearch(e.target.value)}
+                                placeholder="Buscar..."
+                                className="w-24 sm:w-32 md:w-48 pl-7 pr-2 py-1 bg-gray-50 border border-gray-200 rounded text-xs focus:outline-none focus:bg-white focus:border-indigo-300 transition-all"
+                            />
+                            {messagesSearch && (
+                                <button onClick={() => setMessagesSearch('')} className="absolute right-1 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
+                                    <X size={10} />
+                                </button>
+                            )}
+                        </div>
+
+                        <div className="relative">
+                          <button
+                            onClick={(e) => {
+                              setRangeMenuOpen((v) => !v);
+                              setRangeMenuAnchorEl(e.currentTarget as HTMLElement);
+                            }}
+                            className="px-6 py-1 rounded border border-gray-300 bg-white text-[10px] text-gray-700 hover:bg-gray-50 inline-flex items-center gap-1"
+                          >
+                            {statsRange === '1h'
+                              ? '1 Hora'
+                              : statsRange === '24h'
+                                ? '24 Horas'
+                                : statsRange === '7d'
+                                  ? '1 Semana'
+                                  : statsRange === '1m'
+                                    ? '1 Mes'
+                                    : 'Historico'}
+                            <ChevronDown size={10} className="text-gray-500" />
+                          </button>
+                          {rangeMenuOpen && (
+                            <Popper
+                              open
+                              placement="bottom-start"
+                              anchorEl={rangeMenuAnchorEl}
+                              style={{ zIndex: 1000 }}
+                            >
+                              <div className="bg-white border border-gray-200 rounded shadow p-1 text-xs">
+                                <button onClick={() => { setStatsRange('1h'); setRangeMenuOpen(false); }} className="block w-full text-left px-2 py-1 rounded hover:bg-gray-50">1 H</button>
+                                <button onClick={() => { setStatsRange('24h'); setRangeMenuOpen(false); }} className="block w-full text-left px-2 py-1 rounded hover:bg-gray-50">24 H</button>
+                                <button onClick={() => { setStatsRange('7d'); setRangeMenuOpen(false); }} className="block w-full text-left px-2 py-1 rounded hover:bg-gray-50">1 Semana</button>
+                                <button onClick={() => { setStatsRange('1m'); setRangeMenuOpen(false); }} className="block w-full text-left px-2 py-1 rounded hover:bg-gray-50">1 Mes</button>
+                                <button onClick={() => { setStatsRange('all'); setRangeMenuOpen(false); }} className="block w-full text-left px-2 py-1 rounded hover:bg-gray-50">Histórico</button>
+                              </div>
+                            </Popper>
+                          )}
+                      </div>
+                        
+                        <div className="hidden md:flex items-center border border-gray-200 rounded overflow-hidden">
+                          <button
+                            onClick={() => { setMessagesFilter(prev => ({ ...prev, priority: (prev.priority === MessagePriority.LOW ? undefined : MessagePriority.LOW) as MessagePriority | undefined })); setMessagesQuick('all'); }}
+                            className={`px-2 py-1 text-[10px] font-medium transition-colors flex items-center gap-1.5 ${messagesFilter.priority === MessagePriority.LOW ? 'bg-slate-800 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}
+                          >
+                            <span className="w-1.5 h-1.5 rounded-full bg-blue-500"></span>
+                            Baja
+                          </button>
+                          <div className="w-px h-full bg-gray-200" />
+                          <button
+                            onClick={() => { setMessagesFilter(prev => ({ ...prev, priority: (prev.priority === MessagePriority.MEDIUM ? undefined : MessagePriority.MEDIUM) as MessagePriority | undefined })); setMessagesQuick('all'); }}
+                            className={`px-2 py-1 text-[10px] font-medium transition-colors flex items-center gap-1.5 ${messagesFilter.priority === MessagePriority.MEDIUM ? 'bg-slate-800 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}
+                          >
+                            <span className="w-1.5 h-1.5 rounded-full bg-yellow-500"></span>
+                            Media
+                          </button>
+                          <div className="w-px h-full bg-gray-200" />
+                          <button
+                            onClick={() => { setMessagesFilter(prev => ({ ...prev, priority: (prev.priority === MessagePriority.HIGH ? undefined : MessagePriority.HIGH) as MessagePriority | undefined })); setMessagesQuick('all'); }}
+                            className={`px-2 py-1 text-[10px] font-medium transition-colors flex items-center gap-1.5 ${messagesFilter.priority === MessagePriority.HIGH ? 'bg-slate-800 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}
+                          >
+                            <span className="w-1.5 h-1.5 rounded-full bg-red-500"></span>
                             Alta
-                          </div>
-                        </button>
+                          </button>
+                        </div>
+
+                        <div className="flex items-center gap-2">
+                            <span className={`text-[10px] font-medium ${messagesFilter.emergency ? 'text-red-600' : 'text-gray-600'}`}>Prioritario</span>
+                            <button
+                                onClick={() => { setMessagesFilter(prev => ({ ...prev, emergency: !prev.emergency })); setMessagesQuick('all'); }}
+                                className={`relative inline-flex h-4 w-7 items-center rounded-full transition-colors ${messagesFilter.emergency ? 'bg-red-600' : 'bg-gray-200'}`}
+                                title="Prioritario"
+                            >
+                                <span className={`inline-block h-2.5 w-2.5 transform rounded-full bg-white transition-transform ${messagesFilter.emergency ? 'translate-x-3.5' : 'translate-x-0.5'}`} />
+                            </button>
+                        </div>
+
                         <button
-                          className={`group relative p-2 rounded border ${messagesQuick === 'vigent' ? 'bg-slate-800 text-white border-slate-800' : 'text-gray-700 border-gray-300 hover:bg-gray-50'}`}
-                          onClick={() => setMessagesQuick('vigent')}
-                          aria-label="Vigentes"
-                          title="Vigentes"
-                        >
-                          <div className={`w-2.5 h-2.5 rounded-full mx-auto my-0.5 ${messagesQuick === 'vigent' ? 'bg-emerald-300 shadow-sm shadow-white/50' : 'bg-emerald-500'}`} />
-                          <div className="absolute left-1/2 -translate-x-1/2 top-full mt-1 bg-gray-900 text-white text-xs rounded px-2 py-1 opacity-0 group-hover:opacity-100 pointer-events-none whitespace-nowrap">
-                            Vigentes
-                          </div>
-                        </button>
-                        <button
-                          className={`group relative p-2 rounded border ${messagesQuick === 'expired' ? 'bg-slate-800 text-white border-slate-800' : 'text-gray-700 border-gray-300 hover:bg-gray-50'}`}
-                          onClick={() => setMessagesQuick('expired')}
-                          aria-label="Vencidos"
-                          title="Vencidos"
-                        >
-                          <div className={`w-2.5 h-2.5 rounded-full mx-auto my-0.5 ${messagesQuick === 'expired' ? 'bg-gray-400 shadow-sm shadow-white/50' : 'bg-gray-400'}`} />
-                          <div className="absolute left-1/2 -translate-x-1/2 top-full mt-1 bg-gray-900 text-white text-xs rounded px-2 py-1 opacity-0 group-hover:opacity-100 pointer-events-none whitespace-nowrap">
-                            Vencidos
-                          </div>
-                        </button>
-                        <button
-                          className={`group relative p-2 rounded border ${messagesQuick === 'hasApprovals' ? 'bg-slate-800 text-white border-slate-800' : 'text-gray-700 border-gray-300 hover:bg-gray-50'}`}
-                          onClick={() => setMessagesQuick('hasApprovals')}
-                          aria-label="Con aprob."
-                          title="Con aprob."
-                        >
-                          <CheckCircle
-                            size={16}
-                            className={
-                              messagesQuick === 'hasApprovals'
-                                ? 'text-white'
-                                : 'text-slate-600'
-                            }
-                          />
-                          <div className="absolute left-1/2 -translate-x-1/2 top-full mt-1 bg-gray-900 text-white text-xs rounded px-2 py-1 opacity-0 group-hover:opacity-100 pointer-events-none whitespace-nowrap">
-                            Con aprob.
-                          </div>
-                        </button>
-                        <button
-                          className={`group relative p-2 rounded border ${messagesQuick === 'noApprovals' ? 'bg-slate-800 text-white border-slate-800' : 'text-gray-700 border-gray-300 hover:bg-gray-50'}`}
-                          onClick={() => setMessagesQuick('noApprovals')}
-                          aria-label="Sin aprob."
-                          title="Sin aprob."
-                        >
-                          <Clock
-                            size={16}
-                            className={
-                              messagesQuick === 'noApprovals'
-                                ? 'text-white'
-                                : 'text-slate-600'
-                            }
-                          />
-                          <div className="absolute left-1/2 -translate-x-1/2 top-full mt-1 bg-gray-900 text-white text-xs rounded px-2 py-1 opacity-0 group-hover:opacity-100 pointer-events-none whitespace-nowrap">
-                            Sin aprob.
-                          </div>
-                        </button>
-                        <button
-                          className={`group relative p-2 rounded border ml-2 ${messagesFilterOpen ? 'bg-slate-800 text-white border-slate-800' : 'text-gray-700 border-gray-300 hover:bg-gray-50'}`}
+                          className={`p-1 rounded hover:bg-gray-100 ${messagesFilterOpen ? 'bg-slate-100 text-indigo-600' : 'text-gray-400'}`}
                           onClick={() => setMessagesFilterOpen((o) => !o)}
-                          aria-label="Filtro avanzado"
-                          title="Filtro avanzado"
+                          title="Filtros avanzados (Estado y Aprobaciones)"
                         >
-                          <Settings
-                            size={16}
-                            className={messagesFilterOpen ? 'text-white' : 'text-slate-600'}
-                          />
-                          <div className="absolute left-1/2 -translate-x-1/2 top-full mt-1 bg-gray-900 text-white text-xs rounded px-2 py-1 opacity-0 group-hover:opacity-100 pointer-events-none whitespace-nowrap">
-                            Filtro avanzado
-                          </div>
+                          <Settings size={14} />
                         </button>
-                      </div>
                     </div>
-                    {messagesFilterOpen && (
-                      <div className="mb-3 grid grid-cols-1 sm:grid-cols-4 gap-2 bg-slate-50 border border-gray-200 rounded p-2">
-                        <div className="flex items-center gap-2">
-                          <span className="text-xs text-gray-500">Prioridad</span>
-                          <select
-                            value={messagesFilter.priority || ''}
-                            onChange={(e) =>
-                              setMessagesFilter((f) => ({
-                                ...f,
-                                priority: ((e.target.value || '') as any) || undefined,
-                              }))
-                            }
-                            className="px-2 py-1 text-xs border rounded"
+
+                    <div className="flex items-center gap-1 shrink-0">
+                        {!selectedChannel?.parentId && (
+                          <button
+                            onClick={() => {
+                              setMessagesSearch('');
+                              setMessagesQuick('all');
+                              setMessagesFilter({ priority: undefined, emergency: undefined, expired: undefined, hasApprovals: undefined });
+                              setMessagesFilterOpen(false);
+                              setMessagesPage(1);
+                              setMessagesModalOpen(false);
+                            }}
+                            className="text-gray-400 hover:text-gray-600 p-1.5 hover:bg-gray-50 rounded-full"
                           >
-                            <option value="">Todas</option>
-                            <option value="HIGH">Alta</option>
-                            <option value="MEDIUM">Media</option>
-                            <option value="LOW">Baja</option>
-                          </select>
-                        </div>
+                            <X size={14} />
+                          </button>
+                        )}
+                    </div>
+                  </div>
+
+                  {/* Advanced Filters Section */}
+                  {messagesFilterOpen && (
+                    <div className="bg-slate-50 border-b border-gray-200 p-2 flex flex-wrap items-center justify-center gap-4 animate-in slide-in-from-top-1 fade-in duration-200">
                         <div className="flex items-center gap-2">
-                          <span className="text-xs text-gray-500">Emergente</span>
-                          <select
-                            value={
-                              messagesFilter.emergency === undefined
-                                ? ''
-                                : messagesFilter.emergency
-                                  ? '1'
-                                  : '0'
-                            }
-                            onChange={(e) =>
-                              setMessagesFilter((f) => ({
-                                ...f,
-                                emergency:
-                                  e.target.value === '' ? undefined : e.target.value === '1',
-                              }))
-                            }
-                            className="px-2 py-1 text-xs border rounded"
-                          >
-                            <option value="">Todos</option>
-                            <option value="1">Sí</option>
-                            <option value="0">No</option>
-                          </select>
+                          <span className="text-xs font-medium text-gray-600">Vigencia:</span>
+                          <div className="flex items-center gap-2 bg-white px-2 py-1 rounded border border-gray-200">
+                              <span className={`text-[10px] ${!messagesFilter.expired ? 'text-emerald-600 font-medium' : 'text-gray-400'}`}>Vigentes</span>
+                              <button
+                                onClick={() => { setMessagesFilter(prev => ({ ...prev, expired: !prev.expired })); setMessagesQuick('all'); }}
+                                className={`relative inline-flex h-4 w-7 items-center rounded-full transition-colors ${messagesFilter.expired ? 'bg-slate-600' : 'bg-emerald-500'}`}
+                              >
+                                <span className={`inline-block h-2.5 w-2.5 transform rounded-full bg-white transition-transform ${messagesFilter.expired ? 'translate-x-3.5' : 'translate-x-0.5'}`} />
+                              </button>
+                              <span className={`text-[10px] ${messagesFilter.expired ? 'text-slate-600 font-medium' : 'text-gray-400'}`}>Expirados</span>
+                          </div>
                         </div>
+
                         <div className="flex items-center gap-2">
-                          <span className="text-xs text-gray-500">Estado</span>
-                          <select
-                            value={
-                              messagesFilter.expired === undefined
-                                ? ''
-                                : messagesFilter.expired
-                                  ? '1'
-                                  : '0'
-                            }
-                            onChange={(e) =>
-                              setMessagesFilter((f) => ({
-                                ...f,
-                                expired:
-                                  e.target.value === '' ? undefined : e.target.value === '1',
-                              }))
-                            }
-                            className="px-2 py-1 text-xs border rounded"
-                          >
-                            <option value="">Todos</option>
-                            <option value="0">Vigente</option>
-                            <option value="1">Vencido</option>
-                          </select>
+                          <span className="text-xs font-medium text-gray-600">Aprobaciones:</span>
+                          <div className="flex items-center gap-2 bg-white px-2 py-1 rounded border border-gray-200">
+                              <button
+                                onClick={() => { setMessagesFilter(prev => ({ ...prev, hasApprovals: !prev.hasApprovals })); setMessagesQuick('all'); }}
+                                className={`relative inline-flex h-4 w-7 items-center rounded-full transition-colors ${messagesFilter.hasApprovals ? 'bg-indigo-600' : 'bg-gray-200'}`}
+                              >
+                                <span className={`inline-block h-2.5 w-2.5 transform rounded-full bg-white transition-transform ${messagesFilter.hasApprovals ? 'translate-x-3.5' : 'translate-x-0.5'}`} />
+                              </button>
+                              <span className={`text-[10px] ${messagesFilter.hasApprovals ? 'text-indigo-600 font-medium' : 'text-gray-400'}`}>Requeridas</span>
+                          </div>
                         </div>
-                        <div className="flex items-center gap-2">
-                          <span className="text-xs text-gray-500">Aprobaciones</span>
-                          <select
-                            value={
-                              messagesFilter.hasApprovals === undefined
-                                ? ''
-                                : messagesFilter.hasApprovals
-                                  ? '1'
-                                  : '0'
-                            }
-                            onChange={(e) =>
-                              setMessagesFilter((f) => ({
-                                ...f,
-                                hasApprovals:
-                                  e.target.value === '' ? undefined : e.target.value === '1',
-                              }))
-                            }
-                            className="px-2 py-1 text-xs border rounded"
-                          >
-                            <option value="">Todas</option>
-                            <option value="1">Con</option>
-                            <option value="0">Sin</option>
-                          </select>
-                        </div>
-                      </div>
-                    )}
+                    </div>
+                  )}
+
+                  <div className="p-4 flex-1 overflow-y-auto">
                     {messagesLoading ? (
                       <div className="animate-pulse space-y-2">
                         {Array.from({ length: 6 }).map((_, i) => (
@@ -3982,7 +3976,7 @@ const ChannelManager: React.FC = () => {
                         ))}
                       </div>
                     ) : (
-                      <div className="max-h-[50vh] overflow-y-auto space-y-3">
+                      <div className="space-y-3">
                         {messagesItems.map((m) => (
                           <div
                             key={m.id}
@@ -4090,10 +4084,10 @@ const ChannelManager: React.FC = () => {
                                   {m.channel?.title || 'Canal'}
                                 </div>
                                 <span
-                                  className={`text-[10px] px-1.5 py-0.5 rounded border ${m.isEmergency ? 'bg-red-50 text-red-700 border-red-200' : m.priority === 'HIGH' ? 'bg-indigo-50 text-indigo-700 border-indigo-200' : m.priority === 'MEDIUM' ? 'bg-sky-50 text-sky-700 border-sky-200' : 'bg-gray-100 text-gray-700 border-gray-200'}`}
+                                  className={`text-[10px] px-1.5 py-0.5 rounded border ${m.isEmergency ? 'bg-red-50 text-red-700 border-red-200' : m.priority === 'HIGH' ? 'bg-red-50 text-red-700 border-red-200' : m.priority === 'MEDIUM' ? 'bg-yellow-50 text-yellow-700 border-yellow-200' : 'bg-blue-50 text-blue-700 border-blue-200'}`}
                                 >
                                     {m.isEmergency
-                                      ? 'Emergente'
+                                      ? 'Prioritario'
                                       : m.priority === 'HIGH'
                                         ? 'Alta'
                                         : m.priority === 'MEDIUM'
@@ -4128,9 +4122,9 @@ const ChannelManager: React.FC = () => {
 
                             <div className="mt-2 text-sm text-gray-800 flex items-start gap-2">
                               <div className="group relative mt-1.5 shrink-0">
-                                <div className={`w-2 h-2 rounded-full ${m.isEmergency ? 'bg-red-500' : m.priority === 'HIGH' ? 'bg-yellow-500' : m.priority === 'MEDIUM' ? 'bg-sky-500' : 'bg-gray-400'}`} />
+                                <div className={`w-2 h-2 rounded-full ${m.isEmergency ? 'bg-red-600' : m.priority === 'HIGH' ? 'bg-red-500' : m.priority === 'MEDIUM' ? 'bg-yellow-500' : 'bg-blue-500'}`} />
                                 <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-gray-900 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-10">
-                                  {m.isEmergency ? 'Emergente' : m.priority === 'HIGH' ? 'Alta' : m.priority === 'MEDIUM' ? 'Media' : 'Baja'}
+                                  {m.isEmergency ? 'Prioritario' : m.priority === 'HIGH' ? 'Alta' : m.priority === 'MEDIUM' ? 'Media' : 'Baja'}
                                   <div className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-gray-900"></div>
                                 </div>
                               </div>
@@ -4662,10 +4656,24 @@ const ChannelManager: React.FC = () => {
                                         type="button"
                                         disabled={composeIsEmergency}
                                         onClick={() => setComposePriority(p)}
-                                        className={`px-3 py-1.5 text-xs font-bold rounded-md transition-all ${composePriority === p ? 'bg-white text-indigo-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'} ${composeIsEmergency ? 'opacity-50 cursor-not-allowed' : ''}`}
+                                        className={`px-3 py-1.5 text-xs font-bold rounded-md transition-all ${
+                                          composePriority === p
+                                            ? p === MessagePriority.LOW
+                                              ? 'bg-blue-100 text-blue-700 shadow-sm'
+                                              : p === MessagePriority.MEDIUM
+                                                ? 'bg-yellow-100 text-yellow-800 shadow-sm'
+                                                : 'bg-red-100 text-red-700 shadow-sm'
+                                            : 'text-gray-500 hover:text-gray-700 hover:bg-gray-200/50'
+                                        } ${composeIsEmergency ? 'opacity-50 cursor-not-allowed' : ''}`}
                                       >
                                         <div className="flex items-center gap-2">
-                                          {p === MessagePriority.HIGH && <div className="w-1.5 h-1.5 rounded-full bg-amber-400" />}
+                                          <div className={`w-1.5 h-1.5 rounded-full ${
+                                            p === MessagePriority.LOW
+                                              ? 'bg-blue-500'
+                                              : p === MessagePriority.MEDIUM
+                                                ? 'bg-yellow-500'
+                                                : 'bg-red-500'
+                                          }`} />
                                           {p === MessagePriority.LOW ? t('priority.low') : p === MessagePriority.MEDIUM ? t('priority.medium') : t('priority.high')}
                                         </div>
                                       </button>
@@ -4673,7 +4681,7 @@ const ChannelManager: React.FC = () => {
                                 </div>
                                 <div className="w-px h-5 bg-gray-200 mx-3"></div>
                                 <div className="flex items-center gap-2 pr-2">
-                                    <span className={`text-[10px] font-bold uppercase tracking-wider ${composeIsEmergency ? 'text-red-600' : 'text-gray-500'}`}>Urgente</span>
+                                    <span className={`text-[10px] font-bold uppercase tracking-wider ${composeIsEmergency ? 'text-red-600' : 'text-gray-500'}`}>Prioritario</span>
                                     <button
                                        onClick={() => setComposeIsEmergency(!composeIsEmergency)}
                                        className={`w-9 h-5 rounded-full transition-colors relative ${composeIsEmergency ? 'bg-red-500' : 'bg-gray-200'}`}
