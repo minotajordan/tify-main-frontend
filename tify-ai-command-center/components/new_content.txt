@@ -1,0 +1,30 @@
+
+            {(messagesModalOpen || activeTab === 'messages') && (
+              <div
+                className={`${(activeTab === 'messages') ? ' v-full h-full static bg-transparent z-auto' : 'fixed inset-0 bg-black/40 z-50'} flex items-center justify-center`}
+              >
+                <div
+                  className={`bg-white w-full h-full v-full flex flex-col overflow-hidden ${(activeTab === 'messages') ? '' : 'max-w-3xl'} rounded-xl relative`}
+                >
+                  {messagesModalOpen && (
+                    <button 
+                      onClick={() => setMessagesModalOpen(false)} 
+                      className="absolute top-4 right-4 z-50 p-2 bg-white rounded-full shadow-md text-gray-500 hover:text-gray-700 border border-gray-100"
+                    >
+                      <X size={20} />
+                    </button>
+                  )}
+                  <MessageCenter 
+                    channelId={
+                      messagesModalOpen
+                        ? messagesForSub
+                        : (selectedChannel?.parentId && activeTab === 'messages')
+                          ? selectedChannel?.id
+                          : (activeTab === 'messages' && selectedChannel && !selectedChannel.parentId)
+                            ? selectedChannel?.subchannels?.[0]?.id
+                            : selectedChannel?.id
+                    }
+                  />
+                </div>
+              </div>
+            )}

@@ -41,6 +41,7 @@ export interface UserProfileShort {
   id: string;
   username: string;
   fullName: string;
+  avatarUrl?: string;
 }
 
 export interface User {

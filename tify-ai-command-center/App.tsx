@@ -12,7 +12,8 @@ import {
   LogOut,
   RadioTower,
   FileText,
-  Ticket
+  Ticket,
+  Globe
 } from 'lucide-react';
 import { DEFAULT_AVATAR, DEFAULT_ORG_NAME } from './constants';
 import { useI18n } from './i18n';
@@ -94,7 +95,7 @@ const App: React.FC = () => {
 
   const renderContent = () => {
     switch (currentView) {
-      case 'dashboard': return <Dashboard onChangeView={setCurrentView} />;
+      case 'dashboard': return <Dashboard onChangeView={(view) => setCurrentView(view as View)} />;
       case 'channels': return <ChannelManager />;
       case 'messages': return <MessageCenter />;
       case 'approvals': return <ApprovalQueue />;
@@ -280,7 +281,7 @@ const App: React.FC = () => {
               ))}
             </div>
             <div className="flex items-center gap-2">
-              <span className="text-xs text-gray-500">{t('common.language')}</span>
+              <Globe size={16} className="text-gray-500" />
               <select value={lang} onChange={e=>setLang(e.target.value as any)} className="px-2 py-1 border rounded text-sm">
                 <option value="es">ES</option>
                 <option value="en">EN</option>

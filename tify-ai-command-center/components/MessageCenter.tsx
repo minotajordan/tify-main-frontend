@@ -1,11 +1,14 @@
 import React, { useState, useEffect } from 'react';
-import { Send, Sparkles, Paperclip, Clock, AlertTriangle, Loader2, X, FileText, Image as ImageIcon, Film, File, MapPin, List, PenLine } from 'lucide-react';
+import { Send, Sparkles, Paperclip, Clock, AlertTriangle, Loader2, X, FileText, Image as ImageIcon, Film, File, MapPin, List, PenLine, Search, ChevronDown, Hash } from 'lucide-react';
 import { generateMessageDraft } from '../services/geminiService';
 import { api, API_BASE, getAuthToken } from '../services/api';
 import { MessagePriority, Channel, DeliveryMethod } from '../types';
 import { useI18n } from '../i18n';
 import LocationPicker from './LocationPicker';
 import MessageFeed from './MessageFeed';
+import MainChannelSearchModal from './MainChannelSearchModal';
+import SubchannelSearchModal from './SubchannelSearchModal';
+import SearchModal from './SearchModal';
 
 const getFileIcon = (filename: string) => {
   const ext = filename.split('.').pop()?.toLowerCase();
@@ -21,12 +24,22 @@ const getFileIcon = (filename: string) => {
   return <File size={24} className="text-gray-500" />;
 };
 
-const MessageCenter: React.FC = () => {
+interface MessageCenterProps {
+  channelId?: string;
+}
+
+const MessageCenter: React.FC<MessageCenterProps> = ({ channelId }) => {
   const { t } = useI18n();
   const [content, setContent] = useState('');
   const [channels, setChannels] = useState<Channel[]>([]);
   const [loadingChannels, setLoadingChannels] = useState(true);
-  const [selectedChannelId, setSelectedChannelId] = useState('');
+  const [selectedChannelId, setSelectedChannelId] = useState(channelId || '');
+
+  useEffect(() => {
+    if (channelId) {
+      setSelectedChannelId(channelId);
+    }
+  }, [channelId]);
   const [priority, setPriority] = useState<MessagePriority>(MessagePriority.MEDIUM);
   const [isEmergency, setIsEmergency] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
@@ -40,7 +53,11 @@ const MessageCenter: React.FC = () => {
     null
   );
   const [showLocationPicker, setShowLocationPicker] = useState(false);
-  const [viewMode, setViewMode] = useState<'compose' | 'feed'>('compose');
+  const [viewMode, setViewMode] = useState<'compose' | 'feed'>('feed');
+  
+  const [showChannelSearch, setShowChannelSearch] = useState(false);
+  const [showSubchannelSearch, setShowSubchannelSearch] = useState(false);
+  const [showGlobalSearch, setShowGlobalSearch] = useState(false);
 
   const formatBytes = (bytes: number, decimals = 2) => {
     if (bytes === 0) return '0 Bytes';
@@ -57,7 +74,7 @@ const MessageCenter: React.FC = () => {
       .getChannels()
       .then((data) => {
         setChannels(data);
-        if (data.length > 0) setSelectedChannelId(data[0].id);
+        if (data.length > 0 && !channelId) setSelectedChannelId(data[0].id);
       })
       .finally(() => setLoadingChannels(false));
   }, []);
@@ -199,14 +216,26 @@ const MessageCenter: React.FC = () => {
     }
   };
 
+  const selectedChannel = channels.find(c => c.id === selectedChannelId) || 
+                          channels.flatMap(c => c.subchannels || []).find(sc => sc.id === selectedChannelId);
+
   return (
     <div className="h-full max-w-5xl mx-auto flex flex-col">
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden flex flex-col h-full">
         {/* Header with Tabs */}
         <div className="border-b border-gray-100 bg-slate-50/50 flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4">
           <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2 px-2">
-            <Send size={20} className="text-indigo-600" />
-            {t('compose.title')}
+            {viewMode === 'compose' ? (
+              <>
+                <Send size={20} className="text-indigo-600" />
+                {t('compose.title')}
+              </>
+            ) : (
+              <>
+                <List size={20} className="text-indigo-600" />
+                <span>Historial de Mensajes</span>
+              </>
+            )}
           </h2>
           
           <div className="flex p-1 bg-gray-200/50 rounded-lg self-start sm:self-auto">
@@ -244,28 +273,44 @@ const MessageCenter: React.FC = () => {
             {loadingChannels ? (
               <div className="h-10 w-full bg-gray-100 rounded animate-pulse" />
             ) : (
-              <div className="relative">
-                <select
-                  value={selectedChannelId}
-                  onChange={(e) => setSelectedChannelId(e.target.value)}
-                  className="w-full pl-4 pr-10 py-2.5 bg-gray-50 border border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none appearance-none text-gray-900 text-sm font-medium transition-shadow cursor-pointer hover:bg-gray-100"
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setShowChannelSearch(true)}
+                  className="flex-1 flex items-center justify-between px-4 py-2.5 bg-gray-50 hover:bg-gray-100 border border-gray-200 rounded-lg transition-colors group text-left"
                 >
-                  {channels.map((c) => (
-                    <React.Fragment key={c.id}>
-                      <option value={c.id}>{c.title}</option>
-                      {c.subchannels?.map((sc) => (
-                        <option key={sc.id} value={sc.id}>
-                          &nbsp;&nbsp;↳ {sc.title}
-                        </option>
-                      ))}
-                    </React.Fragment>
-                  ))}
-                </select>
-                <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-gray-500">
-                  <svg width="12" height="12" viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg">
-                    <path d="M2.5 4.5L6 8L9.5 4.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-                  </svg>
-                </div>
+                  <div className="flex items-center gap-3">
+                    <span className="text-xl">{selectedChannel?.icon || '#'}</span>
+                    <div>
+                      <div className="font-medium text-gray-900 text-sm">
+                        {selectedChannel?.title || t('selectChannel')}
+                      </div>
+                      {selectedChannel?.description && (
+                        <div className="text-xs text-gray-500 truncate max-w-[200px]">
+                          {selectedChannel.description}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                  <ChevronDown size={16} className="text-gray-400 group-hover:text-gray-600 transition-colors" />
+                </button>
+
+                {selectedChannel?.subchannels && selectedChannel.subchannels.length > 0 && (
+                   <button
+                    onClick={() => setShowSubchannelSearch(true)}
+                    className="p-2.5 bg-gray-50 hover:bg-gray-100 border border-gray-200 rounded-lg text-gray-600 hover:text-indigo-600 transition-colors"
+                    title="View Subchannels"
+                  >
+                    <List size={20} />
+                  </button>
+                )}
+
+                <button
+                  onClick={() => setShowGlobalSearch(true)}
+                  className="p-2.5 bg-gray-50 hover:bg-gray-100 border border-gray-200 rounded-lg text-gray-600 hover:text-indigo-600 transition-colors"
+                  title="Global Search"
+                >
+                  <Search size={20} />
+                </button>
               </div>
             )}
           </div>
@@ -458,6 +503,34 @@ const MessageCenter: React.FC = () => {
           </div>
         </div>
       </div>
+
+      {/* Modals */}
+      <MainChannelSearchModal
+        isOpen={showChannelSearch}
+        onClose={() => setShowChannelSearch(false)}
+        channels={channels}
+        onSelect={(channel) => {
+          setSelectedChannelId(channel.id);
+          setShowChannelSearch(false);
+        }}
+      />
+      
+      {selectedChannel?.subchannels && (
+        <SubchannelSearchModal
+          isOpen={showSubchannelSearch}
+          onClose={() => setShowSubchannelSearch(false)}
+          subchannels={selectedChannel.subchannels}
+          onSelect={(channel) => {
+            setSelectedChannelId(channel.id);
+            setShowSubchannelSearch(false);
+          }}
+        />
+      )}
+
+      <SearchModal
+        isOpen={showGlobalSearch}
+        onClose={() => setShowGlobalSearch(false)}
+      />
     </div>
   );
 };

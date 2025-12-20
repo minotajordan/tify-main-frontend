@@ -107,6 +107,7 @@ import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs';
 import { DateTimePicker } from '@mui/x-date-pickers/DateTimePicker';
 import { Autocomplete, Popper, TextField } from '@mui/material';
 import RichTextEditor from './forms/RichTextEditor';
+import MainChannelSearchModal from './MainChannelSearchModal';
 
   const splitHtmlContent = (html: string, initialOffset: number = 0): string[] => {
     if (typeof document === 'undefined') return [html];
@@ -560,6 +561,7 @@ const ChannelManager: React.FC = () => {
   const [detailsLoading, setDetailsLoading] = useState(false);
   const [parentChannel, setParentChannel] = useState<Channel | null>(null);
   const [showSubCreate, setShowSubCreate] = useState(false);
+  const [showChannelSearch, setShowChannelSearch] = useState(false);
   const [showCompose, setShowCompose] = useState(false);
   const [composeContent, setComposeContent] = useState('');
   const [composePriority, setComposePriority] = useState<MessagePriority>(MessagePriority.MEDIUM);
@@ -2576,30 +2578,6 @@ const ChannelManager: React.FC = () => {
           <Info size={16} />
           Detalles
         </button>
-        <button
-          onClick={() => setActiveTab('stats')}
-          className={`flex items-center gap-2 px-4 py-3 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
-            activeTab === 'stats'
-              ? 'border-indigo-600 text-indigo-600'
-              : 'border-transparent text-gray-500 hover:text-gray-700'
-          }`}
-        >
-          <BarChart2 size={16} />
-          Estadísticas
-        </button>
-        {!selectedChannel.parentId && (
-          <button
-            onClick={() => setActiveTab('content')}
-            className={`flex items-center gap-2 px-4 py-3 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
-              activeTab === 'content'
-                ? 'border-indigo-600 text-indigo-600'
-                : 'border-transparent text-gray-500 hover:text-gray-700'
-            }`}
-          >
-            <ListTree size={16} />
-            Subcanales
-          </button>
-        )}
       </div>
 
       {/* Drawer Panel for Proposal 2 */}
@@ -3797,8 +3775,13 @@ const ChannelManager: React.FC = () => {
                 >
                   <div className="p-2 border-b border-gray-100 flex items-center justify-between gap-2 bg-white sticky top-0 z-20">
                     <div className="flex items-center gap-2 shrink-0">
-                      <span className="h-3 w-px bg-gray-200 mx-1"></span>
-                      <h3 className="text-sm font-semibold text-gray-900 truncate max-w-[100px] sm:max-w-[150px]">
+                      
+                      <button
+                        onClick={() => setShowChannelSearch(true)}
+                        className="flex items-center gap-2 hover:bg-gray-100 rounded-lg px-2 py-1 transition-colors group -ml-2"
+                      >
+                        <span className="mx-1">Subcanal:</span> 
+                        <h3 className="text-sm font-semibold text-gray-900 truncate max-w-[100px] sm:max-w-[150px]">
                         {(() => {
                           const subId = messagesModalOpen
                             ? messagesForSub
@@ -3814,6 +3797,8 @@ const ChannelManager: React.FC = () => {
                           return sub ? sub.title : selectedChannel?.title;
                         })()}
                       </h3>
+                      <ChevronDown size={14} className="text-gray-400 group-hover:text-gray-600" />
+                      </button>
                     </div>
 
                     <div className="flex items-center gap-2 flex-1 justify-end">
@@ -6681,6 +6666,22 @@ const ChannelManager: React.FC = () => {
           initialData={composeLocationData}
         />
       )}
+
+      <MainChannelSearchModal
+        isOpen={showChannelSearch}
+        onClose={() => setShowChannelSearch(false)}
+        channels={channels}
+        selectedParentChannel={
+          selectedChannel?.parentId
+            ? channels.find(c => c.id === selectedChannel.parentId)
+            : channels.find(c => c.id === selectedChannel?.id) || selectedChannel
+        }
+        onSelect={(channel) => {
+          setSelectedChannel(channel);
+          setActiveTab('messages');
+          setShowChannelSearch(false);
+        }}
+      />
     </div>
   )};
 
