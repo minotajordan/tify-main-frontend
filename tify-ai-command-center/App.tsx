@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   LayoutDashboard,
   GitMerge,
@@ -15,6 +15,11 @@ import {
   Ticket,
   Globe,
   QrCode,
+  Settings,
+  ChevronUp,
+  CreditCard,
+  Shield,
+  User as UserIcon,
 } from 'lucide-react';
 import { DEFAULT_AVATAR, DEFAULT_ORG_NAME } from './constants';
 import { useI18n } from './i18n';
@@ -33,10 +38,10 @@ import ShortLinkManager from './components/ShortLinkManager';
 import PublicFormViewer from './components/forms/PublicFormViewer';
 import PublicTicketPurchase from './components/events/PublicTicketPurchase';
 import GuestRSVP from './components/events/GuestRSVP';
+import PublicShortener from './components/PublicShortener';
 
 const ShortLinkRedirect: React.FC<{ code: string }> = ({ code }) => {
   useEffect(() => {
-    alert(code);
     // Redirect to backend root endpoint
     const backendRoot =
       window.location.hostname === 'localhost'
@@ -66,7 +71,8 @@ type View =
   | 'monitoring'
   | 'forms'
   | 'events'
-  | 'shortlinks';
+  | 'shortlinks'
+  | 'settings';
 type BreadcrumbItem = { label: string; view?: View };
 
 const App: React.FC = () => {
@@ -86,31 +92,57 @@ const App: React.FC = () => {
   });
   const [loginForm, setLoginForm] = useState({ identifier: '', password: '' });
   const [resetForm, setResetForm] = useState({ identifier: '', code: '', newPassword: '' });
-  const [publicSlug, setPublicSlug] = useState<string | null>(null);
-  const [publicEventId, setPublicEventId] = useState<string | null>(null);
-  const [publicRSVPEventId, setPublicRSVPEventId] = useState<string | null>(null);
-  const [redirectCode, setRedirectCode] = useState<string | null>(null);
+  const [publicSlug, setPublicSlug] = useState<string | null>(() => {
+    if (typeof window !== 'undefined') {
+      const match = window.location.pathname.match(/^\/forms\/([a-zA-Z0-9-]+)$/);
+      return match ? match[1] : null;
+    }
+    return null;
+  });
+  const [publicEventId, setPublicEventId] = useState<string | null>(() => {
+    if (typeof window !== 'undefined') {
+      const match = window.location.pathname.match(/^\/events\/([a-zA-Z0-9-]+)\/public$/);
+      return match ? match[1] : null;
+    }
+    return null;
+  });
+  const [publicRSVPEventId, setPublicRSVPEventId] = useState<string | null>(() => {
+    if (typeof window !== 'undefined') {
+      const match = window.location.pathname.match(/^\/events\/([a-zA-Z0-9-]+)\/rsvp$/);
+      return match ? match[1] : null;
+    }
+    return null;
+  });
+  const [redirectCode, setRedirectCode] = useState<string | null>(() => {
+    if (typeof window !== 'undefined') {
+      const match = window.location.pathname.match(/^\/(L[a-zA-Z0-9]+)$/);
+      return match ? match[1] : null;
+    }
+    return null;
+  });
+  const [isPublicShortener, setIsPublicShortener] = useState(() => {
+    if (typeof window !== 'undefined') {
+      return !!window.location.pathname.match(/^\/short\/?$/i);
+    }
+    return false;
+  });
+  const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
+  const userMenuRef = useRef<HTMLDivElement>(null);
   const { t, lang, setLang } = useI18n();
 
   useEffect(() => {
-    if (typeof window !== 'undefined') {
-      const path = window.location.pathname;
-      const formMatch = path.match(/^\/forms\/([a-zA-Z0-9-]+)$/);
-      const eventMatch = path.match(/^\/events\/([a-zA-Z0-9-]+)\/public$/);
-      const rsvpMatch = path.match(/^\/events\/([a-zA-Z0-9-]+)\/rsvp$/);
-      const shortLinkMatch = path.match(/^\/(L[a-zA-Z0-9]+)$/);
-
-      if (formMatch) {
-        setPublicSlug(formMatch[1]);
-      } else if (eventMatch) {
-        setPublicEventId(eventMatch[1]);
-      } else if (rsvpMatch) {
-        setPublicRSVPEventId(rsvpMatch[1]);
-      } else if (shortLinkMatch) {
-        setRedirectCode(shortLinkMatch[1]);
+    function handleClickOutside(event: MouseEvent) {
+      if (userMenuRef.current && !userMenuRef.current.contains(event.target as Node)) {
+        setIsUserMenuOpen(false);
       }
     }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
   }, []);
+
+
 
   useEffect(() => {
     const init = async () => {
@@ -152,10 +184,8 @@ const App: React.FC = () => {
         return <ChannelManager currentUser={currentUser} />;
       case 'messages':
         return <MessageCenter />;
-      case 'approvals':
-        return <ApprovalQueue />;
       case 'users':
-        return <UsersModule />;
+        return <UsersModule currentUser={currentUser} />;
       case 'forms':
         return <FormsManager />;
       case 'events':
@@ -164,7 +194,7 @@ const App: React.FC = () => {
         return <ShortLinkManager />;
       case 'ai':
         return <AIChat onNavigateToForms={() => setCurrentView('forms')} />;
-      case 'monitoring':
+      case 'settings':
         return (
           <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
             <h3 className="text-lg font-semibold text-gray-900 mb-4">{t('nav.monitoring')}</h3>
@@ -233,13 +263,17 @@ const App: React.FC = () => {
     return <GuestRSVP eventId={publicRSVPEventId} />;
   }
 
+  if (isPublicShortener) {
+    return <PublicShortener />;
+  }
+
   if (authMode !== 'ready') {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50 p-6">
         <div className="w-full max-w-md bg-white rounded-xl shadow-sm border border-gray-100 p-6">
           {authMode === 'bootstrap' ? (
             <>
-              <h2 className="text-xl font-bold mb-4">{t('auth.createAdmin')}</h2>
+              <h2 className="text-xl font-bold mb-4 text-center">{t('auth.createAdmin')}</h2>
               <div className="space-y-3">
                 <input
                   value={bootstrapForm.email}
@@ -414,18 +448,14 @@ const App: React.FC = () => {
 
         <nav className="flex-1 p-4 space-y-2 overflow-y-auto">
           <NavItem view="dashboard" icon={LayoutDashboard} label={t('nav.dashboard')} />
-          <NavItem view="monitoring" icon={RadioTower} label={t('nav.monitoring')} />
           <NavItem view="channels" icon={GitMerge} label={t('nav.channels')} />
           <NavItem view="forms" icon={FileText} label={t('nav.forms')} />
           <NavItem view="events" icon={Ticket} label={t('nav.events')} />
-          <NavItem
-            view="approvals"
-            icon={CheckCircle}
-            label={t('nav.approvals')}
-            count={currentUser?.pendingApprovalsCount}
-          />
-          <NavItem view="users" icon={Users} label={t('nav.users')} />
+          {currentUser?.isAdmin && (
+            <NavItem view="users" icon={Users} label={t('nav.users')} />
+          )}
           <NavItem view="shortlinks" icon={QrCode} label={t('nav.shortlinks')} />
+          
 
           <div className="pt-6 pb-2 px-4">
             <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
@@ -435,28 +465,151 @@ const App: React.FC = () => {
           <NavItem view="ai" icon={Bot} label={t('nav.ai')} />
         </nav>
 
-        <div className="p-4 border-t border-slate-800">
+        <div className="p-4 border-t border-slate-800 relative" ref={userMenuRef}>
           {currentUser ? (
-            <div className="flex items-center gap-3 px-4 py-3 rounded-lg bg-slate-800/50 border border-slate-700/50">
-              <img
-                src={currentUser.avatarUrl || DEFAULT_AVATAR}
-                alt={currentUser.fullName}
-                className="w-8 h-8 rounded-full border border-indigo-500"
-              />
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium truncate">{currentUser.fullName}</p>
-                <p className="text-xs text-slate-400 truncate">{DEFAULT_ORG_NAME}</p>
-              </div>
-              <LogOut
-                size={16}
-                className="text-slate-500 hover:text-white cursor-pointer"
-                onClick={() => {
-                  localStorage.removeItem('tify_token');
-                  setCurrentUser(null);
-                  setAuthMode('login');
-                }}
-              />
-            </div>
+            <>
+              {/* User Menu Popup */}
+              {isUserMenuOpen && (
+                <>
+                  {/* Mobile Modal Overlay */}
+                  <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[60] lg:hidden flex items-end sm:items-center justify-center p-4 animate-in fade-in duration-200">
+                    <div 
+                      className="bg-white w-full max-w-sm rounded-3xl shadow-2xl overflow-hidden animate-in slide-in-from-bottom-10 sm:slide-in-from-bottom-0 sm:zoom-in-95 duration-300"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <div className="p-6 border-b border-gray-100 flex items-center justify-between bg-gray-50/50">
+                        <div className="flex items-center gap-4">
+                          <img 
+                            src={currentUser.avatarUrl || DEFAULT_AVATAR} 
+                            alt={currentUser.fullName}
+                            className="w-12 h-12 rounded-full border-2 border-white shadow-sm" 
+                          />
+                          <div>
+                            <h3 className="font-bold text-gray-900 text-lg">{currentUser.fullName}</h3>
+                            <p className="text-sm text-gray-500">{DEFAULT_ORG_NAME}</p>
+                          </div>
+                        </div>
+                        <button 
+                          onClick={() => setIsUserMenuOpen(false)} 
+                          className="p-2 bg-gray-100 hover:bg-gray-200 rounded-full text-gray-500 transition-colors"
+                        >
+                          <X size={20} />
+                        </button>
+                      </div>
+                      <div className="p-3 space-y-1">
+                        <button className="w-full flex items-center gap-3 px-4 py-3 text-gray-700 hover:bg-indigo-50 hover:text-indigo-600 rounded-xl transition-colors font-medium text-left">
+                          <UserIcon size={20} />
+                          <span>Mi Perfil</span>
+                        </button>
+                        <button
+                          onClick={() => {
+                            setCurrentView('settings');
+                            setIsUserMenuOpen(false);
+                            setBreadcrumbs([{ label: 'Configuración' }]);
+                          }}
+                          className="w-full flex items-center gap-3 px-4 py-3 text-gray-700 hover:bg-indigo-50 hover:text-indigo-600 rounded-xl transition-colors font-medium text-left"
+                        >
+                          <Settings size={20} />
+                          <span>Configuración</span>
+                        </button>
+                        <button className="w-full flex items-center gap-3 px-4 py-3 text-gray-700 hover:bg-indigo-50 hover:text-indigo-600 rounded-xl transition-colors font-medium text-left">
+                          <CreditCard size={20} />
+                          <span>Precios</span>
+                        </button>
+                        <button className="w-full flex items-center gap-3 px-4 py-3 text-gray-700 hover:bg-indigo-50 hover:text-indigo-600 rounded-xl transition-colors font-medium text-left">
+                          <Shield size={20} />
+                          <span>Política de Privacidad</span>
+                        </button>
+                        <div className="h-px bg-gray-100 my-2" />
+                        <button 
+                          onClick={() => {
+                            localStorage.removeItem('tify_token');
+                            setCurrentUser(null);
+                            setAuthMode('login');
+                            setIsUserMenuOpen(false);
+                          }}
+                          className="w-full flex items-center gap-3 px-4 py-3 text-red-600 hover:bg-red-50 rounded-xl transition-colors font-medium text-left"
+                        >
+                          <LogOut size={20} />
+                          <span>Cerrar Sesión</span>
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Desktop Popover */}
+                  <div className="hidden lg:block absolute bottom-full left-0 w-[240px] mb-3 ml-2 bg-white rounded-2xl shadow-xl border border-gray-200 overflow-hidden animate-in slide-in-from-bottom-2 fade-in zoom-in-95 duration-200 origin-bottom-left">
+                    <div className="p-3 border-b border-gray-100 bg-gray-50/50">
+                      <p className="text-xs font-bold text-gray-400 uppercase tracking-wider px-2">Mi Cuenta</p>
+                    </div>
+                    <div className="p-1.5 space-y-0.5">
+                      <button className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded-lg transition-colors font-medium text-left">
+                        <UserIcon size={16} />
+                        <span>Mi Perfil</span>
+                      </button>
+                      <button
+                        onClick={() => {
+                          setCurrentView('settings');
+                          setIsUserMenuOpen(false);
+                          setBreadcrumbs([{ label: 'Configuración' }]);
+                        }}
+                        className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded-lg transition-colors font-medium text-left"
+                      >
+                        <Settings size={16} />
+                        <span>Configuración</span>
+                      </button>
+                      <button className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded-lg transition-colors font-medium text-left">
+                        <CreditCard size={16} />
+                        <span>Precios</span>
+                      </button>
+                      <button className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded-lg transition-colors font-medium text-left">
+                        <Shield size={16} />
+                        <span>Política de Privacidad</span>
+                      </button>
+                      <div className="h-px bg-gray-100 my-1" />
+                      <button 
+                        onClick={() => {
+                          localStorage.removeItem('tify_token');
+                          setCurrentUser(null);
+                          setAuthMode('login');
+                          setIsUserMenuOpen(false);
+                        }}
+                        className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-red-600 hover:bg-red-50 rounded-lg transition-colors font-medium text-left"
+                      >
+                        <LogOut size={16} />
+                        <span>Cerrar Sesión</span>
+                      </button>
+                    </div>
+                  </div>
+                </>
+              )}
+
+              {/* Trigger Button */}
+              <button
+                onClick={() => setIsUserMenuOpen(!isUserMenuOpen)}
+                className={`w-full flex items-center gap-3 px-3 py-3 rounded-xl border transition-all duration-200 group relative ${
+                  isUserMenuOpen 
+                    ? 'bg-slate-800 border-indigo-500/50 shadow-lg' 
+                    : 'bg-slate-800/50 border-slate-700/50 hover:bg-slate-800 hover:border-slate-600'
+                }`}
+              >
+                <div className="relative">
+                  <img
+                    src={currentUser.avatarUrl || DEFAULT_AVATAR}
+                    alt={currentUser.fullName}
+                    className="w-9 h-9 rounded-full border-2 border-slate-700 group-hover:border-indigo-500 transition-colors object-cover"
+                  />
+                  <div className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-green-500 border-2 border-slate-800 rounded-full"></div>
+                </div>
+                <div className="flex-1 min-w-0 text-left">
+                  <p className="text-sm font-bold text-white truncate">{currentUser.fullName}</p>
+                  <p className="text-xs text-slate-400 truncate group-hover:text-slate-300 transition-colors">{DEFAULT_ORG_NAME}</p>
+                </div>
+                <div className={`text-slate-500 transition-transform duration-300 ${isUserMenuOpen ? 'rotate-180 text-indigo-400' : 'group-hover:text-white'}`}>
+                  <ChevronUp size={18} />
+                </div>
+              </button>
+            </>
           ) : (
             <div className="text-xs text-slate-500 text-center">{t('status.connecting')}</div>
           )}

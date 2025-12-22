@@ -38,7 +38,7 @@ const formatToColombia = (dateStr: string, relative: boolean = false) => {
   if (!dateStr) return '';
   // Convert UTC to Colombia time
   const date = dayjs.utc(dateStr).tz(COLOMBIA_TZ);
-  
+
   if (relative) {
     return date.fromNow();
   }
@@ -181,10 +181,10 @@ const FormsList: React.FC<{
           isPublished: false,
           collectUserInfo: false,
         };
-        
+
         localStorage.setItem('tify_form_draft_new', JSON.stringify(editorDraft));
         localStorage.removeItem('tify_pending_ai_form');
-        
+
         setShowAIChat(false);
         onEdit('new');
       } catch (e) {
@@ -196,9 +196,10 @@ const FormsList: React.FC<{
     }
   };
 
-  const filteredForms = forms.filter(form =>  
-    form.title.toLowerCase().includes(searchQuery.toLowerCase()) || 
-    form.description?.toLowerCase().includes(searchQuery.toLowerCase())
+  const filteredForms = forms.filter(
+    (form) =>
+      form.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      form.description?.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
   if (loading) {
@@ -216,7 +217,10 @@ const FormsList: React.FC<{
           {/* Mobile Skeleton */}
           <div className="block md:hidden space-y-4">
             {[1, 2, 3, 4].map((i) => (
-              <div key={i} className="bg-white rounded-xl border border-gray-200 shadow-sm p-4 animate-pulse">
+              <div
+                key={i}
+                className="bg-white rounded-xl border border-gray-200 shadow-sm p-4 animate-pulse"
+              >
                 <div className="flex justify-between items-start mb-4">
                   <div className="space-y-2 flex-1">
                     <div className="h-5 w-3/4 bg-gray-200 rounded"></div>
@@ -299,17 +303,17 @@ const FormsList: React.FC<{
           <h2 className="text-xl font-semibold text-gray-900">{t('forms.manager.title')}</h2>
           <p className="text-sm text-gray-500 hidden sm:block">{t('forms.manager.subtitle')}</p>
         </div>
-        
+
         <div className="flex items-center gap-3 flex-1 md:justify-end">
           {/* Search Bar */}
           <div className="relative w-full md:w-64">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
-            <input 
-                type="text"
-                placeholder={t('forms.searchPlaceholder')}
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all"
+            <input
+              type="text"
+              placeholder={t('forms.searchPlaceholder')}
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all"
             />
           </div>
 
@@ -333,224 +337,255 @@ const FormsList: React.FC<{
       <div className="flex-1 overflow-auto bg-gray-50 p-4 md:p-6">
         {/* Mobile View: Cards */}
         <div className="block md:hidden space-y-4">
-        {filteredForms.map((form) => (
-          <div 
-            key={form.id} 
-            className="bg-white rounded-xl border border-gray-200 shadow-sm p-4 cursor-pointer hover:border-indigo-300 transition-colors"
-            onClick={() => onViewSubmissions(form.id)}
-          >
-            <div className="flex justify-between items-start mb-2">
-              <div>
-                <h3 className="font-medium text-gray-900 line-clamp-1">{form.title}</h3>
-                <p className="text-xs text-gray-500 mt-1 line-clamp-2">{form.description}</p>
+          {filteredForms.map((form) => (
+            <div
+              key={form.id}
+              className="bg-white rounded-xl border border-gray-200 shadow-sm p-4 cursor-pointer hover:border-indigo-300 transition-colors"
+              onClick={() => onViewSubmissions(form.id)}
+            >
+              <div className="flex justify-between items-start mb-2">
+                <div>
+                  <h3 className="font-medium text-gray-900 line-clamp-1">{form.title}</h3>
+                  <p className="text-xs text-gray-500 mt-1 line-clamp-2">{form.description}</p>
+                </div>
+                <span
+                  className={`px-2 py-0.5 text-[10px] uppercase font-bold tracking-wide rounded-full flex items-center gap-1.5 ${
+                    !form.isPublished
+                      ? 'bg-gray-100 text-gray-600'
+                      : form.isActive
+                        ? 'bg-green-100 text-green-800'
+                        : 'bg-amber-100 text-amber-800'
+                  }`}
+                >
+                  {form.isPublished && form.isActive && (
+                    <span className="relative flex h-2 w-2">
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
+                      <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span>
+                    </span>
+                  )}
+                  {form.isPublished && !form.isActive && (
+                    <span className="relative flex h-2 w-2">
+                      <span className="animate-pulse absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
+                      <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-500"></span>
+                    </span>
+                  )}
+                  {!form.isPublished
+                    ? t('forms.status.draft')
+                    : form.isActive
+                      ? t('forms.status.active')
+                      : t('forms.status.paused')}
+                </span>
               </div>
-              <span
-                className={`px-2 py-0.5 text-[10px] uppercase font-bold tracking-wide rounded-full flex items-center gap-1.5 ${
-                  !form.isPublished 
-                    ? 'bg-gray-100 text-gray-600' 
-                    : form.isActive 
-                      ? 'bg-green-100 text-green-800' 
-                      : 'bg-amber-100 text-amber-800'
-                }`}
-              >
-                {form.isPublished && form.isActive && (
-                  <span className="relative flex h-2 w-2">
-                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
-                    <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span>
+
+              <div className="flex items-center gap-4 text-xs text-gray-500 mb-4 border-b border-gray-50 pb-3">
+                <div className="flex items-center gap-1">
+                  <CheckCircle size={14} className="text-gray-400" />
+                  <span>
+                    {form._count?.submissions || 0} {t('forms.list.header.submissions')}
                   </span>
-                )}
-                {form.isPublished && !form.isActive && (
-                  <span className="relative flex h-2 w-2">
-                    <span className="animate-pulse absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
-                    <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-500"></span>
-                  </span>
-                )}
-                {!form.isPublished 
-                  ? t('forms.status.draft') 
-                  : form.isActive 
-                    ? t('forms.status.active') 
-                    : t('forms.status.paused')}
-              </span>
-            </div>
+                </div>
+                <div className="flex items-center gap-1">
+                  <Clock size={14} className="text-gray-400" />
+                  <span>{formatToColombia(form.createdAt, true)}</span>
+                </div>
+              </div>
 
-            <div className="flex items-center gap-4 text-xs text-gray-500 mb-4 border-b border-gray-50 pb-3">
-              <div className="flex items-center gap-1">
-                <CheckCircle size={14} className="text-gray-400" />
-                <span>{form._count?.submissions || 0} {t('forms.list.header.submissions')}</span>
-              </div>
-              <div className="flex items-center gap-1">
-                <Clock size={14} className="text-gray-400" />
-                <span>{formatToColombia(form.createdAt, true)}</span>
-              </div>
-            </div>
-
-            <div className="flex justify-between items-center">
-              <div className="flex gap-1">
-                <button
-                  onClick={(e) => { e.stopPropagation(); window.open(`/forms/${form.slug}`, '_blank'); }}
-                  className="p-2 text-gray-500 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
-                  title={t('forms.action.viewPublic')}
-                >
-                  <ExternalLink size={18} />
-                </button>
-                <button
-                  onClick={(e) => { e.stopPropagation(); handleOpenQR(form); }}
-                  className="p-2 text-gray-500 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
-                  title={t('forms.action.qrCode')}
-                >
-                  <QrCode size={18} />
-                </button>
-                <button
-                  onClick={(e) => { e.stopPropagation(); onViewSubmissions(form.id); }}
-                  className="p-2 text-gray-500 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
-                  title={t('forms.action.viewSubmissions')}
-                >
-                  <Eye size={18} />
-                </button>
-              </div>
-              
-              <div className="flex gap-1 border-l border-gray-100 pl-2">
-                <button
-                  onClick={(e) => { e.stopPropagation(); onEdit(form.id); }}
-                  className="p-2 text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
-                  title={t('forms.action.edit')}
-                >
-                  <Edit2 size={18} />
-                </button>
-                <button
-                  onClick={(e) => { e.stopPropagation(); handleDelete(form.id); }}
-                  className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                  title={t('forms.action.delete')}
-                >
-                  <Trash2 size={18} />
-                </button>
-              </div>
-            </div>
-          </div>
-        ))}
-        
-        {forms.length === 0 && (
-          <div className="text-center py-8 text-gray-500 bg-white rounded-xl border border-dashed border-gray-200">
-            {t('forms.list.empty')}
-          </div>
-        )}
-      </div>
-
-      {/* Desktop View: Table */}
-      <div className="hidden md:block overflow-x-auto bg-white rounded-lg border border-gray-200 shadow-sm">
-        <table className="w-full">
-          <thead className="bg-gray-50">
-            <tr>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                {t('forms.list.header.title')}
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                {t('forms.list.header.status')}
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                {t('forms.list.header.submissions')}
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                {t('forms.list.header.created')}
-              </th>
-              <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                {t('forms.list.header.actions')}
-              </th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-gray-200">
-            {filteredForms.map((form) => (
-              <tr 
-                key={form.id} 
-                className="hover:bg-indigo-50 transition-colors cursor-pointer"
-                onClick={() => onViewSubmissions(form.id)}
-              >
-                <td className="px-6 py-4 whitespace-nowrap">
-                  <div className="font-medium text-gray-900">{form.title}</div>
-                  <div className="text-sm text-gray-500 truncate max-w-xs" title={form.description}>
-                    {form.description}
-                  </div>
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap">
-                  <span
-                    className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full items-center gap-1.5 ${
-                      !form.isPublished 
-                        ? 'bg-gray-100 text-gray-600' 
-                        : form.isActive 
-                          ? 'bg-green-100 text-green-800' 
-                          : 'bg-amber-100 text-amber-800'
-                    }`}
+              <div className="flex justify-between items-center">
+                <div className="flex gap-1">
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      window.open(`/forms/${form.slug}`, '_blank');
+                    }}
+                    className="p-2 text-gray-500 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
+                    title={t('forms.action.viewPublic')}
                   >
-                    {form.isPublished && form.isActive && (
-                      <span className="relative flex h-2 w-2">
-                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
-                        <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span>
-                      </span>
-                    )}
-                    {form.isPublished && !form.isActive && (
-                      <span className="relative flex h-2 w-2">
-                        <span className="animate-pulse absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
-                        <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-500"></span>
-                      </span>
-                    )}
-                    {!form.isPublished 
-                      ? t('forms.status.draft') 
-                      : form.isActive 
-                        ? t('forms.status.active') 
-                        : t('forms.status.paused')}
-                  </span>
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                  {form._count?.submissions || 0}
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                  {formatToColombia(form.createdAt, true)}
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                  <div className="flex justify-end gap-2">
-                    <button
-                      onClick={(e) => { e.stopPropagation(); window.open(`/forms/${form.slug}`, '_blank'); }}
-                      className="text-gray-400 hover:text-indigo-600"
-                      title={t('forms.action.viewPublic')}
-                    >
-                      <ExternalLink size={18} />
-                    </button>
-                    <button
-                      onClick={(e) => { e.stopPropagation(); handleOpenQR(form); }}
-                      className="text-gray-400 hover:text-indigo-600"
-                      title={t('forms.action.qrCode')}
-                    >
-                      <QrCode size={18} />
-                    </button>
-                    <button
-                      onClick={(e) => { e.stopPropagation(); onEdit(form.id); }}
-                      className="text-indigo-600 hover:text-indigo-900"
-                      title={t('forms.action.edit')}
-                    >
-                      <Edit2 size={18} />
-                    </button>
-                    <button
-                      onClick={(e) => { e.stopPropagation(); handleDelete(form.id); }}
-                      className="text-red-600 hover:text-red-900"
-                      title={t('forms.action.delete')}
-                    >
-                      <Trash2 size={18} />
-                    </button>
-                  </div>
-                </td>
-              </tr>
-            ))}
-            {forms.length === 0 && (
-              <tr>
-                <td colSpan={5} className="px-6 py-8 text-center text-gray-500">
-                  {t('forms.list.empty')}
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
+                    <ExternalLink size={18} />
+                  </button>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleOpenQR(form);
+                    }}
+                    className="p-2 text-gray-500 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
+                    title={t('forms.action.qrCode')}
+                  >
+                    <QrCode size={18} />
+                  </button>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onViewSubmissions(form.id);
+                    }}
+                    className="p-2 text-gray-500 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
+                    title={t('forms.action.viewSubmissions')}
+                  >
+                    <Eye size={18} />
+                  </button>
+                </div>
 
+                <div className="flex gap-1 border-l border-gray-100 pl-2">
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onEdit(form.id);
+                    }}
+                    className="p-2 text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
+                    title={t('forms.action.edit')}
+                  >
+                    <Edit2 size={18} />
+                  </button>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleDelete(form.id);
+                    }}
+                    className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                    title={t('forms.action.delete')}
+                  >
+                    <Trash2 size={18} />
+                  </button>
+                </div>
+              </div>
+            </div>
+          ))}
+
+          {forms.length === 0 && (
+            <div className="text-center py-8 text-gray-500 bg-white rounded-xl border border-dashed border-gray-200">
+              {t('forms.list.empty')}
+            </div>
+          )}
+        </div>
+
+        {/* Desktop View: Table */}
+        <div className="hidden md:block overflow-x-auto bg-white rounded-lg border border-gray-200 shadow-sm">
+          <table className="w-full">
+            <thead className="bg-gray-50">
+              <tr>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  {t('forms.list.header.title')}
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  {t('forms.list.header.status')}
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  {t('forms.list.header.submissions')}
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  {t('forms.list.header.created')}
+                </th>
+                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  {t('forms.list.header.actions')}
+                </th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-200">
+              {filteredForms.map((form) => (
+                <tr
+                  key={form.id}
+                  className="hover:bg-indigo-50 transition-colors cursor-pointer"
+                  onClick={() => onViewSubmissions(form.id)}
+                >
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <div className="font-medium text-gray-900">{form.title}</div>
+                    <div
+                      className="text-sm text-gray-500 truncate max-w-xs"
+                      title={form.description}
+                    >
+                      {form.description}
+                    </div>
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <span
+                      className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full items-center gap-1.5 ${
+                        !form.isPublished
+                          ? 'bg-gray-100 text-gray-600'
+                          : form.isActive
+                            ? 'bg-green-100 text-green-800'
+                            : 'bg-amber-100 text-amber-800'
+                      }`}
+                    >
+                      {form.isPublished && form.isActive && (
+                        <span className="relative flex h-2 w-2">
+                          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
+                          <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span>
+                        </span>
+                      )}
+                      {form.isPublished && !form.isActive && (
+                        <span className="relative flex h-2 w-2">
+                          <span className="animate-pulse absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
+                          <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-500"></span>
+                        </span>
+                      )}
+                      {!form.isPublished
+                        ? t('forms.status.draft')
+                        : form.isActive
+                          ? t('forms.status.active')
+                          : t('forms.status.paused')}
+                    </span>
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                    {form._count?.submissions || 0}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                    {formatToColombia(form.createdAt, true)}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                    <div className="flex justify-end gap-2">
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          window.open(`/forms/${form.slug}`, '_blank');
+                        }}
+                        className="text-gray-400 hover:text-indigo-600"
+                        title={t('forms.action.viewPublic')}
+                      >
+                        <ExternalLink size={18} />
+                      </button>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleOpenQR(form);
+                        }}
+                        className="text-gray-400 hover:text-indigo-600"
+                        title={t('forms.action.qrCode')}
+                      >
+                        <QrCode size={18} />
+                      </button>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onEdit(form.id);
+                        }}
+                        className="text-indigo-600 hover:text-indigo-900"
+                        title={t('forms.action.edit')}
+                      >
+                        <Edit2 size={18} />
+                      </button>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDelete(form.id);
+                        }}
+                        className="text-red-600 hover:text-red-900"
+                        title={t('forms.action.delete')}
+                      >
+                        <Trash2 size={18} />
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+              {forms.length === 0 && (
+                <tr>
+                  <td colSpan={5} className="px-6 py-8 text-center text-gray-500">
+                    {t('forms.list.empty')}
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
 
       {qrModalForm && (
@@ -581,7 +616,9 @@ const FormsList: React.FC<{
                 <div className="flex items-center gap-1.5 text-amber-600 text-sm mb-6 bg-amber-50 px-3 py-1 rounded-full">
                   <Clock size={14} />
                   <span>
-                    {t('forms.modal.expiresOn')} {formatToColombia(qrModalForm.expiresAt || '', true)} ({formatToColombia(qrModalForm.expiresAt || '')})
+                    {t('forms.modal.expiresOn')}{' '}
+                    {formatToColombia(qrModalForm.expiresAt || '', true)} (
+                    {formatToColombia(qrModalForm.expiresAt || '')})
                   </span>
                 </div>
               )}
@@ -614,9 +651,7 @@ const FormsList: React.FC<{
             </div>
 
             <div className="p-4 bg-gray-50 border-t border-gray-100 text-center">
-              <p className="text-xs text-gray-500">
-                {t('forms.modal.scanToAccess')}
-              </p>
+              <p className="text-xs text-gray-500">{t('forms.modal.scanToAccess')}</p>
             </div>
           </div>
         </div>
@@ -629,7 +664,7 @@ const FormsList: React.FC<{
                 <Sparkles size={20} />
                 <h3 className="font-semibold">Asistente de Creación</h3>
               </div>
-              <button 
+              <button
                 onClick={() => setShowAIChat(false)}
                 className="p-1 hover:bg-gray-200 rounded-full transition-colors text-gray-500"
               >

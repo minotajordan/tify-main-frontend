@@ -35,7 +35,7 @@ type ApproverItem = {
   channel: { id: string; title: string; icon?: string; parentId?: string };
 };
 
-const UsersModule: React.FC = () => {
+const UsersModule: React.FC<{ currentUser: User | null }> = ({ currentUser }) => {
   const { t } = useI18n();
   const formatAgo = (iso?: string) => {
     if (!iso) return '';
@@ -77,7 +77,7 @@ const UsersModule: React.FC = () => {
   const [pending, setPending] = useState<Message[]>([]);
   const [loadingDetail, setLoadingDetail] = useState(false);
   const [windowHours, setWindowHours] = useState<number>(24);
-  const [me, setMe] = useState<User | null>(null);
+  const me = currentUser;
   const [subsModalOpen, setSubsModalOpen] = useState(false);
   const [confirmSubId, setConfirmSubId] = useState<string | null>(null);
   const [detailTab, setDetailTab] = useState<
@@ -353,12 +353,7 @@ const UsersModule: React.FC = () => {
     setWindowRange(map[rangeIndex]);
   }, [rangeIndex]);
 
-  useEffect(() => {
-    api
-      .authMe()
-      .then(setMe)
-      .catch(() => setMe(null));
-  }, []);
+  // Auth check moved to props
 
   useEffect(() => {
     if (selected) {
@@ -494,6 +489,19 @@ const UsersModule: React.FC = () => {
       await navigator.clipboard.writeText(selected.verificationCode);
     } catch {}
   };
+
+  if (!me?.isAdmin) {
+    return (
+      <div className="flex flex-col items-center justify-center h-full p-8 text-center">
+        <ShieldCheck size={48} className="text-gray-300 mb-4" />
+        <h3 className="text-lg font-semibold text-gray-900 mb-2">Acceso Restringido</h3>
+        <p className="text-gray-500 max-w-md">
+          Este módulo está reservado únicamente para administradores del sistema.
+          Si crees que deberías tener acceso, contacta al soporte.
+        </p>
+      </div>
+    );
+  }
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-12 gap-6 h-screen  p-4 md:p-8">

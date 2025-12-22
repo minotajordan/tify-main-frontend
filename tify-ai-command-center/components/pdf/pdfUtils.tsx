@@ -28,7 +28,7 @@ export const splitHtmlContent = (html: string, initialOffset: number = 0): strin
   // A4 (297mm) ~ 1123px at 96dpi.
   // Margins (top/bottom) + Header/Footer take significant space.
   // Let's use a smaller safe content area.
-  const BASE_MAX_HEIGHT = 600; 
+  const BASE_MAX_HEIGHT = 600;
 
   // Helper to get height of a node
   const getNodeHeight = (node: Node): number => {
@@ -54,7 +54,8 @@ export const splitHtmlContent = (html: string, initialOffset: number = 0): strin
     Array.from(nodes).forEach((node) => {
       // Determine max height for current page
       // If pages.length is 0, we are on the first page, so subtract initialOffset
-      const currentMaxHeight = pages.length === 0 ? BASE_MAX_HEIGHT - initialOffset : BASE_MAX_HEIGHT;
+      const currentMaxHeight =
+        pages.length === 0 ? BASE_MAX_HEIGHT - initialOffset : BASE_MAX_HEIGHT;
 
       if (node.nodeType === Node.TEXT_NODE) {
         // For text nodes, we might need to wrap them in a span to measure
@@ -62,13 +63,13 @@ export const splitHtmlContent = (html: string, initialOffset: number = 0): strin
         const span = document.createElement('span');
         span.textContent = node.textContent;
         const height = getNodeHeight(span);
-        
+
         if (currentHeight + height > currentMaxHeight && currentPageNodes.length > 0) {
           // Push current page
           const pageDiv = document.createElement('div');
-          currentPageNodes.forEach(n => pageDiv.appendChild(n.cloneNode(true)));
+          currentPageNodes.forEach((n) => pageDiv.appendChild(n.cloneNode(true)));
           if (!isEmptyContent(pageDiv.innerHTML)) {
-              pages.push(pageDiv.innerHTML);
+            pages.push(pageDiv.innerHTML);
           }
           currentPageNodes = [];
           currentHeight = 0;
@@ -78,19 +79,19 @@ export const splitHtmlContent = (html: string, initialOffset: number = 0): strin
       } else {
         // Element node
         const height = getNodeHeight(node);
-        
+
         if (currentHeight + height > currentMaxHeight) {
           // If it's a large block that doesn't fit, we might want to push current page first
           if (currentPageNodes.length > 0) {
-             const pageDiv = document.createElement('div');
-             currentPageNodes.forEach(n => pageDiv.appendChild(n.cloneNode(true)));
-             if (!isEmptyContent(pageDiv.innerHTML)) {
-                 pages.push(pageDiv.innerHTML);
-             }
-             currentPageNodes = [];
-             currentHeight = 0;
+            const pageDiv = document.createElement('div');
+            currentPageNodes.forEach((n) => pageDiv.appendChild(n.cloneNode(true)));
+            if (!isEmptyContent(pageDiv.innerHTML)) {
+              pages.push(pageDiv.innerHTML);
+            }
+            currentPageNodes = [];
+            currentHeight = 0;
           }
-          
+
           // If the element itself is larger than max height, we just have to put it on a new page
           // (Note: Ideally we would split the block, but that's complex. For now, pushing to next page is safer)
           currentPageNodes.push(node);
@@ -108,9 +109,9 @@ export const splitHtmlContent = (html: string, initialOffset: number = 0): strin
   // Push remaining nodes
   if (currentPageNodes.length > 0) {
     const pageDiv = document.createElement('div');
-    currentPageNodes.forEach(n => pageDiv.appendChild(n.cloneNode(true)));
+    currentPageNodes.forEach((n) => pageDiv.appendChild(n.cloneNode(true)));
     if (!isEmptyContent(pageDiv.innerHTML)) {
-        pages.push(pageDiv.innerHTML);
+      pages.push(pageDiv.innerHTML);
     }
   }
 

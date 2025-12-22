@@ -105,7 +105,19 @@ async function request<T>(url: string, options?: RequestInit): Promise<T> {
     }
     throw new Error(`HTTP ${res.status}: ${text}`);
   }
-  const json = await res.json();
+
+  let json: any = null;
+  if (res.status !== 204) {
+    try {
+      json = await res.json();
+    } catch {
+      // If parsing fails but status is OK, we might return null or text?
+      // For now assume if not 204, it should be JSON.
+      // But to be safe against empty 200 OK:
+      json = null;
+    }
+  }
+
   if (typeof window !== 'undefined') {
     try {
       window.dispatchEvent(
@@ -122,7 +134,7 @@ async function request<T>(url: string, options?: RequestInit): Promise<T> {
       );
     } catch {}
   }
-  return json;
+  return json as T;
 }
 
 export async function uploadFile(file: File): Promise<{ url: string }> {

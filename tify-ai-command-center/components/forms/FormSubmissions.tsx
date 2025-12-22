@@ -23,7 +23,9 @@ const FormSubmissions: React.FC<{ formId: string; onClose: () => void }> = ({
   const [loading, setLoading] = useState(true);
   const [formTitle, setFormTitle] = useState('');
   const [formData, setFormData] = useState<any>(null);
-  const [viewFile, setViewFile] = useState<{ name: string; type: string; data: string } | null>(null);
+  const [viewFile, setViewFile] = useState<{ name: string; type: string; data: string } | null>(
+    null
+  );
   const [viewMode, setViewMode] = useState<'table' | 'cards'>('table');
 
   const [allKeys, setAllKeys] = useState<string[]>([]);
@@ -38,7 +40,7 @@ const FormSubmissions: React.FC<{ formId: string; onClose: () => void }> = ({
         setViewMode('table');
       }
     };
-    
+
     // Set initial
     handleResize();
 
@@ -86,7 +88,7 @@ const FormSubmissions: React.FC<{ formId: string; onClose: () => void }> = ({
           new Date(s.createdAt).toISOString(),
           ...allKeys.map((k) => JSON.stringify(s.data[k] ?? '')),
         ];
-        
+
         if (hasTrackingInfo) {
           row.push(
             s.ipAddress || '',
@@ -95,7 +97,7 @@ const FormSubmissions: React.FC<{ formId: string; onClose: () => void }> = ({
             s.deviceInfo ? JSON.stringify(s.deviceInfo).replace(/,/g, ';') : ''
           );
         }
-        
+
         return row.join(',');
       }),
     ].join('\n');
@@ -159,7 +161,10 @@ const FormSubmissions: React.FC<{ formId: string; onClose: () => void }> = ({
           <div className="h-12 w-full bg-gray-200 rounded-lg"></div>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {[1, 2, 3, 4, 5, 6].map((i) => (
-              <div key={i} className="bg-white p-6 rounded-xl shadow-sm border border-gray-200 space-y-4">
+              <div
+                key={i}
+                className="bg-white p-6 rounded-xl shadow-sm border border-gray-200 space-y-4"
+              >
                 <div className="flex justify-between items-center">
                   <div className="h-4 w-24 bg-gray-200 rounded"></div>
                   <div className="h-4 w-32 bg-gray-200 rounded"></div>
@@ -194,7 +199,9 @@ const FormSubmissions: React.FC<{ formId: string; onClose: () => void }> = ({
             <button
               onClick={() => setViewMode('table')}
               className={`p-1.5 rounded-md transition-all ${
-                viewMode === 'table' ? 'bg-white shadow-sm text-indigo-600' : 'text-gray-500 hover:text-gray-700'
+                viewMode === 'table'
+                  ? 'bg-white shadow-sm text-indigo-600'
+                  : 'text-gray-500 hover:text-gray-700'
               }`}
               title="Vista de tabla"
             >
@@ -203,7 +210,9 @@ const FormSubmissions: React.FC<{ formId: string; onClose: () => void }> = ({
             <button
               onClick={() => setViewMode('cards')}
               className={`p-1.5 rounded-md transition-all ${
-                viewMode === 'cards' ? 'bg-white shadow-sm text-indigo-600' : 'text-gray-500 hover:text-gray-700'
+                viewMode === 'cards'
+                  ? 'bg-white shadow-sm text-indigo-600'
+                  : 'text-gray-500 hover:text-gray-700'
               }`}
               title="Vista de tarjetas"
             >
@@ -233,7 +242,9 @@ const FormSubmissions: React.FC<{ formId: string; onClose: () => void }> = ({
                   <table className="w-full text-sm text-left">
                     <thead className="bg-gray-50 text-gray-500 font-medium border-b border-gray-200">
                       <tr>
-                        <th className="px-6 py-3 whitespace-nowrap">{t('forms.submissions.date')}</th>
+                        <th className="px-6 py-3 whitespace-nowrap">
+                          {t('forms.submissions.date')}
+                        </th>
                         {allKeys.map((key) => (
                           <th key={key} className="px-6 py-3 whitespace-nowrap capitalize">
                             {key}
@@ -265,10 +276,19 @@ const FormSubmissions: React.FC<{ formId: string; onClose: () => void }> = ({
                                 {sub.ipAddress || '-'}
                               </td>
                               <td className="px-6 py-4 whitespace-nowrap text-gray-500 text-sm">
-                                {sub.country ? `${sub.city ? sub.city + ', ' : ''}${sub.country}` : '-'}
+                                {sub.country
+                                  ? `${sub.city ? sub.city + ', ' : ''}${sub.country}`
+                                  : '-'}
                               </td>
-                              <td className="px-6 py-4 whitespace-nowrap text-gray-500 text-sm max-w-[200px] truncate" title={sub.userAgent || ''}>
-                                {sub.deviceInfo?.platform ? `${sub.deviceInfo.platform} - ${sub.deviceInfo.browser || ''}` : (sub.userAgent ? sub.userAgent.substring(0, 30) + '...' : '-')}
+                              <td
+                                className="px-6 py-4 whitespace-nowrap text-gray-500 text-sm max-w-[200px] truncate"
+                                title={sub.userAgent || ''}
+                              >
+                                {sub.deviceInfo?.platform
+                                  ? `${sub.deviceInfo.platform} - ${sub.deviceInfo.browser || ''}`
+                                  : sub.userAgent
+                                    ? sub.userAgent.substring(0, 30) + '...'
+                                    : '-'}
                               </td>
                             </>
                           )}
@@ -284,7 +304,10 @@ const FormSubmissions: React.FC<{ formId: string; onClose: () => void }> = ({
             {viewMode === 'cards' && (
               <div className="space-y-4">
                 {submissions.map((sub) => (
-                  <div key={sub.id} className="bg-white border border-gray-200 rounded-xl p-4 shadow-sm">
+                  <div
+                    key={sub.id}
+                    className="bg-white border border-gray-200 rounded-xl p-4 shadow-sm"
+                  >
                     <div className="flex justify-between items-center mb-4 pb-3 border-b border-gray-100">
                       <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
                         {t('forms.submissions.date')}
@@ -315,10 +338,14 @@ const FormSubmissions: React.FC<{ formId: string; onClose: () => void }> = ({
                             <span className="font-medium">IP:</span> {sub.ipAddress || '-'}
                           </div>
                           <div>
-                            <span className="font-medium">Ubicación:</span> {sub.country ? `${sub.city ? sub.city + ', ' : ''}${sub.country}` : '-'}
+                            <span className="font-medium">Ubicación:</span>{' '}
+                            {sub.country ? `${sub.city ? sub.city + ', ' : ''}${sub.country}` : '-'}
                           </div>
                           <div className="col-span-2 truncate" title={sub.userAgent || ''}>
-                            <span className="font-medium">Dispositivo:</span> {sub.deviceInfo?.platform ? `${sub.deviceInfo.platform} (${sub.deviceInfo.screenResolution || ''})` : '-'}
+                            <span className="font-medium">Dispositivo:</span>{' '}
+                            {sub.deviceInfo?.platform
+                              ? `${sub.deviceInfo.platform} (${sub.deviceInfo.screenResolution || ''})`
+                              : '-'}
                           </div>
                         </div>
                       </div>
@@ -341,7 +368,9 @@ const FormSubmissions: React.FC<{ formId: string; onClose: () => void }> = ({
                 </div>
                 <div>
                   <h3 className="font-semibold text-gray-900">{viewFile.name}</h3>
-                  <p className="text-xs text-gray-500 uppercase">{viewFile.type.split('/')[1] || 'FILE'}</p>
+                  <p className="text-xs text-gray-500 uppercase">
+                    {viewFile.type.split('/')[1] || 'FILE'}
+                  </p>
                 </div>
               </div>
               <div className="flex items-center gap-2">

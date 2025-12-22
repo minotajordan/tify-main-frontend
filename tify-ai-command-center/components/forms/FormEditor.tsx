@@ -86,10 +86,10 @@ const FormEditor: React.FC<FormEditorProps> = ({ formId, onClose, onSave }) => {
     { type: 'habeasData', label: t('forms.field.habeasData'), icon: Shield },
   ];
 
-  const getDefaultHeader = (title: string) => 
+  const getDefaultHeader = (title: string) =>
     `<div style="text-align: center; padding: 20px 0;"><h1 class="text-3xl font-bold text-indigo-600">${title}</h1></div>`;
 
-  const getDefaultFooter = () => 
+  const getDefaultFooter = () =>
     `<div style="text-align: center; padding: 20px; color: #6b7280; font-size: 0.875rem;"><p>&copy; ${new Date().getFullYear()} Tify. All rights reserved.</p></div>`;
 
   useEffect(() => {
@@ -144,13 +144,13 @@ const FormEditor: React.FC<FormEditorProps> = ({ formId, onClose, onSave }) => {
     setLoading(true);
     try {
       const data = await api.getForm(id);
-      
+
       // Check if custom appearance is used
       const defHeader = getDefaultHeader(data.title);
       const defFooter = getDefaultFooter();
       const defSuccess = t('forms.defaultSuccessMessage');
-      
-      const hasCustomAppearance = 
+
+      const hasCustomAppearance =
         (data.headerContent && data.headerContent !== defHeader) ||
         (data.footerContent && data.footerContent !== defFooter) ||
         (data.successMessage && data.successMessage !== defSuccess);
@@ -195,15 +195,15 @@ const FormEditor: React.FC<FormEditorProps> = ({ formId, onClose, onSave }) => {
   const executeStatusChange = async (newStatus: { isActive?: boolean; isPublished?: boolean }) => {
     if (!formData.title) return alert(t('forms.error.titleRequired'));
     setIsUpdatingStatus(true);
-    
+
     try {
       if (formId === 'new') {
         // For new forms, we MUST save everything to create it
-        let dataToSave = { ...formData, ...newStatus };
+        const dataToSave = { ...formData, ...newStatus };
         if (newStatus.isPublished && !formData.wasPublished) {
           dataToSave.wasPublished = true;
         }
-        
+
         // Apply defaults if needed
         if (!showAdvancedAppearance) {
           dataToSave.headerContent = getDefaultHeader(formData.title);
@@ -217,19 +217,19 @@ const FormEditor: React.FC<FormEditorProps> = ({ formId, onClose, onSave }) => {
       } else {
         // For existing forms, ONLY update the status fields
         const payload: any = { ...newStatus };
-        
+
         // Handle wasPublished logic
         if (newStatus.isPublished && !formData.wasPublished) {
           payload.wasPublished = true;
         }
 
         await api.updateForm(formId, payload);
-        
+
         // Update local state to reflect status change
-        setFormData(prev => ({ 
-          ...prev, 
-          ...newStatus, 
-          wasPublished: payload.wasPublished || prev.wasPublished 
+        setFormData((prev) => ({
+          ...prev,
+          ...newStatus,
+          wasPublished: payload.wasPublished || prev.wasPublished,
         }));
       }
     } catch (err) {
@@ -244,9 +244,9 @@ const FormEditor: React.FC<FormEditorProps> = ({ formId, onClose, onSave }) => {
   const executeSave = async (forcePublish?: boolean) => {
     if (!formData.title) return alert(t('forms.error.titleRequired'));
     setIsSaving(true);
-    
+
     // Prepare full data to save
-    let dataToSave = { ...formData };
+    const dataToSave = { ...formData };
 
     // Update publish state if requested via modal
     if (forcePublish === true) {
@@ -273,7 +273,7 @@ const FormEditor: React.FC<FormEditorProps> = ({ formId, onClose, onSave }) => {
       } else {
         await api.updateForm(formId, dataToSave);
       }
-      
+
       localStorage.removeItem(`tify_form_draft_${formId}`);
       onSave(); // Close editor and return to list
     } catch (err) {
@@ -304,12 +304,15 @@ const FormEditor: React.FC<FormEditorProps> = ({ formId, onClose, onSave }) => {
     } else if (type === 'file') {
       initialOptions = {
         allowedTypes: ['pdf', 'image', 'video', 'document'],
-        maxSize: 10
+        maxSize: 10,
       };
       initialLabel = t('forms.field.file');
     } else if (type === 'habeasData') {
       initialOptions = {
-        message: t('forms.field.habeasDataDefault').replace('[NOMBRE_ENTIDAD]', formData.title || 'la entidad')
+        message: t('forms.field.habeasDataDefault').replace(
+          '[NOMBRE_ENTIDAD]',
+          formData.title || 'la entidad'
+        ),
       };
       initialLabel = t('forms.field.habeasData');
       initialRequired = true;
@@ -427,16 +430,16 @@ const FormEditor: React.FC<FormEditorProps> = ({ formId, onClose, onSave }) => {
           {formId !== 'new' && (
             <>
               {!formData.isPublished && (
-                  <button
-                      onClick={() => executeStatusChange({ isPublished: true, isActive: true })}
-                      disabled={isUpdatingStatus}
-                      className="flex items-center gap-2 bg-green-100 text-green-700 px-4 py-2 rounded-lg hover:bg-green-200 transition-colors disabled:opacity-50"
-                  >
-                    <Play size={18} />
-                    <span className="hidden sm:inline">{t('forms.editor.publish')}</span>
-                  </button>
+                <button
+                  onClick={() => executeStatusChange({ isPublished: true, isActive: true })}
+                  disabled={isUpdatingStatus}
+                  className="flex items-center gap-2 bg-green-100 text-green-700 px-4 py-2 rounded-lg hover:bg-green-200 transition-colors disabled:opacity-50"
+                >
+                  <Play size={18} />
+                  <span className="hidden sm:inline">{t('forms.editor.publish')}</span>
+                </button>
               )}
-              
+
               <button
                 onClick={handleDeleteForm}
                 className="text-red-500 hover:text-red-700 transition-colors p-2"
@@ -455,52 +458,56 @@ const FormEditor: React.FC<FormEditorProps> = ({ formId, onClose, onSave }) => {
             <Save size={20} />
           </button>
         </div>
-      
+
         {/* Status Banner */}
         <div className="absolute top-full left-0 z-20 pointer-events-none">
-            <div className={`px-6 py-2 text-sm font-medium flex items-center gap-2 rounded-br-2xl shadow-sm pointer-events-auto ${
-                !formData.isPublished
-                    ? 'bg-gray-50 text-gray-600 border border-gray-200 border-t-0 border-l-0'
-                    : formData.isActive
-                        ? 'bg-green-50 text-green-700 border border-green-100 border-t-0 border-l-0'
-                        : 'bg-amber-50 text-amber-700 border border-amber-100 border-t-0 border-l-0'
-            }`}>
+          <div
+            className={`px-6 py-2 text-sm font-medium flex items-center gap-2 rounded-br-2xl shadow-sm pointer-events-auto ${
+              !formData.isPublished
+                ? 'bg-gray-50 text-gray-600 border border-gray-200 border-t-0 border-l-0'
+                : formData.isActive
+                  ? 'bg-green-50 text-green-700 border border-green-100 border-t-0 border-l-0'
+                  : 'bg-amber-50 text-amber-700 border border-amber-100 border-t-0 border-l-0'
+            }`}
+          >
             {!formData.isPublished ? (
-                <><Type size={16} /> {t('forms.editor.status.draft')}</>
+              <>
+                <Type size={16} /> {t('forms.editor.status.draft')}
+              </>
             ) : formData.isActive ? (
-                <>
-                    <span className="relative flex h-2.5 w-2.5 mr-1">
-                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
-                    <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-green-500"></span>
-                    </span>
-                    {t('forms.editor.status.active')}
-                    <button
-                        onClick={() => executeStatusChange({ isActive: false })}
-                        disabled={isUpdatingStatus}
-                        className="ml-2 text-green-700 hover:text-green-900 focus:outline-none disabled:opacity-50"
-                        title={t('forms.editor.pause')}
-                    >
-                    <PauseCircle size={18} />
-                    </button>
-                </>
+              <>
+                <span className="relative flex h-2.5 w-2.5 mr-1">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-green-500"></span>
+                </span>
+                {t('forms.editor.status.active')}
+                <button
+                  onClick={() => executeStatusChange({ isActive: false })}
+                  disabled={isUpdatingStatus}
+                  className="ml-2 text-green-700 hover:text-green-900 focus:outline-none disabled:opacity-50"
+                  title={t('forms.editor.pause')}
+                >
+                  <PauseCircle size={18} />
+                </button>
+              </>
             ) : (
-                <>
-                    <span className="relative flex h-2.5 w-2.5 mr-1">
-                    <span className="animate-pulse absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
-                    <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-amber-500"></span>
-                    </span>
-                    {t('forms.editor.status.paused')}
-                    <button
-                        onClick={() => executeStatusChange({ isActive: true })}
-                        disabled={isUpdatingStatus}
-                        className="ml-2 text-amber-700 hover:text-amber-900 focus:outline-none disabled:opacity-50"
-                        title={t('forms.editor.activate')}
-                    >
-                    <Play size={18} />
-                    </button>
-                </>
+              <>
+                <span className="relative flex h-2.5 w-2.5 mr-1">
+                  <span className="animate-pulse absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-amber-500"></span>
+                </span>
+                {t('forms.editor.status.paused')}
+                <button
+                  onClick={() => executeStatusChange({ isActive: true })}
+                  disabled={isUpdatingStatus}
+                  className="ml-2 text-amber-700 hover:text-amber-900 focus:outline-none disabled:opacity-50"
+                  title={t('forms.editor.activate')}
+                >
+                  <Play size={18} />
+                </button>
+              </>
             )}
-            </div>
+          </div>
         </div>
       </div>
 
@@ -516,30 +523,32 @@ const FormEditor: React.FC<FormEditorProps> = ({ formId, onClose, onSave }) => {
 
       {/* Publish Confirmation Modal */}
       {showPublishModal && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
-            <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-6 space-y-4 animate-in fade-in zoom-in duration-200">
-              <div className="w-12 h-12 bg-indigo-100 rounded-full flex items-center justify-center mx-auto text-indigo-600 mb-2">
-                <Play size={24} />
-              </div>
-              <h3 className="text-xl font-bold text-gray-900 text-center">{t('forms.editor.publishConfirmTitle')}</h3>
-              <p className="text-gray-600 text-center">{t('forms.editor.publishConfirmMessage')}</p>
-              <div className="flex flex-col gap-3 pt-4">
-                <button
-                    onClick={() => executeSave(true)}
-                    className="w-full py-3 bg-indigo-600 text-white rounded-lg font-medium hover:bg-indigo-700 transition-colors flex items-center justify-center gap-2"
-                >
-                  <Play size={18} />
-                  {t('forms.editor.publishNow')}
-                </button>
-                <button
-                    onClick={() => executeSave(false)}
-                    className="w-full py-3 bg-white border border-gray-300 text-gray-700 rounded-lg font-medium hover:bg-gray-50 transition-colors"
-                >
-                  {t('forms.editor.publishLater')}
-                </button>
-              </div>
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+          <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-6 space-y-4 animate-in fade-in zoom-in duration-200">
+            <div className="w-12 h-12 bg-indigo-100 rounded-full flex items-center justify-center mx-auto text-indigo-600 mb-2">
+              <Play size={24} />
+            </div>
+            <h3 className="text-xl font-bold text-gray-900 text-center">
+              {t('forms.editor.publishConfirmTitle')}
+            </h3>
+            <p className="text-gray-600 text-center">{t('forms.editor.publishConfirmMessage')}</p>
+            <div className="flex flex-col gap-3 pt-4">
+              <button
+                onClick={() => executeSave(true)}
+                className="w-full py-3 bg-indigo-600 text-white rounded-lg font-medium hover:bg-indigo-700 transition-colors flex items-center justify-center gap-2"
+              >
+                <Play size={18} />
+                {t('forms.editor.publishNow')}
+              </button>
+              <button
+                onClick={() => executeSave(false)}
+                className="w-full py-3 bg-white border border-gray-300 text-gray-700 rounded-lg font-medium hover:bg-gray-50 transition-colors"
+              >
+                {t('forms.editor.publishLater')}
+              </button>
             </div>
           </div>
+        </div>
       )}
 
       <div className="flex-1 overflow-auto bg-gray-50 relative">
@@ -584,7 +593,7 @@ const FormEditor: React.FC<FormEditorProps> = ({ formId, onClose, onSave }) => {
               <h3 className="text-lg font-medium text-gray-900 mb-4">
                 {t('forms.editor.appearance')}
               </h3>
-              
+
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
                 <div>
                   <LocalizationProvider dateAdapter={AdapterDayjs}>
@@ -631,11 +640,14 @@ const FormEditor: React.FC<FormEditorProps> = ({ formId, onClose, onSave }) => {
                       type="checkbox"
                       id="collectUserInfo"
                       checked={formData.collectUserInfo}
-                      onChange={(e) => setFormData({ ...formData, collectUserInfo: e.target.checked })}
+                      onChange={(e) =>
+                        setFormData({ ...formData, collectUserInfo: e.target.checked })
+                      }
                       className="rounded text-indigo-600 focus:ring-indigo-500"
                     />
                     <label htmlFor="collectUserInfo" className="text-sm font-medium text-gray-700">
-                      {t('forms.editor.collectUserInfo') || 'Recopilar info del usuario (IP, Dispositivo)'}
+                      {t('forms.editor.collectUserInfo') ||
+                        'Recopilar info del usuario (IP, Dispositivo)'}
                     </label>
                   </div>
                 </div>
@@ -654,30 +666,33 @@ const FormEditor: React.FC<FormEditorProps> = ({ formId, onClose, onSave }) => {
                   <div className="grid grid-cols-1 gap-6 mt-6 animate-in fade-in slide-in-from-top-2 duration-200">
                     <div className="space-y-4">
                       <div className="p-4 bg-indigo-50 rounded-lg text-sm text-indigo-700">
-                        Estás editando la apariencia avanzada. Si desactivas esta opción, se usarán los valores por defecto al guardar.
+                        Estás editando la apariencia avanzada. Si desactivas esta opción, se usarán
+                        los valores por defecto al guardar.
                       </div>
-                      
+
                       <RichTextEditor
                         label={t('forms.editor.headerContent')}
                         value={formData.headerContent}
                         onChange={(val) => setFormData({ ...formData, headerContent: val })}
                         placeholder={t('forms.editor.htmlPlaceholder.header')}
                       />
-                      
+
                       <RichTextEditor
                         label={t('forms.editor.footerContent')}
                         value={formData.footerContent}
                         onChange={(val) => setFormData({ ...formData, footerContent: val })}
                         placeholder={t('forms.editor.htmlPlaceholder.footer')}
                       />
-                      
+
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">
                           {t('forms.editor.successMessage')}
                         </label>
                         <textarea
                           value={formData.successMessage}
-                          onChange={(e) => setFormData({ ...formData, successMessage: e.target.value })}
+                          onChange={(e) =>
+                            setFormData({ ...formData, successMessage: e.target.value })
+                          }
                           rows={2}
                           className="w-full px-4 py-2 border border-gray-300 rounded-lg"
                         />
@@ -707,8 +722,8 @@ const FormEditor: React.FC<FormEditorProps> = ({ formId, onClose, onSave }) => {
                     transition={{ duration: 0.2 }}
                     key={field.id}
                     className={`p-6 rounded-xl shadow-sm border relative group mb-4 cursor-pointer transition-all ${
-                      activeFieldId === field.id 
-                        ? 'bg-indigo-50/30 border-indigo-500 ring-2 ring-indigo-500/20 shadow-md z-10' 
+                      activeFieldId === field.id
+                        ? 'bg-indigo-50/30 border-indigo-500 ring-2 ring-indigo-500/20 shadow-md z-10'
                         : 'bg-white border-gray-200 hover:border-indigo-300'
                     } ${field.isHidden ? 'opacity-60 border-dashed' : ''}`}
                     onClick={(e) => {
@@ -759,208 +774,238 @@ const FormEditor: React.FC<FormEditorProps> = ({ formId, onClose, onSave }) => {
                     </div>
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {field.isHidden && (
-                      <div className="md:col-span-2 bg-gray-100 text-gray-500 text-xs px-2 py-1 rounded inline-block w-fit mb-2">
-                        {t('forms.field.hidden')}
-                      </div>
-                    )}
-                    <div>
-                      <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">
-                        {t('forms.editor.fieldLabel')}
-                      </label>
-                      <input
-                        type="text"
-                        value={field.label}
-                        onChange={(e) => updateField(idx, { label: e.target.value })}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">
-                        {t('forms.editor.fieldPlaceholder')}
-                      </label>
-                      <input
-                        type="text"
-                        value={field.placeholder || ''}
-                        onChange={(e) => updateField(idx, { placeholder: e.target.value })}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md"
-                        disabled={['date', 'checkbox', 'select', 'file', 'habeasData'].includes(field.type)}
-                      />
-                    </div>
-
-                    {field.type === 'select' && (
-                      <div className="md:col-span-2 space-y-3 bg-gray-50 p-4 rounded-lg border border-gray-200">
-                        <div className="flex items-center justify-between mb-2">
-                          <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider">
-                            Opciones de selección
-                          </label>
+                      {field.isHidden && (
+                        <div className="md:col-span-2 bg-gray-100 text-gray-500 text-xs px-2 py-1 rounded inline-block w-fit mb-2">
+                          {t('forms.field.hidden')}
                         </div>
-                        
-                        {/* Options List */}
-                        <div className="space-y-2">
-                          {(Array.isArray(field.options) ? field.options : field.options?.items || []).map((opt: string, optIdx: number) => (
-                            <div key={optIdx} className="flex items-center gap-2">
-                              <div className="p-1.5 bg-gray-200 rounded text-gray-500">
-                                <List size={14} />
-                              </div>
-                              <input
-                                type="text"
-                                value={opt}
-                                onChange={(e) => {
-                                  const currentOptions = Array.isArray(field.options) 
-                                    ? { items: field.options, multiple: false, allowOther: false }
-                                    : (field.options || { items: [], multiple: false, allowOther: false });
-                                  
-                                  const newItems = [...currentOptions.items];
-                                  newItems[optIdx] = e.target.value;
-                                  
-                                  updateField(idx, {
-                                    options: { ...currentOptions, items: newItems }
-                                  });
-                                }}
-                                className="flex-1 px-3 py-1.5 border border-gray-300 rounded text-sm"
-                                placeholder={`Opción ${optIdx + 1}`}
-                              />
-                              <button
-                                onClick={() => {
-                                  const currentOptions = Array.isArray(field.options) 
-                                    ? { items: field.options, multiple: false, allowOther: false }
-                                    : (field.options || { items: [], multiple: false, allowOther: false });
-                                  
-                                  const newItems = currentOptions.items.filter((_: any, i: number) => i !== optIdx);
-                                  
-                                  updateField(idx, {
-                                    options: { ...currentOptions, items: newItems }
-                                  });
-                                }}
-                                className="text-red-500 hover:text-red-700 p-1.5 hover:bg-red-50 rounded"
-                              >
-                                <Trash2 size={14} />
-                              </button>
-                            </div>
-                          ))}
-                        </div>
-
-                        <button
-                          onClick={() => {
-                            const currentOptions = Array.isArray(field.options) 
-                              ? { items: field.options, multiple: false, allowOther: false }
-                              : (field.options || { items: [], multiple: false, allowOther: false });
-                            
-                            updateField(idx, {
-                              options: { ...currentOptions, items: [...currentOptions.items, 'Nueva opción'] }
-                            });
-                          }}
-                          className="flex items-center gap-1.5 text-indigo-600 text-sm font-medium hover:text-indigo-800 px-2 py-1 rounded hover:bg-indigo-50 w-full justify-center border border-dashed border-indigo-200"
-                        >
-                          <Plus size={14} />
-                          Añadir opción
-                        </button>
-
-                        <div className="grid grid-cols-2 gap-4 pt-2 border-t border-gray-200 mt-2">
-                          <label className="flex items-center gap-2 cursor-pointer">
-                            <input
-                              type="checkbox"
-                              checked={!Array.isArray(field.options) && field.options?.multiple}
-                              onChange={(e) => {
-                                const currentOptions = Array.isArray(field.options) 
-                                  ? { items: field.options, multiple: false, allowOther: false }
-                                  : (field.options || { items: [], multiple: false, allowOther: false });
-                                
-                                updateField(idx, {
-                                  options: { ...currentOptions, multiple: e.target.checked }
-                                });
-                              }}
-                              className="rounded text-indigo-600 focus:ring-indigo-500"
-                            />
-                            <span className="text-sm text-gray-700">Selección múltiple</span>
-                          </label>
-
-                          <label className="flex items-center gap-2 cursor-pointer">
-                            <input
-                              type="checkbox"
-                              checked={!Array.isArray(field.options) && field.options?.allowOther}
-                              onChange={(e) => {
-                                const currentOptions = Array.isArray(field.options) 
-                                  ? { items: field.options, multiple: false, allowOther: false }
-                                  : (field.options || { items: [], multiple: false, allowOther: false });
-                                
-                                updateField(idx, {
-                                  options: { ...currentOptions, allowOther: e.target.checked }
-                                });
-                              }}
-                              className="rounded text-indigo-600 focus:ring-indigo-500"
-                            />
-                            <span className="text-sm text-gray-700">Permitir "Otro"</span>
-                          </label>
-                        </div>
-                      </div>
-                    )}
-
-                    {field.type === 'file' && (
-                      <div className="md:col-span-2 space-y-2">
-                        <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider">
-                          {t('forms.field.fileTypes')}
+                      )}
+                      <div>
+                        <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">
+                          {t('forms.editor.fieldLabel')}
                         </label>
-                        <div className="flex flex-wrap gap-4">
-                          {['pdf', 'image', 'video', 'document'].map((type) => (
-                            <label key={type} className="flex items-center gap-2 cursor-pointer">
+                        <input
+                          type="text"
+                          value={field.label}
+                          onChange={(e) => updateField(idx, { label: e.target.value })}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">
+                          {t('forms.editor.fieldPlaceholder')}
+                        </label>
+                        <input
+                          type="text"
+                          value={field.placeholder || ''}
+                          onChange={(e) => updateField(idx, { placeholder: e.target.value })}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                          disabled={['date', 'checkbox', 'select', 'file', 'habeasData'].includes(
+                            field.type
+                          )}
+                        />
+                      </div>
+
+                      {field.type === 'select' && (
+                        <div className="md:col-span-2 space-y-3 bg-gray-50 p-4 rounded-lg border border-gray-200">
+                          <div className="flex items-center justify-between mb-2">
+                            <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                              Opciones de selección
+                            </label>
+                          </div>
+
+                          {/* Options List */}
+                          <div className="space-y-2">
+                            {(Array.isArray(field.options)
+                              ? field.options
+                              : field.options?.items || []
+                            ).map((opt: string, optIdx: number) => (
+                              <div key={optIdx} className="flex items-center gap-2">
+                                <div className="p-1.5 bg-gray-200 rounded text-gray-500">
+                                  <List size={14} />
+                                </div>
+                                <input
+                                  type="text"
+                                  value={opt}
+                                  onChange={(e) => {
+                                    const currentOptions = Array.isArray(field.options)
+                                      ? { items: field.options, multiple: false, allowOther: false }
+                                      : field.options || {
+                                          items: [],
+                                          multiple: false,
+                                          allowOther: false,
+                                        };
+
+                                    const newItems = [...currentOptions.items];
+                                    newItems[optIdx] = e.target.value;
+
+                                    updateField(idx, {
+                                      options: { ...currentOptions, items: newItems },
+                                    });
+                                  }}
+                                  className="flex-1 px-3 py-1.5 border border-gray-300 rounded text-sm"
+                                  placeholder={`Opción ${optIdx + 1}`}
+                                />
+                                <button
+                                  onClick={() => {
+                                    const currentOptions = Array.isArray(field.options)
+                                      ? { items: field.options, multiple: false, allowOther: false }
+                                      : field.options || {
+                                          items: [],
+                                          multiple: false,
+                                          allowOther: false,
+                                        };
+
+                                    const newItems = currentOptions.items.filter(
+                                      (_: any, i: number) => i !== optIdx
+                                    );
+
+                                    updateField(idx, {
+                                      options: { ...currentOptions, items: newItems },
+                                    });
+                                  }}
+                                  className="text-red-500 hover:text-red-700 p-1.5 hover:bg-red-50 rounded"
+                                >
+                                  <Trash2 size={14} />
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+
+                          <button
+                            onClick={() => {
+                              const currentOptions = Array.isArray(field.options)
+                                ? { items: field.options, multiple: false, allowOther: false }
+                                : field.options || {
+                                    items: [],
+                                    multiple: false,
+                                    allowOther: false,
+                                  };
+
+                              updateField(idx, {
+                                options: {
+                                  ...currentOptions,
+                                  items: [...currentOptions.items, 'Nueva opción'],
+                                },
+                              });
+                            }}
+                            className="flex items-center gap-1.5 text-indigo-600 text-sm font-medium hover:text-indigo-800 px-2 py-1 rounded hover:bg-indigo-50 w-full justify-center border border-dashed border-indigo-200"
+                          >
+                            <Plus size={14} />
+                            Añadir opción
+                          </button>
+
+                          <div className="grid grid-cols-2 gap-4 pt-2 border-t border-gray-200 mt-2">
+                            <label className="flex items-center gap-2 cursor-pointer">
                               <input
                                 type="checkbox"
-                                checked={field.options?.allowedTypes?.includes(type)}
+                                checked={!Array.isArray(field.options) && field.options?.multiple}
                                 onChange={(e) => {
-                                  const current = field.options?.allowedTypes || [];
-                                  const newTypes = e.target.checked
-                                    ? [...current, type]
-                                    : current.filter((t: string) => t !== type);
+                                  const currentOptions = Array.isArray(field.options)
+                                    ? { items: field.options, multiple: false, allowOther: false }
+                                    : field.options || {
+                                        items: [],
+                                        multiple: false,
+                                        allowOther: false,
+                                      };
+
                                   updateField(idx, {
-                                    options: { ...field.options, allowedTypes: newTypes },
+                                    options: { ...currentOptions, multiple: e.target.checked },
                                   });
                                 }}
                                 className="rounded text-indigo-600 focus:ring-indigo-500"
                               />
-                              <span className="text-sm capitalize">{type}</span>
+                              <span className="text-sm text-gray-700">Selección múltiple</span>
                             </label>
-                          ))}
+
+                            <label className="flex items-center gap-2 cursor-pointer">
+                              <input
+                                type="checkbox"
+                                checked={!Array.isArray(field.options) && field.options?.allowOther}
+                                onChange={(e) => {
+                                  const currentOptions = Array.isArray(field.options)
+                                    ? { items: field.options, multiple: false, allowOther: false }
+                                    : field.options || {
+                                        items: [],
+                                        multiple: false,
+                                        allowOther: false,
+                                      };
+
+                                  updateField(idx, {
+                                    options: { ...currentOptions, allowOther: e.target.checked },
+                                  });
+                                }}
+                                className="rounded text-indigo-600 focus:ring-indigo-500"
+                              />
+                              <span className="text-sm text-gray-700">Permitir "Otro"</span>
+                            </label>
+                          </div>
                         </div>
-                      </div>
-                    )}
+                      )}
 
-                    {field.type === 'habeasData' && (
-                      <div className="md:col-span-2">
-                        <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">
-                          {t('forms.field.habeasDataText')}
-                        </label>
-                        <textarea
-                          value={field.options?.message || ''}
-                          onChange={(e) =>
-                            updateField(idx, {
-                              options: { ...field.options, message: e.target.value },
-                            })
-                          }
-                          rows={4}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
+                      {field.type === 'file' && (
+                        <div className="md:col-span-2 space-y-2">
+                          <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                            {t('forms.field.fileTypes')}
+                          </label>
+                          <div className="flex flex-wrap gap-4">
+                            {['pdf', 'image', 'video', 'document'].map((type) => (
+                              <label key={type} className="flex items-center gap-2 cursor-pointer">
+                                <input
+                                  type="checkbox"
+                                  checked={field.options?.allowedTypes?.includes(type)}
+                                  onChange={(e) => {
+                                    const current = field.options?.allowedTypes || [];
+                                    const newTypes = e.target.checked
+                                      ? [...current, type]
+                                      : current.filter((t: string) => t !== type);
+                                    updateField(idx, {
+                                      options: { ...field.options, allowedTypes: newTypes },
+                                    });
+                                  }}
+                                  className="rounded text-indigo-600 focus:ring-indigo-500"
+                                />
+                                <span className="text-sm capitalize">{type}</span>
+                              </label>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {field.type === 'habeasData' && (
+                        <div className="md:col-span-2">
+                          <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">
+                            {t('forms.field.habeasDataText')}
+                          </label>
+                          <textarea
+                            value={field.options?.message || ''}
+                            onChange={(e) =>
+                              updateField(idx, {
+                                options: { ...field.options, message: e.target.value },
+                              })
+                            }
+                            rows={4}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
+                          />
+                        </div>
+                      )}
+
+                      <div className="flex items-center gap-2 mt-2">
+                        <input
+                          type="checkbox"
+                          id={`req-${idx}`}
+                          checked={field.required}
+                          onChange={(e) => updateField(idx, { required: e.target.checked })}
+                          className="rounded text-indigo-600 focus:ring-indigo-500"
+                          disabled={field.type === 'habeasData'}
                         />
+                        <label htmlFor={`req-${idx}`} className="text-sm text-gray-700">
+                          {t('forms.editor.fieldRequired')}
+                        </label>
                       </div>
-                    )}
-
-                    <div className="flex items-center gap-2 mt-2">
-                      <input
-                        type="checkbox"
-                        id={`req-${idx}`}
-                        checked={field.required}
-                        onChange={(e) => updateField(idx, { required: e.target.checked })}
-                        className="rounded text-indigo-600 focus:ring-indigo-500"
-                        disabled={field.type === 'habeasData'}
-                      />
-                      <label htmlFor={`req-${idx}`} className="text-sm text-gray-700">
-                        {t('forms.editor.fieldRequired')}
-                      </label>
                     </div>
-                  </div>
-                </motion.div>
-              ))}
-            </AnimatePresence>
+                  </motion.div>
+                ))}
+              </AnimatePresence>
             </div>
           </div>
         </div>
@@ -1020,9 +1065,10 @@ const FormEditor: React.FC<FormEditorProps> = ({ formId, onClose, onSave }) => {
                 Recuperar cambios no guardados
               </h3>
               <p className="text-sm text-gray-500 text-center mb-6">
-                Hemos detectado cambios no guardados de una sesión anterior. ¿Deseas recuperarlos o descartarlos?
+                Hemos detectado cambios no guardados de una sesión anterior. ¿Deseas recuperarlos o
+                descartarlos?
               </p>
-              
+
               <div className="grid grid-cols-2 gap-3">
                 <button
                   onClick={() => {
@@ -1039,16 +1085,22 @@ const FormEditor: React.FC<FormEditorProps> = ({ formId, onClose, onSave }) => {
                     if (draftToRestore) {
                       setFormData({
                         ...draftToRestore,
-                        fields: (draftToRestore.fields || []).map((f: any) => ({ ...f, id: f.id || generateId() }))
+                        fields: (draftToRestore.fields || []).map((f: any) => ({
+                          ...f,
+                          id: f.id || generateId(),
+                        })),
                       });
                       const defHeader = getDefaultHeader(draftToRestore.title);
                       const defFooter = getDefaultFooter();
                       const defSuccess = t('forms.defaultSuccessMessage');
-                      
-                      const hasCustomAppearance = 
-                        (draftToRestore.headerContent && draftToRestore.headerContent !== defHeader) ||
-                        (draftToRestore.footerContent && draftToRestore.footerContent !== defFooter) ||
-                        (draftToRestore.successMessage && draftToRestore.successMessage !== defSuccess);
+
+                      const hasCustomAppearance =
+                        (draftToRestore.headerContent &&
+                          draftToRestore.headerContent !== defHeader) ||
+                        (draftToRestore.footerContent &&
+                          draftToRestore.footerContent !== defFooter) ||
+                        (draftToRestore.successMessage &&
+                          draftToRestore.successMessage !== defSuccess);
 
                       setShowAdvancedAppearance(!!hasCustomAppearance);
                     }
@@ -1076,7 +1128,9 @@ const FormEditor: React.FC<FormEditorProps> = ({ formId, onClose, onSave }) => {
             </div>
             <div className="text-center space-y-2">
               <h3 className="text-lg font-semibold text-gray-900">Guardando cambios</h3>
-              <p className="text-sm text-gray-500">Por favor espere mientras procesamos su solicitud...</p>
+              <p className="text-sm text-gray-500">
+                Por favor espere mientras procesamos su solicitud...
+              </p>
             </div>
           </div>
         </div>

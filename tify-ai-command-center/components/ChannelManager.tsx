@@ -85,6 +85,7 @@ import {
   Download,
   Sidebar,
   GitMerge,
+  LayoutDashboard,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { api, uploadFile } from '../services/api';
@@ -99,6 +100,7 @@ import {
 } from '../types';
 import { SF_SYMBOLS } from '../constants';
 import { useI18n } from '../i18n';
+import ApprovalQueue from './ApprovalQueue';
 import QRCodeStyling from 'qr-code-styling';
 import dayjs from 'dayjs';
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
@@ -523,6 +525,7 @@ interface ChannelManagerProps {
 
 const ChannelManager: React.FC<ChannelManagerProps> = ({ currentUser }) => {
   const { t } = useI18n();
+  const [activeMainTab, setActiveMainTab] = useState<'dashboard' | 'channels' | 'approvals'>('dashboard');
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [subchannelModalOpen, setSubchannelModalOpen] = useState(false);
   const [currentSubchannelParent, setCurrentSubchannelParent] = useState<Channel | null>(null);
@@ -2314,6 +2317,7 @@ const ChannelManager: React.FC<ChannelManagerProps> = ({ currentUser }) => {
     );
   };
 
+
   if (loading)
     return (
       <div className="h-[calc(100vh-140px)] flex flex-col md:p-8">
@@ -2341,8 +2345,192 @@ const ChannelManager: React.FC<ChannelManagerProps> = ({ currentUser }) => {
     );
 
   return (
-    <div className="h-[calc(100vh-140px)] flex flex-col md:flex-row relative md:gap-4 md:p-4">
-      {/* Left Panel: Mobile Dashboard & Desktop Sidebar */}
+    <div className="h-[calc(100vh-140px)] flex flex-col relative bg-gray-50">
+      <div className="bg-white border-b border-gray-200 px-6 py-2 flex items-center gap-6 shrink-0 sticky top-0 z-20">
+        <button
+          onClick={() => setActiveMainTab('dashboard')}
+          className={`flex items-center gap-2 py-2 px-1 border-b-2 transition-colors font-medium text-sm ${
+            activeMainTab === 'dashboard'
+              ? 'border-indigo-600 text-indigo-600'
+              : 'border-transparent text-gray-500 hover:text-gray-700'
+          }`}
+        >
+          <LayoutDashboard size={16} />
+          Dashboard
+        </button>
+        <button
+          onClick={() => setActiveMainTab('channels')}
+          className={`flex items-center gap-2 py-2 px-1 border-b-2 transition-colors font-medium text-sm ${
+            activeMainTab === 'channels'
+              ? 'border-indigo-600 text-indigo-600'
+              : 'border-transparent text-gray-500 hover:text-gray-700'
+          }`}
+        >
+          <GitMerge size={16} />
+          {t('channels.title')}
+        </button>
+        <button
+          onClick={() => setActiveMainTab('approvals')}
+          className={`flex items-center gap-2 py-2 px-1 border-b-2 transition-colors font-medium text-sm ${
+            activeMainTab === 'approvals'
+              ? 'border-indigo-600 text-indigo-600'
+              : 'border-transparent text-gray-500 hover:text-gray-700'
+          }`}
+        >
+          <CheckCircle size={16} />
+          Aprobaciones
+        </button>
+      </div>
+
+      <div className="flex-1 overflow-hidden relative">
+        {activeMainTab === 'dashboard' && (
+          <div className="h-full overflow-y-auto p-6">
+             <div className="max-w-6xl mx-auto">
+               <div className="mb-8">
+                 <h2 className="text-2xl font-bold text-gray-900 mb-2">Panel de Canales</h2>
+                 <p className="text-gray-500">Visión general de tus canales de comunicación y actividad reciente.</p>
+               </div>
+
+               {/* Stats Overview */}
+               <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+                 <div className="bg-white p-6 rounded-xl border border-gray-100 shadow-sm">
+                   <div className="flex items-center gap-4 mb-4">
+                     <div className="p-3 bg-indigo-50 text-indigo-600 rounded-lg">
+                       <GitMerge size={24} />
+                     </div>
+                     <div>
+                       <p className="text-sm font-medium text-gray-500">Canales Totales</p>
+                       <h3 className="text-2xl font-bold text-gray-900">{channels.length}</h3>
+                     </div>
+                   </div>
+                   <div className="text-xs text-gray-400">
+                     {channels.filter(c => c.isPublic).length} Públicos • {channels.filter(c => !c.isPublic).length} Privados
+                   </div>
+                 </div>
+
+                 <div className="bg-white p-6 rounded-xl border border-gray-100 shadow-sm">
+                   <div className="flex items-center gap-4 mb-4">
+                     <div className="p-3 bg-emerald-50 text-emerald-600 rounded-lg">
+                       <Users size={24} />
+                     </div>
+                     <div>
+                       <p className="text-sm font-medium text-gray-500">Suscriptores</p>
+                       <h3 className="text-2xl font-bold text-gray-900">
+                         {channels.reduce((acc, curr) => acc + (curr.memberCount || 0), 0).toLocaleString()}
+                       </h3>
+                     </div>
+                   </div>
+                   <div className="text-xs text-gray-400">
+                     En todos los canales
+                   </div>
+                 </div>
+
+                 <div className="bg-white p-6 rounded-xl border border-gray-100 shadow-sm">
+                   <div className="flex items-center gap-4 mb-4">
+                     <div className="p-3 bg-purple-50 text-purple-600 rounded-lg">
+                       <ShieldCheck size={24} />
+                     </div>
+                     <div>
+                       <p className="text-sm font-medium text-gray-500">Pendientes de Aprobación</p>
+                       <h3 className="text-2xl font-bold text-gray-900">--</h3>
+                     </div>
+                   </div>
+                   <button 
+                     onClick={() => setActiveMainTab('approvals')}
+                     className="text-xs font-medium text-purple-600 hover:text-purple-700 hover:underline"
+                   >
+                     Ver cola de aprobación &rarr;
+                   </button>
+                 </div>
+               </div>
+
+               {/* Recent Channels & Quick Actions */}
+               <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                 <div className="lg:col-span-2">
+                   <div className="flex items-center justify-between mb-4">
+                     <h3 className="font-bold text-gray-900">Canales Recientes</h3>
+                     <button 
+                       onClick={() => setActiveMainTab('channels')}
+                       className="text-sm text-indigo-600 hover:text-indigo-700 font-medium"
+                     >
+                       Ver todos
+                     </button>
+                   </div>
+                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                     {channels.slice(0, 4).map(channel => (
+                       <div 
+                         key={channel.id}
+                         onClick={() => {
+                           setSelectedChannel(channel);
+                           setActiveMainTab('channels');
+                         }}
+                         className="bg-white p-4 rounded-xl border border-gray-100 hover:shadow-md hover:border-indigo-100 transition-all cursor-pointer group"
+                       >
+                         <div className="flex items-start justify-between mb-3">
+                           <div className="flex items-center gap-3">
+                             {channel.logoUrl ? (
+                               <img src={channel.logoUrl} alt="" className="w-10 h-10 rounded-lg object-cover bg-gray-50" />
+                             ) : (
+                               <div className="w-10 h-10 rounded-lg bg-indigo-50 flex items-center justify-center text-indigo-600 font-bold">
+                                 {channel.title.charAt(0)}
+                               </div>
+                             )}
+                             <div>
+                               <h4 className="font-bold text-gray-900 group-hover:text-indigo-600 transition-colors line-clamp-1">{channel.title}</h4>
+                               <p className="text-xs text-gray-500">{channel.isPublic ? 'Público' : 'Privado'}</p>
+                             </div>
+                           </div>
+                         </div>
+                         <div className="flex items-center justify-between text-xs text-gray-500">
+                           <span className="flex items-center gap-1"><Users size={12} /> {channel.memberCount || 0}</span>
+                           <span className="flex items-center gap-1"><CheckCircle size={12} className="text-green-500" /> Activo</span>
+                         </div>
+                       </div>
+                     ))}
+                   </div>
+                 </div>
+
+                 <div>
+                   <h3 className="font-bold text-gray-900 mb-4">Acciones Rápidas</h3>
+                   <div className="space-y-3">
+                     <button 
+                       onClick={() => {
+                         setActiveMainTab('channels');
+                         setShowCreate(true);
+                       }}
+                       className="w-full flex items-center gap-3 p-3 bg-white border border-gray-200 rounded-xl hover:border-indigo-300 hover:shadow-sm transition-all text-left group"
+                     >
+                       <div className="p-2 bg-indigo-50 text-indigo-600 rounded-lg group-hover:bg-indigo-600 group-hover:text-white transition-colors">
+                         <Plus size={18} />
+                       </div>
+                       <span className="font-medium text-gray-700 group-hover:text-gray-900">Crear Nuevo Canal</span>
+                     </button>
+
+                     <button 
+                       onClick={() => setActiveMainTab('approvals')}
+                       className="w-full flex items-center gap-3 p-3 bg-white border border-gray-200 rounded-xl hover:border-purple-300 hover:shadow-sm transition-all text-left group"
+                     >
+                       <div className="p-2 bg-purple-50 text-purple-600 rounded-lg group-hover:bg-purple-600 group-hover:text-white transition-colors">
+                         <ShieldCheck size={18} />
+                       </div>
+                       <span className="font-medium text-gray-700 group-hover:text-gray-900">Revisar Aprobaciones</span>
+                     </button>
+                   </div>
+                 </div>
+               </div>
+             </div>
+          </div>
+        )}
+
+        {activeMainTab === 'approvals' && (
+          <div className="h-full overflow-y-auto p-4">
+            <ApprovalQueue />
+          </div>
+        )}
+
+        {activeMainTab === 'channels' && (
+          <div className="h-full flex flex-col md:flex-row relative md:gap-4 md:p-4">
+            {/* Left Panel: Mobile Dashboard & Desktop Sidebar */}
       <div
         className={`
          flex flex-col bg-gray-50 md:bg-white md:rounded-xl md:shadow-sm md:border md:border-gray-100 h-full overflow-hidden
@@ -8056,6 +8244,9 @@ const ChannelManager: React.FC<ChannelManagerProps> = ({ currentUser }) => {
           setShowChannelSearch(false);
         }}
       />
+          </div>
+        )}
+      </div>
     </div>
   );
 };

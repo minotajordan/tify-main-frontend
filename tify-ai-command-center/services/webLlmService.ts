@@ -1,9 +1,8 @@
-
 import { CreateMLCEngine, MLCEngine, InitProgressCallback } from '@mlc-ai/web-llm';
 import { GeneratedForm } from './localFormGenerator';
 
 // Using a lightweight model optimized for browser
-// const SELECTED_MODEL = 'Llama-3.2-1B-Instruct-q4f16_1-MLC'; 
+// const SELECTED_MODEL = 'Llama-3.2-1B-Instruct-q4f16_1-MLC';
 // Alternatively Phi-3.5 is also great. Let's try Llama 3.2 1B as it is very efficient.
 const SELECTED_MODEL = 'Llama-3.2-1B-Instruct-q4f16_1-MLC';
 
@@ -26,7 +25,7 @@ class WebLlmService {
     }
 
     this.isInitializing = true;
-    
+
     this.initializationPromise = (async () => {
       try {
         console.log('Initializing WebLLM with model:', SELECTED_MODEL);
@@ -124,14 +123,14 @@ class WebLlmService {
     try {
       const messages = [
         { role: 'system' as const, content: systemPrompt },
-        { role: 'user' as const, content: `User Request: "${prompt}"` }
+        { role: 'user' as const, content: `User Request: "${prompt}"` },
       ];
 
       const response = await this.engine.chat.completions.create({
         messages,
         temperature: 0.1, // Low temperature for consistent JSON
         max_tokens: 1024,
-        response_format: { type: 'json_object' } // Enforce JSON output if supported by model, otherwise prompt does it
+        response_format: { type: 'json_object' }, // Enforce JSON output if supported by model, otherwise prompt does it
       });
 
       const content = response.choices[0].message.content;
@@ -141,15 +140,14 @@ class WebLlmService {
 
       // Clean up potential markdown if the model ignores the instruction
       const jsonString = content.replace(/```json\n?|\n?```/g, '').trim();
-      
+
       const parsed = JSON.parse(jsonString);
       // Ensure fields exists to prevent UI crashes
       if (!parsed.fields || !Array.isArray(parsed.fields)) {
         parsed.fields = [];
       }
-      
-      return parsed as GeneratedForm;
 
+      return parsed as GeneratedForm;
     } catch (error) {
       console.error('Error generating form with WebLLM:', error);
       return null;
