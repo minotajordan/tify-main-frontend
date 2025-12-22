@@ -26,13 +26,15 @@ import {
   Clock,
   Eye,
   Activity,
-  Save
+  Save,
+  Sparkles
 } from 'lucide-react';
 import { api } from '../../services/api';
 import { TifyEvent, EventStatus, LocalEventGuest } from '../../types';
 import SeatDesigner from './SeatDesigner';
 import SalesDetails from './SalesDetails';
 import RaffleSystem from './RaffleSystem';
+import ShareEventModal from './ShareEventModal';
 
 interface LiveStats {
   totalRevenue: number;
@@ -208,7 +210,7 @@ const GuestDetailModal = ({
   isOpen: boolean;
   guest: LocalEventGuest | null;
   onClose: () => void;
-  onSave: (updatedGuest: LocalEventGuest) => void;
+  onSave: (updatedGuest: LocalEventGuest) => Promise<void> | void;
 }) => {
   const [formData, setFormData] = useState<LocalEventGuest | null>(null);
   const [isSaving, setIsSaving] = useState(false);
@@ -235,136 +237,227 @@ const GuestDetailModal = ({
     }
   };
 
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case 'confirmed': return 'bg-green-100 text-green-700 border-green-200';
+      case 'declined': return 'bg-red-100 text-red-700 border-red-200';
+      case 'attended': return 'bg-blue-100 text-blue-700 border-blue-200';
+      default: return 'bg-yellow-100 text-yellow-700 border-yellow-200';
+    }
+  };
+
+  const getStatusLabel = (status: string) => {
+     switch (status) {
+      case 'confirmed': return 'Confirmado';
+      case 'declined': return 'Rechazado';
+      case 'attended': return 'Asistió';
+      default: return 'Pendiente';
+    }
+  };
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 animate-in fade-in duration-200">
-      <div className="bg-white rounded-2xl shadow-xl w-full max-w-2xl overflow-hidden animate-in zoom-in-95 duration-200 flex flex-col max-h-[90vh]">
-        <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between bg-gray-50">
-          <h3 className="text-lg font-bold text-gray-900 flex items-center gap-2">
-            <Users size={20} className="text-indigo-600" />
-            Detalles del Invitado
-          </h3>
-          <button 
-            onClick={onClose}
-            className="p-2 text-gray-400 hover:text-gray-600 rounded-full hover:bg-gray-100 transition-colors"
-          >
-            <X size={20} />
-          </button>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-md p-4 animate-in fade-in duration-300">
+      <div className="bg-white rounded-3xl shadow-2xl w-full max-w-2xl overflow-hidden animate-in zoom-in-95 duration-300 flex flex-col max-h-[90vh] border border-gray-100">
+        
+        {/* Header */}
+        <div className="relative px-8 py-6 bg-gradient-to-r from-indigo-600 to-violet-600">
+           <div className="absolute top-4 right-4">
+              <button 
+                onClick={onClose}
+                className="p-2 text-white/70 hover:text-white bg-white/10 hover:bg-white/20 rounded-full transition-all backdrop-blur-sm"
+              >
+                <X size={20} />
+              </button>
+           </div>
+           <div className="flex items-center gap-4">
+              <div className="w-12 h-12 bg-white/20 backdrop-blur-md rounded-2xl flex items-center justify-center shadow-inner">
+                <Users size={24} className="text-white" />
+              </div>
+              <div>
+                <h3 className="text-2xl font-bold text-white tracking-tight">Detalles del Invitado</h3>
+                <p className="text-indigo-100 text-sm font-medium opacity-90">Administra la información y estado</p>
+              </div>
+           </div>
         </div>
 
-        <div className="p-6 overflow-y-auto">
-          <form id="guest-form" onSubmit={handleSubmit} className="space-y-6">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div className="space-y-2">
-                <label className="text-sm font-medium text-gray-700">Nombre Completo</label>
-                <input
-                  type="text"
-                  required
-                  value={formData.name}
-                  onChange={e => setFormData({ ...formData, name: e.target.value })}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-shadow"
-                />
-              </div>
+        <div className="flex-1 overflow-y-auto custom-scrollbar">
+          <form id="guest-form" onSubmit={handleSubmit} className="p-8 space-y-8">
+            
+            {/* Main Info Section */}
+            <div className="space-y-6">
+               <div className="flex items-center justify-between">
+                  <h4 className="text-sm font-bold text-gray-400 uppercase tracking-wider flex items-center gap-2">
+                    <div className="w-1.5 h-1.5 rounded-full bg-indigo-500"></div>
+                    Información Personal
+                  </h4>
+                  <span className={`px-3 py-1 rounded-full text-xs font-bold border uppercase tracking-wide ${getStatusColor(formData.status || 'pending')}`}>
+                    {getStatusLabel(formData.status || 'pending')}
+                  </span>
+               </div>
 
-              <div className="space-y-2">
-                <label className="text-sm font-medium text-gray-700">Email</label>
-                <input
-                  type="email"
-                  value={formData.email || ''}
-                  onChange={e => setFormData({ ...formData, email: e.target.value })}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-shadow"
-                />
-              </div>
-
-              <div className="space-y-2">
-                <label className="text-sm font-medium text-gray-700">Teléfono</label>
-                <input
-                  type="tel"
-                  value={formData.phoneNumber || ''}
-                  onChange={e => setFormData({ ...formData, phoneNumber: e.target.value })}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-shadow"
-                />
-              </div>
-
-              <div className="space-y-2">
-                <label className="text-sm font-medium text-gray-700">País</label>
-                <input
-                  type="text"
-                  value={formData.country || ''}
-                  onChange={e => setFormData({ ...formData, country: e.target.value })}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-shadow"
-                />
-              </div>
-
-              <div className="space-y-2">
-                <label className="text-sm font-medium text-gray-700">Cupos</label>
-                <input
-                  type="number"
-                  min="1"
-                  value={formData.quota}
-                  onChange={e => setFormData({ ...formData, quota: parseInt(e.target.value) || 1 })}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-shadow"
-                />
-              </div>
-
-              <div className="space-y-2">
-                <label className="text-sm font-medium text-gray-700">Estado</label>
-                <select
-                  value={formData.status}
-                  onChange={e => setFormData({ ...formData, status: e.target.value as any })}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-shadow bg-white"
-                >
-                  <option value="pending">Pendiente</option>
-                  <option value="confirmed">Confirmado</option>
-                  <option value="declined">Rechazado</option>
-                  <option value="attended">Asistió</option>
-                </select>
-              </div>
-            </div>
-
-            <div className="border-t border-gray-100 pt-4">
-              <h4 className="text-sm font-semibold text-gray-900 mb-4">Información Adicional</h4>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                 <div className="bg-gray-50 p-3 rounded-lg">
-                    <span className="text-xs text-gray-500 block mb-1">Visualizaciones del Link</span>
-                    <span className="text-sm font-medium text-gray-900 flex items-center gap-2">
-                      <Eye size={16} className="text-indigo-500" />
-                      {formData.linkAccessCount || 0}
-                    </span>
-                 </div>
-                 <div className="bg-gray-50 p-3 rounded-lg">
-                    <span className="text-xs text-gray-500 block mb-1">Información Llenada</span>
-                    <span className={`text-sm font-medium flex items-center gap-2 ${formData.infoFilled ? 'text-green-600' : 'text-gray-400'}`}>
-                      {formData.infoFilled ? (
-                        <><CheckCircle size={16} /> Completado</>
-                      ) : (
-                        <><AlertCircle size={16} /> Pendiente</>
-                      )}
-                    </span>
-                 </div>
-              </div>
-              
-              {formData.additionalData && Object.keys(formData.additionalData).length > 0 && (
-                <div className="mt-4">
-                  <h5 className="text-xs font-medium text-gray-500 uppercase mb-2">Datos Extra (CSV)</h5>
-                  <div className="grid grid-cols-2 gap-2">
-                    {Object.entries(formData.additionalData).map(([key, value]) => (
-                      <div key={key} className="bg-gray-50 p-2 rounded border border-gray-100">
-                        <span className="text-xs text-gray-500 block">{key}</span>
-                        <span className="text-sm text-gray-800">{String(value)}</span>
-                      </div>
-                    ))}
+               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div className="space-y-2 group">
+                    <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide group-focus-within:text-indigo-600 transition-colors">Nombre Completo</label>
+                    <div className="relative">
+                      <input
+                        type="text"
+                        required
+                        value={formData.name}
+                        onChange={e => setFormData({ ...formData, name: e.target.value })}
+                        className="w-full pl-10 pr-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 focus:bg-white transition-all font-medium text-gray-900 placeholder-gray-400"
+                        placeholder="Ej. Juan Pérez"
+                      />
+                      <Users size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 group-focus-within:text-indigo-500 transition-colors" />
+                    </div>
                   </div>
-                </div>
-              )}
+
+                  <div className="space-y-2 group">
+                    <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide group-focus-within:text-indigo-600 transition-colors">Email</label>
+                    <div className="relative">
+                      <input
+                        type="email"
+                        value={formData.email || ''}
+                        onChange={e => setFormData({ ...formData, email: e.target.value })}
+                        className="w-full pl-10 pr-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 focus:bg-white transition-all font-medium text-gray-900 placeholder-gray-400"
+                        placeholder="juan@ejemplo.com"
+                      />
+                      <div className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 group-focus-within:text-indigo-500 transition-colors">@</div>
+                    </div>
+                  </div>
+
+                  <div className="space-y-2 group">
+                    <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide group-focus-within:text-indigo-600 transition-colors">Teléfono</label>
+                    <div className="relative">
+                      <input
+                        type="tel"
+                        value={formData.phoneNumber || ''}
+                        onChange={e => setFormData({ ...formData, phoneNumber: e.target.value })}
+                        className="w-full pl-10 pr-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 focus:bg-white transition-all font-medium text-gray-900 placeholder-gray-400"
+                        placeholder="+57 300 123 4567"
+                      />
+                      <div className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 group-focus-within:text-indigo-500 transition-colors">#</div>
+                    </div>
+                  </div>
+
+                  <div className="space-y-2 group">
+                    <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide group-focus-within:text-indigo-600 transition-colors">País</label>
+                    <div className="relative">
+                      <input
+                        type="text"
+                        value={formData.country || ''}
+                        onChange={e => setFormData({ ...formData, country: e.target.value })}
+                        className="w-full pl-10 pr-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 focus:bg-white transition-all font-medium text-gray-900 placeholder-gray-400"
+                        placeholder="Colombia"
+                      />
+                      <MapPin size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 group-focus-within:text-indigo-500 transition-colors" />
+                    </div>
+                  </div>
+               </div>
             </div>
+
+            <div className="w-full h-px bg-gray-100"></div>
+
+            {/* Event Details Section */}
+             <div className="space-y-6">
+               <h4 className="text-sm font-bold text-gray-400 uppercase tracking-wider flex items-center gap-2">
+                 <div className="w-1.5 h-1.5 rounded-full bg-pink-500"></div>
+                 Detalles del Evento
+               </h4>
+
+               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div className="space-y-2 group">
+                    <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide group-focus-within:text-indigo-600 transition-colors">Cupos Asignados</label>
+                    <div className="relative">
+                      <input
+                        type="number"
+                        min="1"
+                        value={formData.quota}
+                        onChange={e => setFormData({ ...formData, quota: parseInt(e.target.value) || 1 })}
+                        className="w-full pl-10 pr-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 focus:bg-white transition-all font-medium text-gray-900"
+                      />
+                      <Ticket size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 group-focus-within:text-indigo-500 transition-colors" />
+                    </div>
+                  </div>
+
+                  <div className="space-y-2 group">
+                    <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide group-focus-within:text-indigo-600 transition-colors">Estado de Asistencia</label>
+                    <div className="relative">
+                       <select
+                        value={formData.status}
+                        onChange={e => setFormData({ ...formData, status: e.target.value as any })}
+                        className="w-full pl-10 pr-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 focus:bg-white transition-all font-medium text-gray-900 appearance-none cursor-pointer"
+                      >
+                        <option value="pending">Pendiente</option>
+                        <option value="confirmed">Confirmado</option>
+                        <option value="declined">Rechazado</option>
+                        <option value="attended">Asistió</option>
+                      </select>
+                      <Activity size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 group-focus-within:text-indigo-500 transition-colors" />
+                      <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-gray-400">
+                        <ChevronLeft size={16} className="-rotate-90" />
+                      </div>
+                    </div>
+                  </div>
+               </div>
+            </div>
+
+            <div className="w-full h-px bg-gray-100"></div>
+
+            {/* Metrics & Extra Data */}
+            <div className="space-y-6">
+               <h4 className="text-sm font-bold text-gray-400 uppercase tracking-wider flex items-center gap-2">
+                 <div className="w-1.5 h-1.5 rounded-full bg-emerald-500"></div>
+                 Métricas y Datos Adicionales
+               </h4>
+               
+               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="bg-gradient-to-br from-indigo-50 to-white p-4 rounded-2xl border border-indigo-100 flex items-center justify-between group hover:shadow-md transition-shadow">
+                     <div>
+                       <span className="text-xs font-semibold text-indigo-400 uppercase tracking-wide block mb-1">Visualizaciones</span>
+                       <span className="text-2xl font-bold text-indigo-900">{formData.linkAccessCount || 0}</span>
+                     </div>
+                     <div className="w-10 h-10 bg-white rounded-xl shadow-sm flex items-center justify-center text-indigo-500 group-hover:scale-110 transition-transform">
+                        <Eye size={20} />
+                     </div>
+                  </div>
+
+                  <div className={`bg-gradient-to-br p-4 rounded-2xl border flex items-center justify-between group hover:shadow-md transition-shadow ${formData.infoFilled ? 'from-green-50 to-white border-green-100' : 'from-gray-50 to-white border-gray-200'}`}>
+                     <div>
+                       <span className={`text-xs font-semibold uppercase tracking-wide block mb-1 ${formData.infoFilled ? 'text-green-500' : 'text-gray-400'}`}>Formulario</span>
+                       <span className={`text-lg font-bold flex items-center gap-2 ${formData.infoFilled ? 'text-green-700' : 'text-gray-500'}`}>
+                         {formData.infoFilled ? 'Completado' : 'Pendiente'}
+                       </span>
+                     </div>
+                     <div className={`w-10 h-10 bg-white rounded-xl shadow-sm flex items-center justify-center group-hover:scale-110 transition-transform ${formData.infoFilled ? 'text-green-500' : 'text-gray-400'}`}>
+                        {formData.infoFilled ? <CheckCircle size={20} /> : <AlertCircle size={20} />}
+                     </div>
+                  </div>
+               </div>
+
+               {formData.additionalData && Object.keys(formData.additionalData).length > 0 && (
+                  <div className="bg-gray-50 rounded-2xl p-5 border border-gray-200/60">
+                    <h5 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3">Datos Importados (CSV)</h5>
+                    <div className="grid grid-cols-2 gap-3">
+                      {Object.entries(formData.additionalData).map(([key, value]) => (
+                        <div key={key} className="bg-white p-3 rounded-xl border border-gray-100 shadow-sm">
+                          <span className="text-xs font-semibold text-gray-400 block mb-0.5">{key}</span>
+                          <span className="text-sm font-medium text-gray-800 break-words">{String(value)}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+            </div>
+
           </form>
         </div>
 
-        <div className="p-6 border-t border-gray-100 bg-gray-50 flex justify-end gap-3">
+        {/* Footer */}
+        <div className="p-6 border-t border-gray-100 bg-gray-50/50 backdrop-blur-sm flex justify-end gap-3 z-10">
           <button
             type="button"
             onClick={onClose}
-            className="px-4 py-2 bg-white border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 hover:text-gray-900 transition-colors shadow-sm"
+            className="px-6 py-2.5 bg-white border border-gray-200 rounded-xl text-sm font-semibold text-gray-600 hover:bg-gray-50 hover:text-gray-900 hover:border-gray-300 transition-all shadow-sm"
           >
             Cancelar
           </button>
@@ -372,12 +465,12 @@ const GuestDetailModal = ({
             type="submit"
             form="guest-form"
             disabled={isSaving}
-            className="px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700 transition-colors shadow-sm flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+            className="px-6 py-2.5 bg-indigo-600 text-white rounded-xl text-sm font-semibold hover:bg-indigo-700 hover:shadow-lg hover:shadow-indigo-200 hover:-translate-y-0.5 transition-all shadow-md flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none disabled:shadow-none"
           >
             {isSaving ? (
-              <Loader2 size={16} className="animate-spin" />
+              <Loader2 size={18} className="animate-spin" />
             ) : (
-              <Save size={16} />
+              <Save size={18} />
             )}
             Guardar Cambios
           </button>
@@ -481,6 +574,7 @@ export default function EventManager() {
 
   const [selectedGuest, setSelectedGuest] = useState<LocalEventGuest | null>(null);
   const [isGuestModalOpen, setIsGuestModalOpen] = useState(false);
+  const [isShareModalOpen, setIsShareModalOpen] = useState(false);
 
   // Templates
   const [templates, setTemplates] = useState<any[]>([]);
@@ -1996,17 +2090,25 @@ export default function EventManager() {
             })()}
 
             {/* Share Link Section */}
-             <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
-                <h3 className="text-lg font-bold text-gray-900 mb-4">Compartir Evento</h3>
-                <div className="flex gap-4 items-center">
-                   <div className="flex-1 bg-gray-50 p-3 rounded-lg text-gray-600 border border-gray-200 break-all">
-                      {`http://localhost:3000/events/${selectedEvent.id}/rsvp`}
+             <div className="p-0 rounded-xl shadow-sm ">
+                
+                <div className="bg-indigo-50 border border-indigo-100 rounded-lg p-4 flex gap-3 items-center justify-between">
+                   <div className="flex gap-3 items-start">
+                      <div className="p-2 bg-white rounded-full text-indigo-600 shadow-sm h-fit">
+                         <Sparkles size={16} />
+                      </div>
+                      <div>
+                         <h4 className="font-bold text-indigo-900 text-sm mb-1">Tip Pro</h4>
+                         <p className="text-sm text-indigo-700">
+                            Los enlaces personalizados precargan los datos del invitado y ofrecen una experiencia VIP. ¡Úsalos para aumentar la tasa de confirmación!
+                         </p>
+                      </div>
                    </div>
                    <button 
-                     onClick={() => navigator.clipboard.writeText(`http://localhost:3000/events/${selectedEvent.id}/rsvp`)}
-                     className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 flex items-center gap-2"
+                     onClick={() => setIsShareModalOpen(true)}
+                     className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 flex items-center gap-2 whitespace-nowrap shadow-sm"
                    >
-                      <Share size={18} /> Copiar Link
+                      <Share size={18} /> Copiar Link Invitación
                    </button>
                 </div>
              </div>
@@ -2367,6 +2469,12 @@ export default function EventManager() {
            </div>
         )}
       </div>
+      
+      <ShareEventModal 
+        isOpen={isShareModalOpen}
+        onClose={() => setIsShareModalOpen(false)}
+        event={selectedEvent}
+      />
       
       <GuestDetailModal 
         isOpen={isGuestModalOpen}
