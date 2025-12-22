@@ -27,10 +27,10 @@ const FormsManager: React.FC = () => {
           isPublished: false,
           collectUserInfo: false,
         };
-        
+
         localStorage.setItem('tify_form_draft_new', JSON.stringify(editorDraft));
         localStorage.removeItem('tify_pending_ai_form');
-        
+
         setSelectedId('new');
         setView('edit');
       } catch (e) {

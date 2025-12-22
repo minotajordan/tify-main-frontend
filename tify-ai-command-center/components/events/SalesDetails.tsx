@@ -42,12 +42,12 @@ export default function SalesDetails({ eventId }: SalesDetailsProps) {
     fetchTickets();
   }, [eventId]);
 
-  const filteredTickets = tickets.filter(ticket => {
-    const matchesSearch = 
+  const filteredTickets = tickets.filter((ticket) => {
+    const matchesSearch =
       ticket.customerName.toLowerCase().includes(filter.toLowerCase()) ||
       ticket.customerEmail.toLowerCase().includes(filter.toLowerCase()) ||
       ticket.id.toLowerCase().includes(filter.toLowerCase());
-    
+
     const matchesStatus = statusFilter === 'ALL' || ticket.status === statusFilter;
 
     return matchesSearch && matchesStatus;
@@ -57,7 +57,7 @@ export default function SalesDetails({ eventId }: SalesDetailsProps) {
     <div className="h-full flex flex-col bg-gray-50 p-6">
       <div className="flex justify-between items-center mb-6">
         <h2 className="text-xl font-bold text-gray-900">Detalles de Ventas</h2>
-        <button 
+        <button
           onClick={fetchTickets}
           className="p-2 text-gray-500 hover:bg-gray-200 rounded-full transition-colors"
           title="Actualizar"
@@ -71,19 +71,19 @@ export default function SalesDetails({ eventId }: SalesDetailsProps) {
         <div className="p-4 border-b border-gray-200 flex gap-4 items-center">
           <div className="relative flex-1 max-w-md">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
-            <input 
-              type="text" 
-              placeholder="Buscar por nombre, email o ID..." 
+            <input
+              type="text"
+              placeholder="Buscar por nombre, email o ID..."
               className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
               value={filter}
-              onChange={e => setFilter(e.target.value)}
+              onChange={(e) => setFilter(e.target.value)}
             />
           </div>
-          
-          <select 
+
+          <select
             className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
             value={statusFilter}
-            onChange={e => setStatusFilter(e.target.value)}
+            onChange={(e) => setStatusFilter(e.target.value)}
           >
             <option value="ALL">Todos los estados</option>
             <option value="VALID">Válidos</option>
@@ -93,9 +93,9 @@ export default function SalesDetails({ eventId }: SalesDetailsProps) {
           </select>
 
           <div className="ml-auto">
-             <div className="text-sm text-gray-500">
-               Total: <span className="font-semibold text-gray-900">{filteredTickets.length}</span>
-             </div>
+            <div className="text-sm text-gray-500">
+              Total: <span className="font-semibold text-gray-900">{filteredTickets.length}</span>
+            </div>
           </div>
         </div>
 
@@ -104,12 +104,24 @@ export default function SalesDetails({ eventId }: SalesDetailsProps) {
           <table className="w-full text-left border-collapse">
             <thead className="bg-gray-50 sticky top-0 z-10 shadow-sm">
               <tr>
-                <th className="px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider bg-gray-50">ID Ticket</th>
-                <th className="px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider bg-gray-50">Comprador</th>
-                <th className="px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider bg-gray-50">Ubicación</th>
-                <th className="px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider bg-gray-50">Estado</th>
-                <th className="px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider bg-gray-50">Fecha Compra</th>
-                <th className="px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider bg-gray-50">Check-in</th>
+                <th className="px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider bg-gray-50">
+                  ID Ticket
+                </th>
+                <th className="px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider bg-gray-50">
+                  Comprador
+                </th>
+                <th className="px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider bg-gray-50">
+                  Ubicación
+                </th>
+                <th className="px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider bg-gray-50">
+                  Estado
+                </th>
+                <th className="px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider bg-gray-50">
+                  Fecha Compra
+                </th>
+                <th className="px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider bg-gray-50">
+                  Check-in
+                </th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200 bg-white">
@@ -128,7 +140,10 @@ export default function SalesDetails({ eventId }: SalesDetailsProps) {
               ) : (
                 filteredTickets.map((ticket) => (
                   <tr key={ticket.id} className="hover:bg-gray-50 transition-colors">
-                    <td className="px-6 py-4 text-sm font-mono text-gray-500 truncate max-w-[120px]" title={ticket.id}>
+                    <td
+                      className="px-6 py-4 text-sm font-mono text-gray-500 truncate max-w-[120px]"
+                      title={ticket.id}
+                    >
                       {ticket.id.substring(0, 8)}...
                     </td>
                     <td className="px-6 py-4">
@@ -144,11 +159,18 @@ export default function SalesDetails({ eventId }: SalesDetailsProps) {
                       )}
                     </td>
                     <td className="px-6 py-4">
-                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium
-                        ${ticket.status === 'VALID' ? 'bg-green-100 text-green-800' : 
-                          ticket.status === 'USED' ? 'bg-blue-100 text-blue-800' : 
-                          ticket.status === 'REFUNDED' ? 'bg-yellow-100 text-yellow-800' : 
-                          'bg-red-100 text-red-800'}`}>
+                      <span
+                        className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium
+                        ${
+                          ticket.status === 'VALID'
+                            ? 'bg-green-100 text-green-800'
+                            : ticket.status === 'USED'
+                              ? 'bg-blue-100 text-blue-800'
+                              : ticket.status === 'REFUNDED'
+                                ? 'bg-yellow-100 text-yellow-800'
+                                : 'bg-red-100 text-red-800'
+                        }`}
+                      >
                         {ticket.status === 'VALID' && 'Válido'}
                         {ticket.status === 'USED' && 'Ingresado'}
                         {ticket.status === 'REFUNDED' && 'Reembolsado'}

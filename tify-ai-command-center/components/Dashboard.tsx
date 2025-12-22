@@ -1,20 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import {
-  Users,
-  CheckCircle,
-  Activity,
-  AlertTriangle,
-  ArrowRight,
-} from 'lucide-react';
-import {
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
-} from 'recharts';
+import { Users, CheckCircle, Activity, AlertTriangle, ArrowRight } from 'lucide-react';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { useI18n } from '../i18n';
 import { UserStats, Channel } from '../types';
 import { api } from '../services/api';

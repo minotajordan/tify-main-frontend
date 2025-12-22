@@ -2,10 +2,25 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Search, X, ArrowRight, Users, ShieldCheck, LayoutGrid } from 'lucide-react';
 import { useI18n } from '../i18n';
 import { Channel } from '../types';
-import { 
-  Bell, BellRing, Globe, AlertTriangle, MapPin, MessagesSquare, 
-  Lock, Megaphone, Zap, Mail, Send, Phone, AudioWaveform, 
-  RadioTower, Camera, Image, Clock, Calendar 
+import {
+  Bell,
+  BellRing,
+  Globe,
+  AlertTriangle,
+  MapPin,
+  MessagesSquare,
+  Lock,
+  Megaphone,
+  Zap,
+  Mail,
+  Send,
+  Phone,
+  AudioWaveform,
+  RadioTower,
+  Camera,
+  Image,
+  Clock,
+  Calendar,
 } from 'lucide-react';
 
 const ICON_MAP: Record<string, any> = {
@@ -49,12 +64,12 @@ interface MainChannelSearchModalProps {
   selectedParentChannel?: Channel;
 }
 
-const MainChannelSearchModal: React.FC<MainChannelSearchModalProps> = ({ 
-  isOpen, 
-  onClose, 
-  channels, 
+const MainChannelSearchModal: React.FC<MainChannelSearchModalProps> = ({
+  isOpen,
+  onClose,
+  channels,
   onSelect,
-  selectedParentChannel
+  selectedParentChannel,
 }) => {
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<Channel[]>([]);
@@ -80,7 +95,7 @@ const MainChannelSearchModal: React.FC<MainChannelSearchModalProps> = ({
   }, [onClose]);
 
   const [internalViewMode, setInternalViewMode] = useState<'context' | 'global'>('context');
-  
+
   const effectiveViewMode = internalViewMode;
 
   useEffect(() => {
@@ -102,8 +117,9 @@ const MainChannelSearchModal: React.FC<MainChannelSearchModalProps> = ({
       let subs = selectedParentChannel.subchannels || [];
       if (query.trim()) {
         const lower = query.toLowerCase();
-        subs = subs.filter(item => 
-            item.title.toLowerCase().includes(lower) || 
+        subs = subs.filter(
+          (item) =>
+            item.title.toLowerCase().includes(lower) ||
             (item.description && item.description.toLowerCase().includes(lower))
         );
       }
@@ -112,31 +128,39 @@ const MainChannelSearchModal: React.FC<MainChannelSearchModalProps> = ({
     }
 
     // Global Mode (Search everything or Browse all)
-    const allChannels = channels.filter(c => !c.parentId);
+    const allChannels = channels.filter((c) => !c.parentId);
     let filtered = allChannels;
-    
+
     if (query.trim()) {
       const lowerQuery = query.toLowerCase();
-      filtered = allChannels.filter(item => 
-        item.title.toLowerCase().includes(lowerQuery) || 
-        (item.description && item.description.toLowerCase().includes(lowerQuery))
+      filtered = allChannels.filter(
+        (item) =>
+          item.title.toLowerCase().includes(lowerQuery) ||
+          (item.description && item.description.toLowerCase().includes(lowerQuery))
       );
     }
 
     setResults(filtered);
 
     // Split into "Mis Canales" (subscribed) and "Públicos" (others)
-    const my = filtered.filter(c => (c as any).isSubscribed);
-    const publicC = filtered.filter(c => !(c as any).isSubscribed);
-    
+    const my = filtered.filter((c) => (c as any).isSubscribed);
+    const publicC = filtered.filter((c) => !(c as any).isSubscribed);
+
     setMyChannels(my);
     setPublicChannels(publicC);
-
   }, [query, channels, selectedParentChannel, isOpen, internalViewMode]);
 
   if (!isOpen) return null;
 
-  const ChannelResultItem = ({ result, onSelect, onClose }: { result: Channel; onSelect: (c: Channel) => void; onClose: () => void }) => (
+  const ChannelResultItem = ({
+    result,
+    onSelect,
+    onClose,
+  }: {
+    result: Channel;
+    onSelect: (c: Channel) => void;
+    onClose: () => void;
+  }) => (
     <button
       onClick={() => {
         onSelect(result);
@@ -177,10 +201,10 @@ const MainChannelSearchModal: React.FC<MainChannelSearchModalProps> = ({
               <MessagesSquare size={13} />
               <span>{result._count?.messages || 0}</span>
             </div>
-            
+
             {/* Activity Indicator */}
             <div className="ml-auto flex items-center gap-2" title="Actividad reciente">
-               <div className="w-2 h-2 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.5)] animate-pulse" />
+              <div className="w-2 h-2 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.5)] animate-pulse" />
             </div>
           </div>
         </div>
@@ -192,24 +216,31 @@ const MainChannelSearchModal: React.FC<MainChannelSearchModalProps> = ({
   return (
     <div className="fixed inset-0 z-[100] flex flex-col items-center pt-[8vh] p-4">
       {/* Blurred Backdrop */}
-      <div 
+      <div
         className="absolute inset-0 bg-slate-950/80 backdrop-blur-2xl transition-opacity duration-300"
         onClick={onClose}
       />
 
       {/* Content Container */}
       <div className="relative w-full max-w-2xl flex flex-col items-center z-10">
-        
         {/* Context Indicator */}
         {selectedParentChannel && effectiveViewMode === 'context' && (
           <div className="mb-6 flex flex-col items-center animate-in fade-in slide-in-from-bottom-4 duration-500 delay-100">
-            <span className="text-slate-400 text-xs uppercase tracking-widest mb-2 font-medium">Navegando en</span>
-            <button 
+            <span className="text-slate-400 text-xs uppercase tracking-widest mb-2 font-medium">
+              Navegando en
+            </span>
+            <button
               onClick={() => setInternalViewMode('global')}
               className="group flex items-center gap-3 bg-white/5 border border-white/10 px-4 py-2 rounded-full backdrop-blur-md hover:bg-white/10 hover:border-white/20 transition-all cursor-pointer"
             >
-              <IconView name={selectedParentChannel.icon} size={16} className="text-indigo-400 group-hover:scale-110 transition-transform" />
-              <span className="text-white font-medium text-sm group-hover:text-indigo-200 transition-colors">{selectedParentChannel.title}</span>
+              <IconView
+                name={selectedParentChannel.icon}
+                size={16}
+                className="text-indigo-400 group-hover:scale-110 transition-transform"
+              />
+              <span className="text-white font-medium text-sm group-hover:text-indigo-200 transition-colors">
+                {selectedParentChannel.title}
+              </span>
               <div className="w-px h-3 bg-white/10 mx-1" />
               <span className="text-[10px] text-slate-400 uppercase tracking-wider group-hover:text-white transition-colors flex items-center gap-1">
                 <LayoutGrid size={10} />
@@ -222,26 +253,30 @@ const MainChannelSearchModal: React.FC<MainChannelSearchModalProps> = ({
         {/* Global View Header */}
         {effectiveViewMode === 'global' && selectedParentChannel && (
           <div className="mb-6 flex flex-col items-center animate-in fade-in slide-in-from-bottom-4 duration-500 delay-100">
-             <button 
+            <button
               onClick={() => {
                 setInternalViewMode('context');
                 setQuery(''); // Clear query to truly go back
               }}
               className="text-slate-500 hover:text-white text-xs uppercase tracking-widest mb-2 font-medium flex items-center gap-2 transition-colors"
-             >
-               <ArrowRight className="rotate-180" size={12} />
-               Volver a {selectedParentChannel.title}
-             </button>
-             {!query && (
-               <div className="flex items-center gap-3 px-4 py-2">
-                 <span className="text-white font-bold text-xl tracking-tight">Todos los canales</span>
-               </div>
-             )}
+            >
+              <ArrowRight className="rotate-180" size={12} />
+              Volver a {selectedParentChannel.title}
+            </button>
+            {!query && (
+              <div className="flex items-center gap-3 px-4 py-2">
+                <span className="text-white font-bold text-xl tracking-tight">
+                  Todos los canales
+                </span>
+              </div>
+            )}
           </div>
         )}
 
         {/* Search Input */}
-        <div className={`w-full transition-all duration-500 ease-out transform ${results.length > 0 || query || selectedParentChannel || effectiveViewMode === 'global' ? 'translate-y-0' : 'translate-y-[25vh]'}`}>
+        <div
+          className={`w-full transition-all duration-500 ease-out transform ${results.length > 0 || query || selectedParentChannel || effectiveViewMode === 'global' ? 'translate-y-0' : 'translate-y-[25vh]'}`}
+        >
           <div className="relative group">
             <div className="absolute -inset-1 bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 rounded-full opacity-25 blur-xl group-hover:opacity-40 transition-all duration-500" />
             <div className="relative flex items-center bg-slate-900/40 border border-slate-700/50 rounded-full shadow-2xl backdrop-blur-md transition-all group-hover:bg-slate-900/60 group-hover:border-slate-600">
@@ -251,11 +286,15 @@ const MainChannelSearchModal: React.FC<MainChannelSearchModalProps> = ({
                 type="text"
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
-                placeholder={effectiveViewMode === 'context' && selectedParentChannel ? "Buscar subcanal..." : (t('channels.searchPlaceholder') || "Buscar canal...")}
+                placeholder={
+                  effectiveViewMode === 'context' && selectedParentChannel
+                    ? 'Buscar subcanal...'
+                    : t('channels.searchPlaceholder') || 'Buscar canal...'
+                }
                 className="w-full bg-transparent text-white text-xl font-light placeholder-slate-500 py-4 px-4 focus:outline-none"
               />
               {query && (
-                <button 
+                <button
                   onClick={() => setQuery('')}
                   className="mr-4 p-1 rounded-full hover:bg-slate-700/50 text-slate-500 hover:text-white transition-colors"
                 >
@@ -267,14 +306,21 @@ const MainChannelSearchModal: React.FC<MainChannelSearchModalProps> = ({
         </div>
 
         {/* Results */}
-        <div className={`w-full mt-8 transition-all duration-500 ease-out ${results.length > 0 ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8 pointer-events-none'}`}>
+        <div
+          className={`w-full mt-8 transition-all duration-500 ease-out ${results.length > 0 ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8 pointer-events-none'}`}
+        >
           {results.length > 0 && effectiveViewMode === 'context' && (
             <div className="flex flex-col gap-3 pb-8 max-h-[60vh] overflow-y-auto custom-scrollbar pr-2">
               <div className="text-center text-slate-500 text-xs font-medium tracking-[0.2em] uppercase mb-4">
                 Subcanales ({results.length})
               </div>
               {results.map((result) => (
-                <ChannelResultItem key={result.id} result={result} onSelect={onSelect} onClose={onClose} />
+                <ChannelResultItem
+                  key={result.id}
+                  result={result}
+                  onSelect={onSelect}
+                  onClose={onClose}
+                />
               ))}
             </div>
           )}
@@ -288,10 +334,17 @@ const MainChannelSearchModal: React.FC<MainChannelSearchModalProps> = ({
                 </div>
                 {myChannels.length > 0 ? (
                   myChannels.map((result) => (
-                    <ChannelResultItem key={result.id} result={result} onSelect={onSelect} onClose={onClose} />
+                    <ChannelResultItem
+                      key={result.id}
+                      result={result}
+                      onSelect={onSelect}
+                      onClose={onClose}
+                    />
                   ))
                 ) : (
-                  <div className="text-center text-slate-600 text-sm py-4 italic">No tienes canales aquí</div>
+                  <div className="text-center text-slate-600 text-sm py-4 italic">
+                    No tienes canales aquí
+                  </div>
                 )}
               </div>
 
@@ -302,28 +355,39 @@ const MainChannelSearchModal: React.FC<MainChannelSearchModalProps> = ({
                 </div>
                 {publicChannels.length > 0 ? (
                   publicChannels.map((result) => (
-                    <ChannelResultItem key={result.id} result={result} onSelect={onSelect} onClose={onClose} />
+                    <ChannelResultItem
+                      key={result.id}
+                      result={result}
+                      onSelect={onSelect}
+                      onClose={onClose}
+                    />
                   ))
                 ) : (
-                  <div className="text-center text-slate-600 text-sm py-4 italic">No hay canales públicos</div>
+                  <div className="text-center text-slate-600 text-sm py-4 italic">
+                    No hay canales públicos
+                  </div>
                 )}
               </div>
             </div>
           )}
         </div>
 
-          
         {query && results.length === 0 && (
-           <div className="mt-12 text-center text-slate-500">
-             <p className="text-lg font-light">No se encontraron resultados para "{query}"</p>
-           </div>
+          <div className="mt-12 text-center text-slate-500">
+            <p className="text-lg font-light">No se encontraron resultados para "{query}"</p>
+          </div>
         )}
 
         {/* Footer info */}
         {!query && (
-          <div className={`mt-16 text-slate-600 text-sm transition-all duration-500 ${query ? 'opacity-0' : 'opacity-100'}`}>
+          <div
+            className={`mt-16 text-slate-600 text-sm transition-all duration-500 ${query ? 'opacity-0' : 'opacity-100'}`}
+          >
             <span className="flex items-center gap-2">
-              <kbd className="px-1.5 py-0.5 bg-slate-800/50 rounded border border-slate-700/50 text-xs font-mono">Esc</kbd> para cerrar
+              <kbd className="px-1.5 py-0.5 bg-slate-800/50 rounded border border-slate-700/50 text-xs font-mono">
+                Esc
+              </kbd>{' '}
+              para cerrar
             </span>
           </div>
         )}

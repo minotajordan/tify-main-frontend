@@ -11,6 +11,8 @@ import {
   EventZone,
   EventSeat,
   LocalEventGuest,
+  ShortLink,
+  ShortLinkStats,
 } from '../types';
 
 let MOCK_EVENTS: TifyEvent[] = [];
@@ -46,8 +48,8 @@ export const API_BASE = (() => {
   ) {
     return (process as any).env.TIFY_API_BASE;
   }
-  return 'https://tify-main-backend.vercel.app/api';
-  // return 'http://localhost:3333/api';
+  // return 'https://tify-main-backend.vercel.app/api';
+  return 'http://localhost:3333/api';
 })();
 export function getAuthToken(): string | null {
   return typeof localStorage !== 'undefined' ? localStorage.getItem('tify_token') : null;
@@ -139,7 +141,15 @@ export const api = {
     const query = new URLSearchParams(uid ? { userid: uid } : ({} as any));
     return request(`${API_BASE}/app/bootstrap?${query.toString()}`);
   },
-  uploadFile: async (file: File): Promise<{ url: string; filename: string; originalName: string; size: number; mimetype: string }> => {
+  uploadFile: async (
+    file: File
+  ): Promise<{
+    url: string;
+    filename: string;
+    originalName: string;
+    size: number;
+    mimetype: string;
+  }> => {
     const formData = new FormData();
     formData.append('file', file);
     return request(`${API_BASE}/upload`, {
@@ -528,7 +538,11 @@ export const api = {
   getPublicForm: async (slug: string): Promise<any> => {
     return request(`${API_BASE}/forms/public/${slug}`);
   },
-  submitForm: async (slug: string, data: any, extra?: { deviceInfo?: any; country?: string; city?: string }): Promise<any> => {
+  submitForm: async (
+    slug: string,
+    data: any,
+    extra?: { deviceInfo?: any; country?: string; city?: string }
+  ): Promise<any> => {
     return request(`${API_BASE}/forms/public/${slug}/submit`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -604,7 +618,7 @@ export const api = {
   getEvents: async (): Promise<TifyEvent[]> => {
     try {
       const events = await request<any[]>(`${API_BASE}/events`);
-      return events.map(e => ({
+      return events.map((e) => ({
         ...e,
         zones: e.zones || [],
         seats: e.seats || Array(e._count?.seats || 0).fill({} as any),
@@ -636,7 +650,7 @@ export const api = {
         ...event,
         guestList: event.guestList || data.guestList || [],
         zones: event.zones || [],
-        seats: event.seats || []
+        seats: event.seats || [],
       };
     } catch (e) {
       const newEvent: TifyEvent = {
@@ -669,8 +683,9 @@ export const api = {
         headers: { 'Content-Type': 'application/json' },
       });
       return {
-          ...event,
-          guestList: event.guestList || (data.guestList ? data.guestList : undefined) || event.guestList // If backend drops it, try to keep it from data, else keep existing (not perfect but better)
+        ...event,
+        guestList:
+          event.guestList || (data.guestList ? data.guestList : undefined) || event.guestList, // If backend drops it, try to keep it from data, else keep existing (not perfect but better)
       };
     } catch (e) {
       const idx = MOCK_EVENTS.findIndex((e) => e.id === id);
@@ -716,60 +731,88 @@ export const api = {
   },
 
   // --- Templates ---
-  saveEventTemplate: async (name: string, zones: EventZone[], seats: EventSeat[]): Promise<void> => {
-      const templates = JSON.parse(localStorage.getItem('tify_event_templates') || '[]');
-      const newTemplate = {
-          id: Math.random().toString(36).substr(2, 9),
-          name,
-          zones,
-          seats,
-          createdAt: new Date().toISOString()
-      };
-      templates.push(newTemplate);
-      localStorage.setItem('tify_event_templates', JSON.stringify(templates));
+  saveEventTemplate: async (
+    name: string,
+    zones: EventZone[],
+    seats: EventSeat[]
+  ): Promise<void> => {
+    const templates = JSON.parse(localStorage.getItem('tify_event_templates') || '[]');
+    const newTemplate = {
+      id: Math.random().toString(36).substr(2, 9),
+      name,
+      zones,
+      seats,
+      createdAt: new Date().toISOString(),
+    };
+    templates.push(newTemplate);
+    localStorage.setItem('tify_event_templates', JSON.stringify(templates));
   },
 
-  getEventTemplates: async (): Promise<Array<{ id: string; name: string; zones: EventZone[]; seats: EventSeat[] }>> => {
-      return JSON.parse(localStorage.getItem('tify_event_templates') || '[]');
+  getEventTemplates: async (): Promise<
+    Array<{ id: string; name: string; zones: EventZone[]; seats: EventSeat[] }>
+  > => {
+    return JSON.parse(localStorage.getItem('tify_event_templates') || '[]');
   },
 
   getEventTickets: async (eventId: string): Promise<any[]> => {
     return request<any[]>(`${API_BASE}/events/${eventId}/tickets`);
   },
 
-  getEventByToken: async (token: string): Promise<TifyEvent & { currentGuest?: LocalEventGuest }> => {
-    return request<TifyEvent & { currentGuest?: LocalEventGuest }>(`${API_BASE}/events/by-token/${token}`);
+  getEventByToken: async (
+    token: string
+  ): Promise<TifyEvent & { currentGuest?: LocalEventGuest }> => {
+    return request<TifyEvent & { currentGuest?: LocalEventGuest }>(
+      `${API_BASE}/events/by-token/${token}`
+    );
   },
 
   checkInTicket: async (eventId: string, code: string): Promise<any> => {
     return request(`${API_BASE}/events/${eventId}/check-in`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ code })
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ code }),
     });
   },
 
   recordGuestAccess: async (token: string): Promise<{ success: boolean; guest: any }> => {
     return request<{ success: boolean; guest: any }>(`${API_BASE}/events/guests/${token}/access`, {
-      method: 'POST'
+      method: 'POST',
     });
   },
 
   updateGuest: async (id: string, data: any): Promise<{ success: boolean; guest: any }> => {
     return request<{ success: boolean; guest: any }>(`${API_BASE}/events/guests/${id}`, {
       method: 'PUT',
-      body: JSON.stringify(data)
+      body: JSON.stringify(data),
     });
   },
 
   // --- SHORTLINKS API ---
-  getShortLinks: async (): Promise<{ items: any[]; pagination: any }> => {
-    return request<{ items: any[]; pagination: any }>(`${API_BASE}/shortlinks`);
+  getShortLinkStats: async (): Promise<ShortLinkStats> => {
+    const uid = getCurrentUserId();
+    const query = new URLSearchParams(uid ? { createdBy: uid } : ({} as any));
+    return request<ShortLinkStats>(`${API_BASE}/shortlinks/stats?${query.toString()}`);
   },
 
-  createShortLink: async (data: any): Promise<any> => {
-    return request<any>(`${API_BASE}/shortlinks`, {
+  getShortLinks: async (): Promise<{ items: ShortLink[]; pagination: any }> => {
+    const uid = getCurrentUserId();
+    const query = new URLSearchParams(uid ? { createdBy: uid } : ({} as any));
+    return request<{ items: ShortLink[]; pagination: any }>(
+      `${API_BASE}/shortlinks?${query.toString()}`
+    );
+  },
+
+  createShortLink: async (data: any): Promise<ShortLink> => {
+    return request<ShortLink>(`${API_BASE}/shortlinks`, {
       method: 'POST',
+      body: JSON.stringify(data),
+      headers: { 'Content-Type': 'application/json' },
+    });
+  },
+
+  updateShortLink: async (id: string, data: any): Promise<ShortLink> => {
+    return request<ShortLink>(`${API_BASE}/shortlinks/${id}`, {
+      method: 'PATCH',
       body: JSON.stringify(data),
       headers: { 'Content-Type': 'application/json' },
     });
@@ -779,5 +822,18 @@ export const api = {
     return request<void>(`${API_BASE}/shortlinks/${id}`, {
       method: 'DELETE',
     });
+  },
+
+  extractMetadata: async (
+    url: string
+  ): Promise<{ title: string; description: string; image: string }> => {
+    return request<{ title: string; description: string; image: string }>(
+      `${API_BASE}/shortlinks/extract-metadata`,
+      {
+        method: 'POST',
+        body: JSON.stringify({ url }),
+        headers: { 'Content-Type': 'application/json' },
+      }
+    );
   },
 };

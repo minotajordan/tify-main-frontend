@@ -1,5 +1,15 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Send, Bot, User, Sparkles, Terminal, FileText, ArrowRight, Loader2, Cpu } from 'lucide-react';
+import {
+  Send,
+  Bot,
+  User,
+  Sparkles,
+  Terminal,
+  FileText,
+  ArrowRight,
+  Loader2,
+  Cpu,
+} from 'lucide-react';
 import { askTifyBrain } from '../services/geminiService';
 import { generateFormFromPrompt, GeneratedForm } from '../services/localFormGenerator';
 import { webLlmService } from '../services/webLlmService';
@@ -76,17 +86,30 @@ const AIChat: React.FC<AIChatProps> = ({ onNavigateToForms, variant = 'full' }) 
 
     // INTERCEPT: Handle Title Confirmation for Pending Form
     if (pendingForm) {
-      const keepKeywords = ['ok', 'si', 'yes', 'no', 'skip', 'saltar', 'listo', 'vale', 'keep', 'mantener', 'bien', 'igual'];
+      const keepKeywords = [
+        'ok',
+        'si',
+        'yes',
+        'no',
+        'skip',
+        'saltar',
+        'listo',
+        'vale',
+        'keep',
+        'mantener',
+        'bien',
+        'igual',
+      ];
       const isKeep = keepKeywords.includes(userMsg.text.toLowerCase().trim());
-      
+
       let finalTitle = pendingForm.title;
       if (!isKeep) {
         finalTitle = userMsg.text;
       }
-      
+
       const finalForm = { ...pendingForm, title: finalTitle };
       localStorage.setItem('tify_pending_ai_form', JSON.stringify(finalForm));
-      
+
       const aiMsg: ChatMessage = {
         id: (Date.now() + 1).toString(),
         role: 'ai',
@@ -95,20 +118,23 @@ const AIChat: React.FC<AIChatProps> = ({ onNavigateToForms, variant = 'full' }) 
       };
       setMessages((prev) => [...prev, aiMsg]);
       setPendingForm(null);
-      
+
       setTimeout(() => {
         if (onNavigateToForms) {
           onNavigateToForms();
         }
       }, 1500);
-      
+
       return;
     }
 
     setIsLoading(true);
 
     // Check for form generation intent
-    const isFormIntent = /crear|create|generate|generar|hacer|make|form|encuesta|survey|formulario|construir|diseñar/i.test(userMsg.text);
+    const isFormIntent =
+      /crear|create|generate|generar|hacer|make|form|encuesta|survey|formulario|construir|diseñar/i.test(
+        userMsg.text
+      );
 
     if (isFormIntent) {
       try {
@@ -130,8 +156,8 @@ const AIChat: React.FC<AIChatProps> = ({ onNavigateToForms, variant = 'full' }) 
             timestamp: new Date(),
             attachment: {
               type: 'form_preview',
-              data: webLlmForm
-            }
+              data: webLlmForm,
+            },
           };
           setMessages((prev) => [...prev, aiMsg]);
           setIsLoading(false);
@@ -145,7 +171,7 @@ const AIChat: React.FC<AIChatProps> = ({ onNavigateToForms, variant = 'full' }) 
       }
 
       const generatedForm = generateFormFromPrompt(userMsg.text, t);
-      
+
       if (generatedForm) {
         setTimeout(() => {
           const aiMsg: ChatMessage = {
@@ -155,8 +181,8 @@ const AIChat: React.FC<AIChatProps> = ({ onNavigateToForms, variant = 'full' }) 
             timestamp: new Date(),
             attachment: {
               type: 'form_preview',
-              data: generatedForm
-            }
+              data: generatedForm,
+            },
           };
           setMessages((prev) => [...prev, aiMsg]);
           setIsLoading(false);
@@ -185,9 +211,10 @@ const AIChat: React.FC<AIChatProps> = ({ onNavigateToForms, variant = 'full' }) 
     }
   };
 
-  const containerClasses = variant === 'full'
-    ? "h-full flex flex-col bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden w-full max-w-5xl mx-auto"
-    : "h-full flex flex-col bg-white overflow-hidden w-full";
+  const containerClasses =
+    variant === 'full'
+      ? 'h-full flex flex-col bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden w-full max-w-5xl mx-auto'
+      : 'h-full flex flex-col bg-white overflow-hidden w-full';
 
   return (
     <div className={containerClasses}>
@@ -236,7 +263,7 @@ const AIChat: React.FC<AIChatProps> = ({ onNavigateToForms, variant = 'full' }) 
             `}
             >
               {msg.text}
-              
+
               {msg.attachment?.type === 'form_preview' && (
                 <div className="mt-4 bg-gray-50 border border-gray-200 rounded-xl overflow-hidden">
                   <div className="p-4 border-b border-gray-200 flex justify-between items-start bg-white">
@@ -245,12 +272,17 @@ const AIChat: React.FC<AIChatProps> = ({ onNavigateToForms, variant = 'full' }) 
                         <FileText size={16} className="text-indigo-600" />
                         {msg.attachment.data.title}
                       </h4>
-                      <p className="text-xs text-gray-500 mt-1">{msg.attachment.data.description}</p>
+                      <p className="text-xs text-gray-500 mt-1">
+                        {msg.attachment.data.description}
+                      </p>
                     </div>
                   </div>
                   <div className="p-3 bg-gray-50 space-y-2 max-h-[200px] overflow-y-auto">
                     {(msg.attachment.data.fields || []).map((field, idx) => (
-                      <div key={idx} className="flex items-center gap-2 text-xs text-gray-600 bg-white p-2 rounded border border-gray-200">
+                      <div
+                        key={idx}
+                        className="flex items-center gap-2 text-xs text-gray-600 bg-white p-2 rounded border border-gray-200"
+                      >
                         <span className="font-mono text-gray-400">[{field.type}]</span>
                         <span className="font-medium">{field.label}</span>
                         {field.required && <span className="text-red-500">*</span>}
@@ -258,7 +290,7 @@ const AIChat: React.FC<AIChatProps> = ({ onNavigateToForms, variant = 'full' }) 
                     ))}
                   </div>
                   <div className="p-3 bg-white border-t border-gray-200">
-                    <button 
+                    <button
                       onClick={() => handleCreateForm(msg.attachment!.data)}
                       className="w-full flex items-center justify-center gap-2 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-medium transition-colors"
                     >
@@ -334,9 +366,7 @@ const AIChat: React.FC<AIChatProps> = ({ onNavigateToForms, variant = 'full' }) 
             <Send size={18} />
           </button>
         </div>
-        <div className="mt-2 text-center text-xs text-gray-400">
-          {t('ai.disclaimer')}
-        </div>
+        <div className="mt-2 text-center text-xs text-gray-400">{t('ai.disclaimer')}</div>
       </div>
     </div>
   );

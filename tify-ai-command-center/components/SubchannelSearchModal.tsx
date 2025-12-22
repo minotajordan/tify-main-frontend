@@ -1,13 +1,37 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Search, X, ArrowRight, Command, Users, ShieldCheck, Hourglass, Target } from 'lucide-react';
+import {
+  Search,
+  X,
+  ArrowRight,
+  Command,
+  Users,
+  ShieldCheck,
+  Hourglass,
+  Target,
+} from 'lucide-react';
 import { useI18n } from '../i18n';
 import { Channel } from '../types';
 import { AnimatePresence, motion } from 'framer-motion';
 
-import { 
-  Bell, BellRing, Globe, AlertTriangle, MapPin, MessagesSquare, 
-  Lock, Megaphone, Zap, Mail, Send, Phone, AudioWaveform, 
-  RadioTower, Camera, Image, Clock, Calendar 
+import {
+  Bell,
+  BellRing,
+  Globe,
+  AlertTriangle,
+  MapPin,
+  MessagesSquare,
+  Lock,
+  Megaphone,
+  Zap,
+  Mail,
+  Send,
+  Phone,
+  AudioWaveform,
+  RadioTower,
+  Camera,
+  Image,
+  Clock,
+  Calendar,
 } from 'lucide-react';
 
 const ICON_MAP: Record<string, any> = {
@@ -50,11 +74,11 @@ interface SubchannelSearchModalProps {
   onSelect: (channel: Channel) => void;
 }
 
-const SubchannelSearchModal: React.FC<SubchannelSearchModalProps> = ({ 
-  isOpen, 
-  onClose, 
-  subchannels, 
-  onSelect 
+const SubchannelSearchModal: React.FC<SubchannelSearchModalProps> = ({
+  isOpen,
+  onClose,
+  subchannels,
+  onSelect,
 }) => {
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<Channel[]>([]);
@@ -84,9 +108,10 @@ const SubchannelSearchModal: React.FC<SubchannelSearchModalProps> = ({
       setResults([]);
       return;
     }
-    const filtered = subchannels.filter(item => 
-      item.title.toLowerCase().includes(query.toLowerCase()) || 
-      (item.description && item.description.toLowerCase().includes(query.toLowerCase()))
+    const filtered = subchannels.filter(
+      (item) =>
+        item.title.toLowerCase().includes(query.toLowerCase()) ||
+        (item.description && item.description.toLowerCase().includes(query.toLowerCase()))
     );
     setResults(filtered);
   }, [query, subchannels]);
@@ -96,16 +121,17 @@ const SubchannelSearchModal: React.FC<SubchannelSearchModalProps> = ({
   return (
     <div className="fixed inset-0 z-[100] flex flex-col items-center pt-[15vh] p-4">
       {/* Blurred Backdrop */}
-      <div 
+      <div
         className="absolute inset-0 bg-slate-950/80 backdrop-blur-2xl transition-opacity duration-300"
         onClick={onClose}
       />
 
       {/* Content Container */}
       <div className="relative w-full max-w-2xl flex flex-col items-center z-10">
-        
         {/* Search Input */}
-        <div className={`w-full transition-all duration-500 ease-out transform ${results.length > 0 || query ? 'translate-y-0' : 'translate-y-[25vh]'}`}>
+        <div
+          className={`w-full transition-all duration-500 ease-out transform ${results.length > 0 || query ? 'translate-y-0' : 'translate-y-[25vh]'}`}
+        >
           <div className="relative group">
             <div className="absolute -inset-1 bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 rounded-full opacity-25 blur-xl group-hover:opacity-40 transition-all duration-500" />
             <div className="relative flex items-center bg-slate-900/40 border border-slate-700/50 rounded-full shadow-2xl backdrop-blur-md transition-all group-hover:bg-slate-900/60 group-hover:border-slate-600">
@@ -119,7 +145,7 @@ const SubchannelSearchModal: React.FC<SubchannelSearchModalProps> = ({
                 className="w-full bg-transparent text-white text-xl font-light placeholder-slate-500 py-4 px-4 focus:outline-none"
               />
               {query && (
-                <button 
+                <button
                   onClick={() => setQuery('')}
                   className="mr-4 p-1 rounded-full hover:bg-slate-700/50 text-slate-500 hover:text-white transition-colors"
                 >
@@ -131,7 +157,9 @@ const SubchannelSearchModal: React.FC<SubchannelSearchModalProps> = ({
         </div>
 
         {/* Results */}
-        <div className={`w-full mt-8 transition-all duration-500 ease-out ${results.length > 0 ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8 pointer-events-none'}`}>
+        <div
+          className={`w-full mt-8 transition-all duration-500 ease-out ${results.length > 0 ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8 pointer-events-none'}`}
+        >
           {results.length > 0 && (
             <div className="flex flex-col gap-3 pb-8 max-h-[60vh] overflow-y-auto custom-scrollbar pr-2">
               <div className="text-center text-slate-500 text-xs font-medium tracking-[0.2em] uppercase mb-4">
@@ -170,18 +198,23 @@ const SubchannelSearchModal: React.FC<SubchannelSearchModalProps> = ({
             </div>
           )}
         </div>
-          
+
         {query && results.length === 0 && (
-           <div className="mt-12 text-center text-slate-500">
-             <p className="text-lg font-light">No se encontraron subcanales para "{query}"</p>
-           </div>
+          <div className="mt-12 text-center text-slate-500">
+            <p className="text-lg font-light">No se encontraron subcanales para "{query}"</p>
+          </div>
         )}
 
         {/* Footer info */}
         {!query && (
-          <div className={`mt-16 text-slate-600 text-sm transition-all duration-500 ${query ? 'opacity-0' : 'opacity-100'}`}>
+          <div
+            className={`mt-16 text-slate-600 text-sm transition-all duration-500 ${query ? 'opacity-0' : 'opacity-100'}`}
+          >
             <span className="flex items-center gap-2">
-              <kbd className="px-1.5 py-0.5 bg-slate-800/50 rounded border border-slate-700/50 text-xs font-mono">Esc</kbd> para cerrar
+              <kbd className="px-1.5 py-0.5 bg-slate-800/50 rounded border border-slate-700/50 text-xs font-mono">
+                Esc
+              </kbd>{' '}
+              para cerrar
             </span>
           </div>
         )}

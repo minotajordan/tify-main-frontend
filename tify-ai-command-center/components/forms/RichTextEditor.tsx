@@ -23,14 +23,14 @@ interface RichTextEditorProps {
   pageHeight?: number;
 }
 
-const RichTextEditor: React.FC<RichTextEditorProps> = ({ 
-  value, 
-  onChange, 
-  placeholder, 
-  label, 
+const RichTextEditor: React.FC<RichTextEditorProps> = ({
+  value,
+  onChange,
+  placeholder,
+  label,
   className = '',
   enablePagination = false,
-  pageHeight = 1122 // A4 at 96 DPI is approx 1123px, let's use a safe printable height
+  pageHeight = 1122, // A4 at 96 DPI is approx 1123px, let's use a safe printable height
 }) => {
   const contentRef = useRef<HTMLDivElement>(null);
 
@@ -70,7 +70,9 @@ const RichTextEditor: React.FC<RichTextEditorProps> = ({
   );
 
   return (
-    <div className={`border border-gray-300 rounded-lg overflow-hidden bg-white focus-within:ring-2 focus-within:ring-indigo-500 focus-within:border-indigo-500 flex flex-col ${className}`}>
+    <div
+      className={`border border-gray-300 rounded-lg overflow-hidden bg-white focus-within:ring-2 focus-within:ring-indigo-500 focus-within:border-indigo-500 flex flex-col ${className}`}
+    >
       {label && (
         <div className="px-3 py-2 text-xs font-semibold text-gray-500 uppercase border-b border-gray-100 bg-gray-50 shrink-0">
           {label}
@@ -96,12 +98,16 @@ const RichTextEditor: React.FC<RichTextEditorProps> = ({
         contentEditable
         onInput={handleInput}
         className={`outline-none prose max-w-none flex-1 overflow-y-auto relative font-serif text-gray-800 leading-relaxed text-justify ${enablePagination ? 'p-12' : 'p-4'}`}
-        style={enablePagination ? {
-          backgroundImage: `linear-gradient(to bottom, transparent ${pageHeight - 10}px, #e2e8f0 ${pageHeight - 10}px, #e2e8f0 ${pageHeight}px, transparent ${pageHeight}px)`,
-          backgroundSize: `100% ${pageHeight}px`,
-          backgroundRepeat: 'repeat-y',
-          paddingBottom: '50px'
-        } : {}}
+        style={
+          enablePagination
+            ? {
+                backgroundImage: `linear-gradient(to bottom, transparent ${pageHeight - 10}px, #e2e8f0 ${pageHeight - 10}px, #e2e8f0 ${pageHeight}px, transparent ${pageHeight}px)`,
+                backgroundSize: `100% ${pageHeight}px`,
+                backgroundRepeat: 'repeat-y',
+                paddingBottom: '50px',
+              }
+            : {}
+        }
         data-placeholder={placeholder}
       />
       {enablePagination && (

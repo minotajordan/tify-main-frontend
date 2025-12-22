@@ -259,3 +259,35 @@ export interface LocalEventGuest {
   infoFilled?: boolean;
   updatedAt?: string;
 }
+
+// --- SHORTLINKS MODULE TYPES ---
+
+export interface ShortLink {
+  id: string;
+  code: string;
+  targetUrl: string;
+  shortUrl: string;
+  clicks: number;
+  interstitialTitle?: string;
+  interstitialMessage?: string;
+  bannerImageUrl?: string;
+  activeFrom?: string;
+  expiresAt?: string;
+  redirectMode: 'IMMEDIATE' | 'INTERSTITIAL';
+  createdAt: string;
+}
+
+export interface ShortLinkVisit {
+  createdAt: string;
+  shortLink: {
+    code: string;
+  };
+}
+
+export interface ShortLinkStats {
+  totalLinks: number;
+  totalClicks: number;
+  activeLinks: number;
+  recentVisits: ShortLinkVisit[];
+  chartData: { date: string; count: number }[];
+}

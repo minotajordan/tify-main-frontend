@@ -1,5 +1,23 @@
 import React, { useState, useEffect } from 'react';
-import { Send, Sparkles, Paperclip, Clock, AlertTriangle, Loader2, X, FileText, Image as ImageIcon, Film, File, MapPin, List, PenLine, Search, ChevronDown, Hash } from 'lucide-react';
+import {
+  Send,
+  Sparkles,
+  Paperclip,
+  Clock,
+  AlertTriangle,
+  Loader2,
+  X,
+  FileText,
+  Image as ImageIcon,
+  Film,
+  File,
+  MapPin,
+  List,
+  PenLine,
+  Search,
+  ChevronDown,
+  Hash,
+} from 'lucide-react';
 import { generateMessageDraft } from '../services/geminiService';
 import { api, API_BASE, getAuthToken } from '../services/api';
 import { MessagePriority, Channel, DeliveryMethod } from '../types';
@@ -54,7 +72,7 @@ const MessageCenter: React.FC<MessageCenterProps> = ({ channelId }) => {
   );
   const [showLocationPicker, setShowLocationPicker] = useState(false);
   const [viewMode, setViewMode] = useState<'compose' | 'feed'>('feed');
-  
+
   const [showChannelSearch, setShowChannelSearch] = useState(false);
   const [showSubchannelSearch, setShowSubchannelSearch] = useState(false);
   const [showGlobalSearch, setShowGlobalSearch] = useState(false);
@@ -90,14 +108,14 @@ const MessageCenter: React.FC<MessageCenterProps> = ({ channelId }) => {
 
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (!e.target.files || e.target.files.length === 0) return;
-    
+
     const file = e.target.files[0];
     setUploading(true);
     setUploadFileName(file.name);
     setUploadFileSize(formatBytes(file.size));
     setUploadProgress(0);
     setFeedback(null);
-    
+
     console.log(`[Upload] Starting upload for ${file.name} (${file.size} bytes)`);
 
     const xhr = new XMLHttpRequest();
@@ -116,7 +134,7 @@ const MessageCenter: React.FC<MessageCenterProps> = ({ channelId }) => {
       if (xhr.status === 200) {
         setUploadProgress(100); // Ensure it shows 100%
         console.log('[Upload] Completed (100%), waiting for server response...');
-        
+
         setTimeout(() => {
           try {
             const result = JSON.parse(xhr.responseText);
@@ -167,11 +185,14 @@ const MessageCenter: React.FC<MessageCenterProps> = ({ channelId }) => {
     xhr.send(formData);
   };
 
- const removeAttachment = (index: number) => {
+  const removeAttachment = (index: number) => {
     setAttachments((prev) => prev.filter((_, i) => i !== index));
   };
 
-  const handleLocationSave = (data: { markers: [number, number][]; polylines: { points: [number, number][]; color: string }[] }) => {
+  const handleLocationSave = (data: {
+    markers: [number, number][];
+    polylines: { points: [number, number][]; color: string }[];
+  }) => {
     let locText = '\n\n📍 Location Attached:';
     if (data.markers.length > 0) {
       locText += `\nMarkers: ${data.markers.map((m) => `[${m[0].toFixed(5)}, ${m[1].toFixed(5)}]`).join(', ')}`;
@@ -182,7 +203,6 @@ const MessageCenter: React.FC<MessageCenterProps> = ({ channelId }) => {
     setContent((prev) => prev + locText);
     setShowLocationPicker(false);
   };
-
 
   const handleSend = async () => {
     if (!selectedChannelId || !content) return;
@@ -216,8 +236,9 @@ const MessageCenter: React.FC<MessageCenterProps> = ({ channelId }) => {
     }
   };
 
-  const selectedChannel = channels.find(c => c.id === selectedChannelId) || 
-                          channels.flatMap(c => c.subchannels || []).find(sc => sc.id === selectedChannelId);
+  const selectedChannel =
+    channels.find((c) => c.id === selectedChannelId) ||
+    channels.flatMap((c) => c.subchannels || []).find((sc) => sc.id === selectedChannelId);
 
   return (
     <div className="h-full max-w-5xl mx-auto flex flex-col">
@@ -237,13 +258,13 @@ const MessageCenter: React.FC<MessageCenterProps> = ({ channelId }) => {
               </>
             )}
           </h2>
-          
+
           <div className="flex p-1 bg-gray-200/50 rounded-lg self-start sm:self-auto">
             <button
               onClick={() => setViewMode('compose')}
               className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-all ${
-                viewMode === 'compose' 
-                  ? 'bg-white text-indigo-600 shadow-sm' 
+                viewMode === 'compose'
+                  ? 'bg-white text-indigo-600 shadow-sm'
                   : 'text-gray-600 hover:text-gray-900 hover:bg-gray-200/50'
               }`}
             >
@@ -253,8 +274,8 @@ const MessageCenter: React.FC<MessageCenterProps> = ({ channelId }) => {
             <button
               onClick={() => setViewMode('feed')}
               className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-all ${
-                viewMode === 'feed' 
-                  ? 'bg-white text-indigo-600 shadow-sm' 
+                viewMode === 'feed'
+                  ? 'bg-white text-indigo-600 shadow-sm'
                   : 'text-gray-600 hover:text-gray-900 hover:bg-gray-200/50'
               }`}
             >
@@ -291,11 +312,14 @@ const MessageCenter: React.FC<MessageCenterProps> = ({ channelId }) => {
                       )}
                     </div>
                   </div>
-                  <ChevronDown size={16} className="text-gray-400 group-hover:text-gray-600 transition-colors" />
+                  <ChevronDown
+                    size={16}
+                    className="text-gray-400 group-hover:text-gray-600 transition-colors"
+                  />
                 </button>
 
                 {selectedChannel?.subchannels && selectedChannel.subchannels.length > 0 && (
-                   <button
+                  <button
                     onClick={() => setShowSubchannelSearch(true)}
                     className="p-2.5 bg-gray-50 hover:bg-gray-100 border border-gray-200 rounded-lg text-gray-600 hover:text-indigo-600 transition-colors"
                     title="View Subchannels"
@@ -319,7 +343,10 @@ const MessageCenter: React.FC<MessageCenterProps> = ({ channelId }) => {
           <div className="flex-1 overflow-y-auto">
             {viewMode === 'feed' ? (
               <div className="h-full bg-gray-50/30">
-                <MessageFeed channelId={selectedChannelId} className="h-full border-none shadow-none rounded-none bg-transparent" />
+                <MessageFeed
+                  channelId={selectedChannelId}
+                  className="h-full border-none shadow-none rounded-none bg-transparent"
+                />
               </div>
             ) : (
               <div className="p-6 space-y-6 max-w-3xl mx-auto">
@@ -333,7 +360,9 @@ const MessageCenter: React.FC<MessageCenterProps> = ({ channelId }) => {
 
                 {/* Editor */}
                 <div className="relative">
-                  <label className="block text-sm font-medium text-gray-700 mb-1">{t('content')}</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    {t('content')}
+                  </label>
                   <textarea
                     value={content}
                     onChange={(e) => setContent(e.target.value)}
@@ -373,17 +402,19 @@ const MessageCenter: React.FC<MessageCenterProps> = ({ channelId }) => {
                         </span>
                       </div>
                     ))}
-                    
+
                     {uploading && (
                       <div className="w-24 h-24 bg-indigo-50 border border-indigo-100 rounded-xl flex flex-col items-center justify-center p-2">
                         <Loader2 className="animate-spin text-indigo-500 mb-2" size={20} />
-                        <span className="text-[10px] text-indigo-600 font-medium mb-1">{uploadProgress}%</span>
-                         <div className="w-full bg-indigo-200 rounded-full h-1 overflow-hidden">
-                            <div
-                              className="bg-indigo-600 h-full rounded-full transition-all duration-200"
-                              style={{ width: `${uploadProgress}%` }}
-                            />
-                         </div>
+                        <span className="text-[10px] text-indigo-600 font-medium mb-1">
+                          {uploadProgress}%
+                        </span>
+                        <div className="w-full bg-indigo-200 rounded-full h-1 overflow-hidden">
+                          <div
+                            className="bg-indigo-600 h-full rounded-full transition-all duration-200"
+                            style={{ width: `${uploadProgress}%` }}
+                          />
+                        </div>
                       </div>
                     )}
                   </div>
@@ -425,22 +456,24 @@ const MessageCenter: React.FC<MessageCenterProps> = ({ channelId }) => {
                         {t('priority')}
                       </label>
                       <div className="flex rounded-md shadow-sm" role="group">
-                        {[MessagePriority.LOW, MessagePriority.MEDIUM, MessagePriority.HIGH].map((p) => (
-                          <button
-                            key={p}
-                            type="button"
-                            disabled={isEmergency}
-                            onClick={() => setPriority(p)}
-                            className={`px-4 py-2 text-sm font-medium border first:rounded-l-lg last:rounded-r-lg flex-1 capitalize
+                        {[MessagePriority.LOW, MessagePriority.MEDIUM, MessagePriority.HIGH].map(
+                          (p) => (
+                            <button
+                              key={p}
+                              type="button"
+                              disabled={isEmergency}
+                              onClick={() => setPriority(p)}
+                              className={`px-4 py-2 text-sm font-medium border first:rounded-l-lg last:rounded-r-lg flex-1 capitalize
                               ${
                                 priority === p
                                   ? 'bg-slate-800 text-white border-slate-800'
                                   : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
                               } ${isEmergency ? 'opacity-50 cursor-not-allowed' : ''}`}
-                          >
-                            {p.toLowerCase()}
-                          </button>
-                        ))}
+                            >
+                              {p.toLowerCase()}
+                            </button>
+                          )
+                        )}
                       </div>
                     </div>
 
@@ -462,7 +495,9 @@ const MessageCenter: React.FC<MessageCenterProps> = ({ channelId }) => {
                   </div>
 
                   <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
-                    <h4 className="text-sm font-semibold text-gray-900 mb-2">{t('deliveryPreview')}</h4>
+                    <h4 className="text-sm font-semibold text-gray-900 mb-2">
+                      {t('deliveryPreview')}
+                    </h4>
                     <ul className="space-y-2 text-sm text-gray-600">
                       <li className="flex items-center gap-2">
                         <Clock size={14} />
@@ -514,7 +549,7 @@ const MessageCenter: React.FC<MessageCenterProps> = ({ channelId }) => {
           setShowChannelSearch(false);
         }}
       />
-      
+
       {selectedChannel?.subchannels && (
         <SubchannelSearchModal
           isOpen={showSubchannelSearch}
@@ -527,10 +562,7 @@ const MessageCenter: React.FC<MessageCenterProps> = ({ channelId }) => {
         />
       )}
 
-      <SearchModal
-        isOpen={showGlobalSearch}
-        onClose={() => setShowGlobalSearch(false)}
-      />
+      <SearchModal isOpen={showGlobalSearch} onClose={() => setShowGlobalSearch(false)} />
     </div>
   );
 };

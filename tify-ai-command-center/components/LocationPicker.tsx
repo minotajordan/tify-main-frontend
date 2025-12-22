@@ -18,7 +18,10 @@ const DefaultIcon = L.icon({
 L.Marker.prototype.options.icon = DefaultIcon;
 
 interface LocationPickerProps {
-  onSave: (data: { markers: [number, number][]; polylines: { points: [number, number][]; color: string }[] }) => void;
+  onSave: (data: {
+    markers: [number, number][];
+    polylines: { points: [number, number][]; color: string }[];
+  }) => void;
   onClose: () => void;
   initialData?: { markers: [number, number][]; polylines: any[] } | null;
 }
@@ -54,17 +57,19 @@ const MapController = ({ center }: { center: [number, number] | null }) => {
 const LocationPicker: React.FC<LocationPickerProps> = ({ onSave, onClose, initialData }) => {
   const [mode, setMode] = useState<Mode>('view');
   const [markers, setMarkers] = useState<[number, number][]>(initialData?.markers || []);
-  
+
   // Normalize polylines to new format
-  const [polylines, setPolylines] = useState<{ points: [number, number][]; color: string }[]>(() => {
-    if (!initialData?.polylines) return [];
-    return initialData.polylines.map(p => {
-      if (Array.isArray(p)) {
-        return { points: p as [number, number][], color: '#4F46E5' };
-      }
-      return p;
-    });
-  });
+  const [polylines, setPolylines] = useState<{ points: [number, number][]; color: string }[]>(
+    () => {
+      if (!initialData?.polylines) return [];
+      return initialData.polylines.map((p) => {
+        if (Array.isArray(p)) {
+          return { points: p as [number, number][], color: '#4F46E5' };
+        }
+        return p;
+      });
+    }
+  );
 
   const [currentPolyline, setCurrentPolyline] = useState<[number, number][]>([]);
   const [searchQuery, setSearchQuery] = useState('');
@@ -97,7 +102,7 @@ const LocationPicker: React.FC<LocationPickerProps> = ({ onSave, onClose, initia
 
   const handleSave = () => {
     // If there is an unfinished polyline, add it
-    let finalPolylines = [...polylines];
+    const finalPolylines = [...polylines];
     if (currentPolyline.length > 1) {
       finalPolylines.push({ points: currentPolyline, color: selectedColor });
     }
@@ -141,7 +146,7 @@ const LocationPicker: React.FC<LocationPickerProps> = ({ onSave, onClose, initia
               <Navigation size={20} className="text-indigo-600" />
               Location & Routes
             </h3>
-            
+
             {/* Search Bar */}
             <form onSubmit={handleSearch} className="relative w-full max-w-md ml-4">
               <input
@@ -151,7 +156,10 @@ const LocationPicker: React.FC<LocationPickerProps> = ({ onSave, onClose, initia
                 placeholder="Search place..."
                 className="w-full pl-10 pr-4 py-1.5 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none"
               />
-              <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+              <Search
+                size={16}
+                className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
+              />
             </form>
           </div>
 
@@ -169,7 +177,9 @@ const LocationPicker: React.FC<LocationPickerProps> = ({ onSave, onClose, initia
             <button
               onClick={() => setMode('view')}
               className={`p-2 rounded-lg transition-all flex items-center gap-2 ${
-                mode === 'view' ? 'bg-indigo-50 text-indigo-600 shadow-sm' : 'text-gray-500 hover:bg-gray-50'
+                mode === 'view'
+                  ? 'bg-indigo-50 text-indigo-600 shadow-sm'
+                  : 'text-gray-500 hover:bg-gray-50'
               }`}
               title="View Mode"
             >
@@ -198,21 +208,21 @@ const LocationPicker: React.FC<LocationPickerProps> = ({ onSave, onClose, initia
               <Route size={20} />
             </button>
           </div>
-          
+
           <div className="h-px bg-gray-200 my-1" />
-          
+
           <div className="p-1 flex flex-col gap-2 items-center">
-             <Palette size={16} className="text-gray-400" />
-             <div className="flex flex-col gap-1">
-               {colors.map(color => (
-                 <button
-                   key={color}
-                   onClick={() => setSelectedColor(color)}
-                   className={`w-4 h-4 rounded-full transition-transform hover:scale-110 ${selectedColor === color ? 'ring-2 ring-offset-1 ring-gray-400 scale-110' : ''}`}
-                   style={{ backgroundColor: color }}
-                 />
-               ))}
-             </div>
+            <Palette size={16} className="text-gray-400" />
+            <div className="flex flex-col gap-1">
+              {colors.map((color) => (
+                <button
+                  key={color}
+                  onClick={() => setSelectedColor(color)}
+                  className={`w-4 h-4 rounded-full transition-transform hover:scale-110 ${selectedColor === color ? 'ring-2 ring-offset-1 ring-gray-400 scale-110' : ''}`}
+                  style={{ backgroundColor: color }}
+                />
+              ))}
+            </div>
           </div>
 
           <div className="h-px bg-gray-200 my-1" />
@@ -240,7 +250,7 @@ const LocationPicker: React.FC<LocationPickerProps> = ({ onSave, onClose, initia
             />
             <MapEvents mode={mode} onMapClick={handleMapClick} />
             <MapController center={mapCenter} />
-            
+
             {markers.map((pos, idx) => (
               <Marker key={`marker-${idx}`} position={pos} />
             ))}
@@ -253,19 +263,32 @@ const LocationPicker: React.FC<LocationPickerProps> = ({ onSave, onClose, initia
               <Polyline positions={currentPolyline} color={selectedColor} dashArray="5, 10" />
             )}
           </MapContainer>
-          
+
           {/* Instructions Overlay */}
           <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-[1000] bg-white/90 backdrop-blur px-6 py-2.5 rounded-full shadow-lg border border-gray-200 text-sm font-medium text-gray-700 flex items-center gap-3">
-             {mode === 'view' && <><Navigation size={16} className="text-indigo-600"/> Pan and zoom to explore</>}
-             {mode === 'marker' && <><MapPin size={16} className="text-indigo-600"/> Click map to place markers</>}
-             {mode === 'polyline' && <><Route size={16} className="text-indigo-600"/> Click to draw path points. Switch mode to finish.</>}
+            {mode === 'view' && (
+              <>
+                <Navigation size={16} className="text-indigo-600" /> Pan and zoom to explore
+              </>
+            )}
+            {mode === 'marker' && (
+              <>
+                <MapPin size={16} className="text-indigo-600" /> Click map to place markers
+              </>
+            )}
+            {mode === 'polyline' && (
+              <>
+                <Route size={16} className="text-indigo-600" /> Click to draw path points. Switch
+                mode to finish.
+              </>
+            )}
           </div>
         </div>
 
         {/* Footer */}
         <div className="p-4 border-t border-gray-100 bg-white flex justify-between items-center z-10">
           <div className="text-xs text-gray-500">
-             {markers.length} markers, {polylines.length} routes
+            {markers.length} markers, {polylines.length} routes
           </div>
           <div className="flex gap-3">
             <button

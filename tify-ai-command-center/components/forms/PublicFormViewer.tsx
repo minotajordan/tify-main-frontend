@@ -24,7 +24,7 @@ const PublicFormViewer: React.FC<{ slug: string }> = ({ slug }) => {
   const qrRef = useRef<HTMLDivElement>(null);
   const [form, setForm] = useState<any>(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<{message: string, status?: string} | null>(null);
+  const [error, setError] = useState<{ message: string; status?: string } | null>(null);
   const [submitted, setSubmitted] = useState(false);
   const [submissionId, setSubmissionId] = useState('');
   const [answers, setAnswers] = useState<Record<string, any>>({});
@@ -60,7 +60,15 @@ const PublicFormViewer: React.FC<{ slug: string }> = ({ slug }) => {
       const errorData = err.response?.data || {};
       setError({
         message: errorData.message || err.message || t('forms.public.notFound'),
-        status: errorData.status || (err.response?.status === 403 ? 'paused' : err.response?.status === 410 ? 'deleted' : err.response?.status === 404 ? 'notFound' : 'error')
+        status:
+          errorData.status ||
+          (err.response?.status === 403
+            ? 'paused'
+            : err.response?.status === 410
+              ? 'deleted'
+              : err.response?.status === 404
+                ? 'notFound'
+                : 'error'),
       });
     } finally {
       setLoading(false);
@@ -77,10 +85,10 @@ const PublicFormViewer: React.FC<{ slug: string }> = ({ slug }) => {
     for (const field of form.fields) {
       if (field.required && !answers[field.label]) {
         if (form.isWizard) {
-            // If validation fails in wizard, jump to that step?
-            // For simplicity, just alert.
-            const idx = form.fields.findIndex((f: any) => f.label === field.label);
-            setCurrentStep(idx);
+          // If validation fails in wizard, jump to that step?
+          // For simplicity, just alert.
+          const idx = form.fields.findIndex((f: any) => f.label === field.label);
+          setCurrentStep(idx);
         }
         alert(t('forms.public.fieldRequired').replace('{label}', field.label));
         return;
@@ -123,7 +131,8 @@ const PublicFormViewer: React.FC<{ slug: string }> = ({ slug }) => {
       if (type === 'image' && file.type.startsWith('image/')) isValid = true;
       else if (type === 'video' && file.type.startsWith('video/')) isValid = true;
       else if (type === 'pdf' && file.type === 'application/pdf') isValid = true;
-      else if (type === 'document' && file.name.match(/\.(doc|docx|xls|xlsx|ppt|pptx)$/i)) isValid = true;
+      else if (type === 'document' && file.name.match(/\.(doc|docx|xls|xlsx|ppt|pptx)$/i))
+        isValid = true;
     }
 
     if (!isValid) {
@@ -138,7 +147,7 @@ const PublicFormViewer: React.FC<{ slug: string }> = ({ slug }) => {
         name: file.name,
         type: file.type,
         size: file.size,
-        data: reader.result
+        data: reader.result,
       });
     };
     reader.readAsDataURL(file);
@@ -170,12 +179,16 @@ const PublicFormViewer: React.FC<{ slug: string }> = ({ slug }) => {
           />
         ) : field.type === 'select' ? (
           (() => {
-            const opts = Array.isArray(field.options) 
-              ? { items: field.options, multiple: false, allowOther: false } 
-              : (field.options || { items: [], multiple: false, allowOther: false });
+            const opts = Array.isArray(field.options)
+              ? { items: field.options, multiple: false, allowOther: false }
+              : field.options || { items: [], multiple: false, allowOther: false };
 
             const handleSelectChange = (val: string, checked: boolean) => {
-              const current = answers[field.label] ? (Array.isArray(answers[field.label]) ? answers[field.label] : [answers[field.label]]) : [];
+              const current = answers[field.label]
+                ? Array.isArray(answers[field.label])
+                  ? answers[field.label]
+                  : [answers[field.label]]
+                : [];
               let newVal;
               if (checked) {
                 newVal = [...current, val];
@@ -194,13 +207,14 @@ const PublicFormViewer: React.FC<{ slug: string }> = ({ slug }) => {
                 {opts.items.map((opt: string, optIdx: number) => (
                   <div key={optIdx} className="flex items-center gap-3">
                     <input
-                      type={opts.multiple ? "checkbox" : "radio"}
+                      type={opts.multiple ? 'checkbox' : 'radio'}
                       name={`field-${idx}`}
                       id={`field-${idx}-opt-${optIdx}`}
                       value={opt}
                       checked={
-                        opts.multiple 
-                          ? (Array.isArray(answers[field.label]) && answers[field.label].includes(opt))
+                        opts.multiple
+                          ? Array.isArray(answers[field.label]) &&
+                            answers[field.label].includes(opt)
                           : answers[field.label] === opt
                       }
                       onChange={(e) => {
@@ -212,7 +226,10 @@ const PublicFormViewer: React.FC<{ slug: string }> = ({ slug }) => {
                       }}
                       className="w-5 h-5 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
                     />
-                    <label htmlFor={`field-${idx}-opt-${optIdx}`} className="text-gray-700 cursor-pointer select-none">
+                    <label
+                      htmlFor={`field-${idx}-opt-${optIdx}`}
+                      className="text-gray-700 cursor-pointer select-none"
+                    >
                       {opt}
                     </label>
                   </div>
@@ -221,13 +238,14 @@ const PublicFormViewer: React.FC<{ slug: string }> = ({ slug }) => {
                 {opts.allowOther && (
                   <div className="flex items-center gap-3 mt-2">
                     <input
-                      type={opts.multiple ? "checkbox" : "radio"}
+                      type={opts.multiple ? 'checkbox' : 'radio'}
                       name={`field-${idx}`}
                       id={`field-${idx}-other`}
                       checked={
-                        opts.multiple 
-                          ? (Array.isArray(answers[field.label]) && answers[field.label]?.some((v: string) => !opts.items.includes(v)))
-                          : (answers[field.label] && !opts.items.includes(answers[field.label]))
+                        opts.multiple
+                          ? Array.isArray(answers[field.label]) &&
+                            answers[field.label]?.some((v: string) => !opts.items.includes(v))
+                          : answers[field.label] && !opts.items.includes(answers[field.label])
                       }
                       onChange={(e) => {
                         if (!opts.multiple && e.target.checked) {
@@ -242,14 +260,21 @@ const PublicFormViewer: React.FC<{ slug: string }> = ({ slug }) => {
                         type="text"
                         placeholder="Otro (especificar)"
                         value={
-                          opts.multiple 
-                            ? (Array.isArray(answers[field.label]) ? answers[field.label].find((v: string) => !opts.items.includes(v)) || '' : '')
-                            : (answers[field.label] && !opts.items.includes(answers[field.label]) ? answers[field.label] : '')
+                          opts.multiple
+                            ? Array.isArray(answers[field.label])
+                              ? answers[field.label].find((v: string) => !opts.items.includes(v)) ||
+                                ''
+                              : ''
+                            : answers[field.label] && !opts.items.includes(answers[field.label])
+                              ? answers[field.label]
+                              : ''
                         }
                         onChange={(e) => {
                           const val = e.target.value;
                           if (opts.multiple) {
-                            const current = Array.isArray(answers[field.label]) ? answers[field.label] : [];
+                            const current = Array.isArray(answers[field.label])
+                              ? answers[field.label]
+                              : [];
                             // Remove old custom value if exists
                             const clean = current.filter((v: string) => opts.items.includes(v));
                             if (val) {
@@ -263,14 +288,18 @@ const PublicFormViewer: React.FC<{ slug: string }> = ({ slug }) => {
                         }}
                         className="w-full px-3 py-1.5 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 disabled:bg-gray-100 disabled:text-gray-400"
                         disabled={
-                          opts.multiple 
+                          opts.multiple
                             ? false // Always enabled if checkbox checked logic is weird, actually better to just check if input has value
                             : false
                         }
                         onFocus={() => {
                           // Auto select radio when focusing input
-                          if (!opts.multiple && answers[field.label] && opts.items.includes(answers[field.label])) {
-                             handleSingleChange('');
+                          if (
+                            !opts.multiple &&
+                            answers[field.label] &&
+                            opts.items.includes(answers[field.label])
+                          ) {
+                            handleSingleChange('');
                           }
                         }}
                       />
@@ -295,37 +324,42 @@ const PublicFormViewer: React.FC<{ slug: string }> = ({ slug }) => {
             </label>
           </div>
         ) : field.type === 'file' ? (
-            <div className="mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-gray-300 border-dashed rounded-lg hover:border-indigo-500 transition-colors">
-              <div className="space-y-1 text-center">
-                <Upload className="mx-auto h-12 w-12 text-gray-400" />
-                <div className="flex text-sm text-gray-600">
-                  <label
-                    htmlFor={`file-upload-${idx}`}
-                    className="relative cursor-pointer bg-white rounded-md font-medium text-indigo-600 hover:text-indigo-500 focus-within:outline-none"
-                  >
-                    <span>{t('forms.field.file')}</span>
-                    <input
-                        id={`file-upload-${idx}`}
-                        name={`file-upload-${idx}`}
-                        type="file"
-                        className="sr-only"
-                        onChange={(e) => handleFileChange(field, e)}
-                        accept={
-                            field.options?.allowedTypes?.map((t: string) =>
-                                t === 'image' ? 'image/*' :
-                                    t === 'video' ? 'video/*' :
-                                        t === 'pdf' ? '.pdf' :
-                                            t === 'document' ? '.doc,.docx,.xls,.xlsx,.ppt,.pptx' : ''
-                            ).join(',')
-                        }
-                    />
-                  </label>
-                </div>
-                <p className="text-xs text-gray-500">
-                  {answers[field.label] ? answers[field.label].name : t('forms.public.fileTooLarge')}
-                </p>
+          <div className="mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-gray-300 border-dashed rounded-lg hover:border-indigo-500 transition-colors">
+            <div className="space-y-1 text-center">
+              <Upload className="mx-auto h-12 w-12 text-gray-400" />
+              <div className="flex text-sm text-gray-600">
+                <label
+                  htmlFor={`file-upload-${idx}`}
+                  className="relative cursor-pointer bg-white rounded-md font-medium text-indigo-600 hover:text-indigo-500 focus-within:outline-none"
+                >
+                  <span>{t('forms.field.file')}</span>
+                  <input
+                    id={`file-upload-${idx}`}
+                    name={`file-upload-${idx}`}
+                    type="file"
+                    className="sr-only"
+                    onChange={(e) => handleFileChange(field, e)}
+                    accept={field.options?.allowedTypes
+                      ?.map((t: string) =>
+                        t === 'image'
+                          ? 'image/*'
+                          : t === 'video'
+                            ? 'video/*'
+                            : t === 'pdf'
+                              ? '.pdf'
+                              : t === 'document'
+                                ? '.doc,.docx,.xls,.xlsx,.ppt,.pptx'
+                                : ''
+                      )
+                      .join(',')}
+                  />
+                </label>
               </div>
+              <p className="text-xs text-gray-500">
+                {answers[field.label] ? answers[field.label].name : t('forms.public.fileTooLarge')}
+              </p>
             </div>
+          </div>
         ) : field.type === 'habeasData' ? (
           <div className="flex items-start gap-3 p-4 bg-gray-50 rounded-lg border border-gray-200">
             <input
@@ -381,42 +415,110 @@ const PublicFormViewer: React.FC<{ slug: string }> = ({ slug }) => {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50 p-4">
         <div className="bg-white max-w-md w-full rounded-2xl shadow-xl p-8 text-center space-y-6">
-          <div className={`w-20 h-20 rounded-full flex items-center justify-center mx-auto ${
-            isDeleted ? 'bg-red-100 text-red-600' : 
-            isPaused ? 'bg-amber-100 text-amber-600' : 
-            isNotFound ? 'bg-gray-100 text-gray-600' :
-            'bg-red-50 text-red-500'
-          }`}>
+          <div
+            className={`w-20 h-20 rounded-full flex items-center justify-center mx-auto ${
+              isDeleted
+                ? 'bg-red-100 text-red-600'
+                : isPaused
+                  ? 'bg-amber-100 text-amber-600'
+                  : isNotFound
+                    ? 'bg-gray-100 text-gray-600'
+                    : 'bg-red-50 text-red-500'
+            }`}
+          >
             {isDeleted ? (
-              <svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                width="40"
+                height="40"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <path d="M3 6h18" />
+                <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6" />
+                <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" />
+              </svg>
             ) : isPaused ? (
-              <svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                width="40"
+                height="40"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <rect x="6" y="4" width="4" height="16" />
+                <rect x="14" y="4" width="4" height="16" />
+              </svg>
             ) : isNotFound ? (
-              <svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                width="40"
+                height="40"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <circle cx="11" cy="11" r="8" />
+                <path d="m21 21-4.3-4.3" />
+              </svg>
             ) : (
-              <svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                width="40"
+                height="40"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <circle cx="12" cy="12" r="10" />
+                <line x1="12" y1="8" x2="12" y2="12" />
+                <line x1="12" y1="16" x2="12.01" y2="16" />
+              </svg>
             )}
           </div>
-          
+
           <div className="space-y-2">
             <h2 className="text-2xl font-bold text-gray-900">
-              {isDeleted ? t('forms.public.deletedTitle') : 
-               isPaused ? t('forms.public.pausedTitle') : 
-               isNotFound ? t('forms.public.notFoundTitle') :
-               t('forms.public.errorTitle')}
+              {isDeleted
+                ? t('forms.public.deletedTitle')
+                : isPaused
+                  ? t('forms.public.pausedTitle')
+                  : isNotFound
+                    ? t('forms.public.notFoundTitle')
+                    : t('forms.public.errorTitle')}
             </h2>
             <p className="text-gray-500 text-lg leading-relaxed">
-              {isDeleted ? t('forms.public.deletedMessage') : 
-               isPaused ? t('forms.public.pausedMessage') : 
-               isNotFound ? t('forms.public.notFoundMessage') :
-               error.message || t('forms.public.notFound')}
+              {isDeleted
+                ? t('forms.public.deletedMessage')
+                : isPaused
+                  ? t('forms.public.pausedMessage')
+                  : isNotFound
+                    ? t('forms.public.notFoundMessage')
+                    : error.message || t('forms.public.notFound')}
             </p>
           </div>
 
           <div className="pt-4">
-             <a href="/" className="text-indigo-600 hover:text-indigo-800 font-medium hover:underline">
-               {t('forms.public.goHome')}
-             </a>
+            <a
+              href="/"
+              className="text-indigo-600 hover:text-indigo-800 font-medium hover:underline"
+            >
+              {t('forms.public.goHome')}
+            </a>
           </div>
         </div>
       </div>
@@ -487,67 +589,67 @@ const PublicFormViewer: React.FC<{ slug: string }> = ({ slug }) => {
 
           <form onSubmit={handleSubmit} className="p-8 space-y-6">
             {form.isWizard ? (
-                <div className="space-y-6">
-                    <div className="w-full bg-gray-200 rounded-full h-2.5">
-                        <div
-                            className="bg-indigo-600 h-2.5 rounded-full transition-all duration-300"
-                            style={{ width: `${((currentStep + 1) / form.fields.length) * 100}%` }}
-                        ></div>
-                    </div>
-                    
-                    <div className="min-h-[200px]">
-                        {renderField(form.fields[currentStep], currentStep)}
-                    </div>
-
-                    <div className="flex justify-between pt-6 border-t border-gray-100">
-                        <button
-                            type="button"
-                            onClick={() => setCurrentStep((c) => c - 1)}
-                            disabled={currentStep === 0}
-                            className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-colors ${
-                                currentStep === 0
-                                    ? 'text-gray-300 cursor-not-allowed'
-                                    : 'text-gray-600 hover:bg-gray-100'
-                            }`}
-                        >
-                            <ChevronLeft size={20} />
-                            {t('forms.public.back')}
-                        </button>
-
-                        {currentStep < form.fields.length - 1 ? (
-                            <button
-                                type="button"
-                                onClick={handleNext}
-                                className="flex items-center gap-2 bg-indigo-600 text-white px-6 py-2 rounded-lg hover:bg-indigo-700"
-                            >
-                                {t('forms.public.next')}
-                                <ChevronRight size={20} />
-                            </button>
-                        ) : (
-                            <button
-                                type="submit"
-                                disabled={submitting}
-                                className="flex items-center gap-2 bg-green-600 text-white px-6 py-2 rounded-lg hover:bg-green-700 disabled:opacity-70"
-                            >
-                                {submitting ? t('forms.public.submitting') : t('forms.public.submit')}
-                                <CheckCircle size={20} />
-                            </button>
-                        )}
-                    </div>
+              <div className="space-y-6">
+                <div className="w-full bg-gray-200 rounded-full h-2.5">
+                  <div
+                    className="bg-indigo-600 h-2.5 rounded-full transition-all duration-300"
+                    style={{ width: `${((currentStep + 1) / form.fields.length) * 100}%` }}
+                  ></div>
                 </div>
+
+                <div className="min-h-[200px]">
+                  {renderField(form.fields[currentStep], currentStep)}
+                </div>
+
+                <div className="flex justify-between pt-6 border-t border-gray-100">
+                  <button
+                    type="button"
+                    onClick={() => setCurrentStep((c) => c - 1)}
+                    disabled={currentStep === 0}
+                    className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-colors ${
+                      currentStep === 0
+                        ? 'text-gray-300 cursor-not-allowed'
+                        : 'text-gray-600 hover:bg-gray-100'
+                    }`}
+                  >
+                    <ChevronLeft size={20} />
+                    {t('forms.public.back')}
+                  </button>
+
+                  {currentStep < form.fields.length - 1 ? (
+                    <button
+                      type="button"
+                      onClick={handleNext}
+                      className="flex items-center gap-2 bg-indigo-600 text-white px-6 py-2 rounded-lg hover:bg-indigo-700"
+                    >
+                      {t('forms.public.next')}
+                      <ChevronRight size={20} />
+                    </button>
+                  ) : (
+                    <button
+                      type="submit"
+                      disabled={submitting}
+                      className="flex items-center gap-2 bg-green-600 text-white px-6 py-2 rounded-lg hover:bg-green-700 disabled:opacity-70"
+                    >
+                      {submitting ? t('forms.public.submitting') : t('forms.public.submit')}
+                      <CheckCircle size={20} />
+                    </button>
+                  )}
+                </div>
+              </div>
             ) : (
-                <>
-                    {form.fields.map((field: any, idx: number) => renderField(field, idx))}
-                    <div className="pt-6">
-                        <button
-                            type="submit"
-                            disabled={submitting}
-                            className="w-full bg-indigo-600 text-white font-semibold py-3 px-6 rounded-lg hover:bg-indigo-700 focus:ring-4 focus:ring-indigo-200 transition-all disabled:opacity-70"
-                        >
-                            {submitting ? t('forms.public.submitting') : t('forms.public.submit')}
-                        </button>
-                    </div>
-                </>
+              <>
+                {form.fields.map((field: any, idx: number) => renderField(field, idx))}
+                <div className="pt-6">
+                  <button
+                    type="submit"
+                    disabled={submitting}
+                    className="w-full bg-indigo-600 text-white font-semibold py-3 px-6 rounded-lg hover:bg-indigo-700 focus:ring-4 focus:ring-indigo-200 transition-all disabled:opacity-70"
+                  >
+                    {submitting ? t('forms.public.submitting') : t('forms.public.submit')}
+                  </button>
+                </div>
+              </>
             )}
           </form>
         </div>
@@ -572,7 +674,9 @@ const PublicFormViewer: React.FC<{ slug: string }> = ({ slug }) => {
               </div>
             </div>
             <div className="text-center space-y-2">
-              <h3 className="text-lg font-semibold text-gray-900">{t('forms.public.submitting')}</h3>
+              <h3 className="text-lg font-semibold text-gray-900">
+                {t('forms.public.submitting')}
+              </h3>
               <p className="text-sm text-gray-500">{t('forms.public.submittingMessage')}</p>
             </div>
           </div>

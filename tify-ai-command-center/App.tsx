@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { 
-  LayoutDashboard, 
-  GitMerge, 
-  CheckCircle, 
-  Users, 
+import {
+  LayoutDashboard,
+  GitMerge,
+  CheckCircle,
+  Users,
   Bot,
   Bell,
   Search,
@@ -14,7 +14,7 @@ import {
   FileText,
   Ticket,
   Globe,
-  QrCode
+  QrCode,
 } from 'lucide-react';
 import { DEFAULT_AVATAR, DEFAULT_ORG_NAME } from './constants';
 import { useI18n } from './i18n';
@@ -38,7 +38,10 @@ const ShortLinkRedirect: React.FC<{ code: string }> = ({ code }) => {
   useEffect(() => {
     alert(code);
     // Redirect to backend root endpoint
-    const backendRoot = api.getBootstrap ? API_BASE.replace('/api', '') : 'http://localhost:3333';
+    const backendRoot =
+      window.location.hostname === 'localhost'
+        ? 'http://localhost:3333'
+        : API_BASE.replace('/api', '');
     window.location.href = `${backendRoot}/${code}`;
   }, [code]);
 
@@ -53,7 +56,17 @@ const ShortLinkRedirect: React.FC<{ code: string }> = ({ code }) => {
   );
 };
 
-type View = 'dashboard' | 'channels' | 'messages' | 'approvals' | 'users' | 'ai' | 'monitoring' | 'forms' | 'events' | 'shortlinks';
+type View =
+  | 'dashboard'
+  | 'channels'
+  | 'messages'
+  | 'approvals'
+  | 'users'
+  | 'ai'
+  | 'monitoring'
+  | 'forms'
+  | 'events'
+  | 'shortlinks';
 type BreadcrumbItem = { label: string; view?: View };
 
 const App: React.FC = () => {
@@ -61,13 +74,22 @@ const App: React.FC = () => {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [breadcrumbs, setBreadcrumbs] = useState<BreadcrumbItem[]>([]);
-  const [authMode, setAuthMode] = useState<'checking'|'bootstrap'|'login'|'forgot'|'ready'>('checking');
-  const [bootstrapForm, setBootstrapForm] = useState({ email: '', username: '', fullName: '', password: '', code: '' });
+  const [authMode, setAuthMode] = useState<'checking' | 'bootstrap' | 'login' | 'forgot' | 'ready'>(
+    'checking'
+  );
+  const [bootstrapForm, setBootstrapForm] = useState({
+    email: '',
+    username: '',
+    fullName: '',
+    password: '',
+    code: '',
+  });
   const [loginForm, setLoginForm] = useState({ identifier: '', password: '' });
   const [resetForm, setResetForm] = useState({ identifier: '', code: '', newPassword: '' });
   const [publicSlug, setPublicSlug] = useState<string | null>(null);
   const [publicEventId, setPublicEventId] = useState<string | null>(null);
   const [publicRSVPEventId, setPublicRSVPEventId] = useState<string | null>(null);
+  const [redirectCode, setRedirectCode] = useState<string | null>(null);
   const { t, lang, setLang } = useI18n();
 
   useEffect(() => {
@@ -76,13 +98,16 @@ const App: React.FC = () => {
       const formMatch = path.match(/^\/forms\/([a-zA-Z0-9-]+)$/);
       const eventMatch = path.match(/^\/events\/([a-zA-Z0-9-]+)\/public$/);
       const rsvpMatch = path.match(/^\/events\/([a-zA-Z0-9-]+)\/rsvp$/);
-      
+      const shortLinkMatch = path.match(/^\/(L[a-zA-Z0-9]+)$/);
+
       if (formMatch) {
         setPublicSlug(formMatch[1]);
       } else if (eventMatch) {
         setPublicEventId(eventMatch[1]);
       } else if (rsvpMatch) {
         setPublicRSVPEventId(rsvpMatch[1]);
+      } else if (shortLinkMatch) {
+        setRedirectCode(shortLinkMatch[1]);
       }
     }
   }, []);
@@ -121,30 +146,58 @@ const App: React.FC = () => {
 
   const renderContent = () => {
     switch (currentView) {
-      case 'dashboard': return <Dashboard onChangeView={(view) => setCurrentView(view as View)} />;
-      case 'channels': return <ChannelManager currentUser={currentUser} />;
-      case 'messages': return <MessageCenter />;
-      case 'approvals': return <ApprovalQueue />;
-      case 'users': return <UsersModule />;
-      case 'forms': return <FormsManager />;
-      case 'events': return <EventManager />;
-      case 'shortlinks': return <ShortLinkManager />;
-      case 'ai': return <AIChat onNavigateToForms={() => setCurrentView('forms')} />;
-      case 'monitoring': return <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100"><h3 className="text-lg font-semibold text-gray-900 mb-4">{t('nav.monitoring')}</h3><div className="mt-2"><MonitoringDashboard /></div></div>;
-      default: return <div className="p-8 text-center text-gray-500">{t('module.underConstruction')}</div>;
+      case 'dashboard':
+        return <Dashboard onChangeView={(view) => setCurrentView(view as View)} />;
+      case 'channels':
+        return <ChannelManager currentUser={currentUser} />;
+      case 'messages':
+        return <MessageCenter />;
+      case 'approvals':
+        return <ApprovalQueue />;
+      case 'users':
+        return <UsersModule />;
+      case 'forms':
+        return <FormsManager />;
+      case 'events':
+        return <EventManager />;
+      case 'shortlinks':
+        return <ShortLinkManager />;
+      case 'ai':
+        return <AIChat onNavigateToForms={() => setCurrentView('forms')} />;
+      case 'monitoring':
+        return (
+          <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+            <h3 className="text-lg font-semibold text-gray-900 mb-4">{t('nav.monitoring')}</h3>
+            <div className="mt-2">
+              <MonitoringDashboard />
+            </div>
+          </div>
+        );
+      default:
+        return <div className="p-8 text-center text-gray-500">{t('module.underConstruction')}</div>;
     }
   };
 
-  const NavItem = ({ view, icon: Icon, label, count }: { view: View; icon: any; label: string; count?: number }) => (
+  const NavItem = ({
+    view,
+    icon: Icon,
+    label,
+    count,
+  }: {
+    view: View;
+    icon: any;
+    label: string;
+    count?: number;
+  }) => (
     <button
       onClick={() => {
         setCurrentView(view);
         setIsMobileMenuOpen(false);
-        setBreadcrumbs([{ label },]);
+        setBreadcrumbs([{ label }]);
       }}
       className={`w-full flex items-center justify-between px-4 py-3 rounded-lg transition-colors ${
-        currentView === view 
-          ? 'bg-indigo-600 text-white shadow-md' 
+        currentView === view
+          ? 'bg-indigo-600 text-white shadow-md'
           : 'text-slate-400 hover:bg-slate-800 hover:text-white'
       }`}
     >
@@ -153,14 +206,20 @@ const App: React.FC = () => {
         <span className="font-medium">{label}</span>
       </div>
       {count !== undefined && count > 0 && (
-        <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${
-          currentView === view ? 'bg-white text-indigo-600' : 'bg-slate-700 text-slate-200'
-        }`}>
+        <span
+          className={`text-xs font-bold px-2 py-0.5 rounded-full ${
+            currentView === view ? 'bg-white text-indigo-600' : 'bg-slate-700 text-slate-200'
+          }`}
+        >
           {count}
         </span>
       )}
     </button>
   );
+
+  if (redirectCode) {
+    return <ShortLinkRedirect code={redirectCode} />;
+  }
 
   if (publicSlug) {
     return <PublicFormViewer slug={publicSlug} />;
@@ -182,12 +241,47 @@ const App: React.FC = () => {
             <>
               <h2 className="text-xl font-bold mb-4">{t('auth.createAdmin')}</h2>
               <div className="space-y-3">
-                <input value={bootstrapForm.email} onChange={e=>setBootstrapForm({...bootstrapForm,email:e.target.value})} placeholder={t('auth.email')} className="w-full px-3 py-2 border rounded" />
-                <input value={bootstrapForm.username} onChange={e=>setBootstrapForm({...bootstrapForm,username:e.target.value})} placeholder={t('auth.username')} className="w-full px-3 py-2 border rounded" />
-                <input value={bootstrapForm.fullName} onChange={e=>setBootstrapForm({...bootstrapForm,fullName:e.target.value})} placeholder={t('auth.fullName')} className="w-full px-3 py-2 border rounded" />
-                <input type="password" value={bootstrapForm.password} onChange={e=>setBootstrapForm({...bootstrapForm,password:e.target.value})} placeholder={t('auth.password')} className="w-full px-3 py-2 border rounded" />
-                <input value={bootstrapForm.code} onChange={e=>setBootstrapForm({...bootstrapForm,code:e.target.value})} placeholder={t('auth.verificationCode')} className="w-full px-3 py-2 border rounded" />
-                <button onClick={async ()=>{ const user=await api.authBootstrapAdmin(bootstrapForm as any); setCurrentUser(user); setAuthMode('ready'); }} className="w-full px-4 py-2 bg-indigo-600 text-white rounded">{t('auth.createAndEnter')}</button>
+                <input
+                  value={bootstrapForm.email}
+                  onChange={(e) => setBootstrapForm({ ...bootstrapForm, email: e.target.value })}
+                  placeholder={t('auth.email')}
+                  className="w-full px-3 py-2 border rounded"
+                />
+                <input
+                  value={bootstrapForm.username}
+                  onChange={(e) => setBootstrapForm({ ...bootstrapForm, username: e.target.value })}
+                  placeholder={t('auth.username')}
+                  className="w-full px-3 py-2 border rounded"
+                />
+                <input
+                  value={bootstrapForm.fullName}
+                  onChange={(e) => setBootstrapForm({ ...bootstrapForm, fullName: e.target.value })}
+                  placeholder={t('auth.fullName')}
+                  className="w-full px-3 py-2 border rounded"
+                />
+                <input
+                  type="password"
+                  value={bootstrapForm.password}
+                  onChange={(e) => setBootstrapForm({ ...bootstrapForm, password: e.target.value })}
+                  placeholder={t('auth.password')}
+                  className="w-full px-3 py-2 border rounded"
+                />
+                <input
+                  value={bootstrapForm.code}
+                  onChange={(e) => setBootstrapForm({ ...bootstrapForm, code: e.target.value })}
+                  placeholder={t('auth.verificationCode')}
+                  className="w-full px-3 py-2 border rounded"
+                />
+                <button
+                  onClick={async () => {
+                    const user = await api.authBootstrapAdmin(bootstrapForm as any);
+                    setCurrentUser(user);
+                    setAuthMode('ready');
+                  }}
+                  className="w-full px-4 py-2 bg-indigo-600 text-white rounded"
+                >
+                  {t('auth.createAndEnter')}
+                </button>
               </div>
             </>
           ) : (
@@ -196,10 +290,35 @@ const App: React.FC = () => {
                 <>
                   <h2 className="text-xl font-bold mb-4">{t('auth.login')}</h2>
                   <div className="space-y-3">
-                    <input value={loginForm.identifier} onChange={e=>setLoginForm({...loginForm,identifier:e.target.value})} placeholder={t('auth.emailOrUsername')} className="w-full px-3 py-2 border rounded" />
-                    <input type="password" value={loginForm.password} onChange={e=>setLoginForm({...loginForm,password:e.target.value})} placeholder={t('auth.password')} className="w-full px-3 py-2 border rounded" />
-                    <button onClick={async ()=>{ const user=await api.authLogin(loginForm); setCurrentUser(user); setAuthMode('ready'); }} className="w-full px-4 py-2 bg-indigo-600 text-white rounded">{t('auth.enter')}</button>
-                    <button onClick={()=>setAuthMode('forgot')} className="w-full text-xs text-indigo-600 mt-2">{t('auth.forgotPassword')}</button>
+                    <input
+                      value={loginForm.identifier}
+                      onChange={(e) => setLoginForm({ ...loginForm, identifier: e.target.value })}
+                      placeholder={t('auth.emailOrUsername')}
+                      className="w-full px-3 py-2 border rounded"
+                    />
+                    <input
+                      type="password"
+                      value={loginForm.password}
+                      onChange={(e) => setLoginForm({ ...loginForm, password: e.target.value })}
+                      placeholder={t('auth.password')}
+                      className="w-full px-3 py-2 border rounded"
+                    />
+                    <button
+                      onClick={async () => {
+                        const user = await api.authLogin(loginForm);
+                        setCurrentUser(user);
+                        setAuthMode('ready');
+                      }}
+                      className="w-full px-4 py-2 bg-indigo-600 text-white rounded"
+                    >
+                      {t('auth.enter')}
+                    </button>
+                    <button
+                      onClick={() => setAuthMode('forgot')}
+                      className="w-full text-xs text-indigo-600 mt-2"
+                    >
+                      {t('auth.forgotPassword')}
+                    </button>
                   </div>
                 </>
               )}
@@ -207,14 +326,52 @@ const App: React.FC = () => {
                 <>
                   <h2 className="text-xl font-bold mb-4">{t('auth.resetPassword')}</h2>
                   <div className="space-y-3">
-                    <input value={resetForm.identifier} onChange={e=>setResetForm({...resetForm,identifier:e.target.value})} placeholder={t('auth.emailOrUsername')} className="w-full px-3 py-2 border rounded" />
+                    <input
+                      value={resetForm.identifier}
+                      onChange={(e) => setResetForm({ ...resetForm, identifier: e.target.value })}
+                      placeholder={t('auth.emailOrUsername')}
+                      className="w-full px-3 py-2 border rounded"
+                    />
                     <div className="flex gap-2">
-                      <button onClick={async ()=>{ await api.authRequestPasswordReset({ identifier: resetForm.identifier }); alert(t('auth.codeSent')); }} className="flex-1 px-4 py-2 bg-gray-100 text-gray-700 rounded border">{t('auth.requestReset')}</button>
+                      <button
+                        onClick={async () => {
+                          await api.authRequestPasswordReset({ identifier: resetForm.identifier });
+                          alert(t('auth.codeSent'));
+                        }}
+                        className="flex-1 px-4 py-2 bg-gray-100 text-gray-700 rounded border"
+                      >
+                        {t('auth.requestReset')}
+                      </button>
                     </div>
-                    <input value={resetForm.code} onChange={e=>setResetForm({...resetForm,code:e.target.value})} placeholder={t('auth.code')} className="w-full px-3 py-2 border rounded" />
-                    <input type="password" value={resetForm.newPassword} onChange={e=>setResetForm({...resetForm,newPassword:e.target.value})} placeholder={t('auth.newPassword')} className="w-full px-3 py-2 border rounded" />
-                    <button onClick={async ()=>{ const user=await api.authResetPassword(resetForm as any); setCurrentUser(user); setAuthMode('ready'); }} className="w-full px-4 py-2 bg-indigo-600 text-white rounded">{t('auth.reset')}</button>
-                    <button onClick={()=>setAuthMode('login')} className="w-full text-xs text-gray-500 mt-2">{t('auth.backToLogin')}</button>
+                    <input
+                      value={resetForm.code}
+                      onChange={(e) => setResetForm({ ...resetForm, code: e.target.value })}
+                      placeholder={t('auth.code')}
+                      className="w-full px-3 py-2 border rounded"
+                    />
+                    <input
+                      type="password"
+                      value={resetForm.newPassword}
+                      onChange={(e) => setResetForm({ ...resetForm, newPassword: e.target.value })}
+                      placeholder={t('auth.newPassword')}
+                      className="w-full px-3 py-2 border rounded"
+                    />
+                    <button
+                      onClick={async () => {
+                        const user = await api.authResetPassword(resetForm as any);
+                        setCurrentUser(user);
+                        setAuthMode('ready');
+                      }}
+                      className="w-full px-4 py-2 bg-indigo-600 text-white rounded"
+                    >
+                      {t('auth.reset')}
+                    </button>
+                    <button
+                      onClick={() => setAuthMode('login')}
+                      className="w-full text-xs text-gray-500 mt-2"
+                    >
+                      {t('auth.backToLogin')}
+                    </button>
                   </div>
                 </>
               )}
@@ -228,13 +385,18 @@ const App: React.FC = () => {
   return (
     <div className="flex h-screen bg-gray-50 overflow-hidden">
       {isMobileMenuOpen && (
-        <div className="fixed inset-0 bg-black/50 z-40 lg:hidden" onClick={() => setIsMobileMenuOpen(false)} />
+        <div
+          className="fixed inset-0 bg-black/50 z-40 lg:hidden"
+          onClick={() => setIsMobileMenuOpen(false)}
+        />
       )}
 
-      <aside className={`
+      <aside
+        className={`
         fixed lg:static inset-y-0 left-0 z-50 w-64 bg-slate-900 text-white flex flex-col transition-transform duration-300
         ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
-      `}>
+      `}
+      >
         <div className="p-6 border-b border-slate-800 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center font-bold text-xl">
@@ -256,12 +418,19 @@ const App: React.FC = () => {
           <NavItem view="channels" icon={GitMerge} label={t('nav.channels')} />
           <NavItem view="forms" icon={FileText} label={t('nav.forms')} />
           <NavItem view="events" icon={Ticket} label={t('nav.events')} />
-          <NavItem view="approvals" icon={CheckCircle} label={t('nav.approvals')} count={currentUser?.pendingApprovalsCount} />
+          <NavItem
+            view="approvals"
+            icon={CheckCircle}
+            label={t('nav.approvals')}
+            count={currentUser?.pendingApprovalsCount}
+          />
           <NavItem view="users" icon={Users} label={t('nav.users')} />
           <NavItem view="shortlinks" icon={QrCode} label={t('nav.shortlinks')} />
-          
+
           <div className="pt-6 pb-2 px-4">
-            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">{t('nav.intelligence')}</p>
+            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
+              {t('nav.intelligence')}
+            </p>
           </div>
           <NavItem view="ai" icon={Bot} label={t('nav.ai')} />
         </nav>
@@ -269,16 +438,24 @@ const App: React.FC = () => {
         <div className="p-4 border-t border-slate-800">
           {currentUser ? (
             <div className="flex items-center gap-3 px-4 py-3 rounded-lg bg-slate-800/50 border border-slate-700/50">
-              <img 
-                src={currentUser.avatarUrl || DEFAULT_AVATAR} 
-                alt={currentUser.fullName} 
+              <img
+                src={currentUser.avatarUrl || DEFAULT_AVATAR}
+                alt={currentUser.fullName}
                 className="w-8 h-8 rounded-full border border-indigo-500"
               />
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-medium truncate">{currentUser.fullName}</p>
                 <p className="text-xs text-slate-400 truncate">{DEFAULT_ORG_NAME}</p>
               </div>
-              <LogOut size={16} className="text-slate-500 hover:text-white cursor-pointer" onClick={()=>{ localStorage.removeItem('tify_token'); setCurrentUser(null); setAuthMode('login'); }} />
+              <LogOut
+                size={16}
+                className="text-slate-500 hover:text-white cursor-pointer"
+                onClick={() => {
+                  localStorage.removeItem('tify_token');
+                  setCurrentUser(null);
+                  setAuthMode('login');
+                }}
+              />
             </div>
           ) : (
             <div className="text-xs text-slate-500 text-center">{t('status.connecting')}</div>
@@ -291,12 +468,15 @@ const App: React.FC = () => {
         {/* Top Header */}
         <header className="h-16 bg-white border-b border-gray-200 flex items-center justify-between px-6 shadow-sm shrink-0">
           <div className="flex items-center gap-4">
-            <button onClick={() => setIsMobileMenuOpen(true)} className="lg:hidden p-2 text-gray-500 hover:bg-gray-100 rounded-md">
+            <button
+              onClick={() => setIsMobileMenuOpen(true)}
+              className="lg:hidden p-2 text-gray-500 hover:bg-gray-100 rounded-md"
+            >
               <Menu size={20} />
             </button>
             <div className="hidden md:flex items-center text-sm text-gray-500">
               <span className="font-medium text-gray-900"></span>
-              {([ { label: currentView } , ...breadcrumbs ] as BreadcrumbItem[]).map((bc, idx) => (
+              {([{ label: currentView }, ...breadcrumbs] as BreadcrumbItem[]).map((bc, idx) => (
                 <span key={idx} className="flex items-center">
                   <span className="mx-2 text-gray-300">/</span>
                   {bc.view ? (
@@ -314,7 +494,11 @@ const App: React.FC = () => {
             </div>
             <div className="flex items-center gap-2">
               <Globe size={16} className="text-gray-500" />
-              <select value={lang} onChange={e=>setLang(e.target.value as any)} className="px-2 py-1 border rounded text-sm">
+              <select
+                value={lang}
+                onChange={(e) => setLang(e.target.value as any)}
+                className="px-2 py-1 border rounded text-sm"
+              >
                 <option value="es">ES</option>
                 <option value="en">EN</option>
                 <option value="pt">PT</option>
@@ -324,10 +508,13 @@ const App: React.FC = () => {
 
           <div className="flex items-center gap-4">
             <div className="relative hidden sm:block">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
-              <input 
-                type="text" 
-                placeholder={t('common.searchPlaceholder')} 
+              <Search
+                className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
+                size={16}
+              />
+              <input
+                type="text"
+                placeholder={t('common.searchPlaceholder')}
                 className="pl-10 pr-4 py-2 bg-gray-100 border-transparent rounded-full text-sm focus:bg-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 outline-none w-64 transition-all"
               />
             </div>
@@ -340,9 +527,7 @@ const App: React.FC = () => {
 
         {/* View Content */}
         <div className="flex-1 bg-gray-50 overflow-y-auto p-0 md:p-0">
-          <div className="max-w-7xl mx-auto h-full">
-            {renderContent()}
-          </div>
+          <div className="max-w-7xl mx-auto h-full">{renderContent()}</div>
         </div>
       </main>
     </div>

@@ -8,11 +8,31 @@ interface SearchModalProps {
 }
 
 const MOCK_RESULTS = [
-  { id: 1, title: 'Dashboard Analytics', category: 'Module', description: 'View system statistics and overview' },
-  { id: 2, title: 'User Management', category: 'Settings', description: 'Manage users and permissions' },
-  { id: 3, title: 'Channel Configuration', category: 'Channels', description: 'Setup and modify communication channels' },
+  {
+    id: 1,
+    title: 'Dashboard Analytics',
+    category: 'Module',
+    description: 'View system statistics and overview',
+  },
+  {
+    id: 2,
+    title: 'User Management',
+    category: 'Settings',
+    description: 'Manage users and permissions',
+  },
+  {
+    id: 3,
+    title: 'Channel Configuration',
+    category: 'Channels',
+    description: 'Setup and modify communication channels',
+  },
   { id: 4, title: 'Form Builder', category: 'Tools', description: 'Create and edit dynamic forms' },
-  { id: 5, title: 'Event Planning', category: 'Events', description: 'Manage upcoming events and tickets' },
+  {
+    id: 5,
+    title: 'Event Planning',
+    category: 'Events',
+    description: 'Manage upcoming events and tickets',
+  },
 ];
 
 const SearchModal: React.FC<SearchModalProps> = ({ isOpen, onClose }) => {
@@ -44,9 +64,10 @@ const SearchModal: React.FC<SearchModalProps> = ({ isOpen, onClose }) => {
       setResults([]);
       return;
     }
-    const filtered = MOCK_RESULTS.filter(item => 
-      item.title.toLowerCase().includes(query.toLowerCase()) || 
-      item.description.toLowerCase().includes(query.toLowerCase())
+    const filtered = MOCK_RESULTS.filter(
+      (item) =>
+        item.title.toLowerCase().includes(query.toLowerCase()) ||
+        item.description.toLowerCase().includes(query.toLowerCase())
     );
     setResults(filtered);
   }, [query]);
@@ -56,14 +77,13 @@ const SearchModal: React.FC<SearchModalProps> = ({ isOpen, onClose }) => {
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
       {/* Blurred Backdrop */}
-      <div 
+      <div
         className="absolute inset-0 bg-slate-900/90 backdrop-blur-md transition-opacity duration-300"
         onClick={onClose}
       />
 
       {/* Content Container */}
       <div className="relative w-full max-w-3xl flex flex-col items-center animate-in fade-in zoom-in-95 duration-200">
-        
         {/* Search Input */}
         <div className="w-full relative group">
           <div className="absolute inset-0 bg-indigo-500/20 blur-xl rounded-full group-hover:bg-indigo-500/30 transition-all duration-500" />
@@ -74,11 +94,11 @@ const SearchModal: React.FC<SearchModalProps> = ({ isOpen, onClose }) => {
               type="text"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder={t('common.searchPlaceholder') || "Search..."}
+              placeholder={t('common.searchPlaceholder') || 'Search...'}
               className="w-full bg-slate-800/50 border-2 border-slate-700/50 text-white text-3xl font-light placeholder-slate-500 py-6 pl-20 pr-8 rounded-full focus:outline-none focus:border-indigo-500/50 focus:bg-slate-800 transition-all shadow-2xl"
             />
             {query && (
-              <button 
+              <button
                 onClick={() => setQuery('')}
                 className="absolute right-6 text-slate-500 hover:text-white transition-colors"
               >
@@ -89,7 +109,9 @@ const SearchModal: React.FC<SearchModalProps> = ({ isOpen, onClose }) => {
         </div>
 
         {/* Results */}
-        <div className={`w-full mt-12 transition-all duration-500 ${results.length > 0 ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'}`}>
+        <div
+          className={`w-full mt-12 transition-all duration-500 ${results.length > 0 ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'}`}
+        >
           {results.length > 0 && (
             <div className="flex flex-col items-center gap-4 w-full">
               <div className="text-slate-400 text-sm font-medium tracking-widest uppercase mb-2">
@@ -107,20 +129,18 @@ const SearchModal: React.FC<SearchModalProps> = ({ isOpen, onClose }) => {
                     <h3 className="text-xl text-white font-medium group-hover:text-indigo-300 transition-colors">
                       {result.title}
                     </h3>
-                    <p className="text-slate-400 mt-1">
-                      {result.description}
-                    </p>
+                    <p className="text-slate-400 mt-1">{result.description}</p>
                   </div>
                   <ArrowRight className="text-slate-600 group-hover:text-indigo-400 group-hover:translate-x-1 transition-all" />
                 </button>
               ))}
             </div>
           )}
-          
+
           {query && results.length === 0 && (
-             <div className="text-center text-slate-500 py-8">
-               <p className="text-lg">No results found for "{query}"</p>
-             </div>
+            <div className="text-center text-slate-500 py-8">
+              <p className="text-lg">No results found for "{query}"</p>
+            </div>
           )}
         </div>
 
@@ -128,7 +148,10 @@ const SearchModal: React.FC<SearchModalProps> = ({ isOpen, onClose }) => {
         {!query && (
           <div className="mt-8 text-slate-500 flex gap-8">
             <span className="flex items-center gap-2 text-sm">
-              <kbd className="px-2 py-1 bg-slate-800 rounded border border-slate-700 text-xs">Esc</kbd> to close
+              <kbd className="px-2 py-1 bg-slate-800 rounded border border-slate-700 text-xs">
+                Esc
+              </kbd>{' '}
+              to close
             </span>
           </div>
         )}
