@@ -383,6 +383,13 @@ const ShortLinkManager: React.FC = () => {
     }
   };
 
+  const getDisplayUrl = (code: string) => {
+    if (typeof window !== 'undefined') {
+      return `${window.location.origin}/L${code}`;
+    }
+    return `https://tify.pro/L${code}`;
+  };
+
   const getHostname = (url: string) => {
     try {
       return new URL(url).hostname.toUpperCase();
@@ -485,7 +492,7 @@ const ShortLinkManager: React.FC = () => {
                   <div className="flex-1 flex items-center gap-2 px-5 py-3 border border-gray-200 bg-gray-50 rounded-xl animate-in fade-in duration-300">
                     <LinkIcon size={20} className="text-indigo-500" />
                     <span className="text-gray-900 font-bold text-lg truncate flex-1">
-                      {createdLink.shortUrl}
+                      {getDisplayUrl(createdLink.code)}
                     </span>
                     <div className="flex items-center gap-1 text-xs text-green-600 font-medium bg-green-50 px-2 py-1 rounded-full">
                       <CheckCircle size={12} />
@@ -509,7 +516,7 @@ const ShortLinkManager: React.FC = () => {
                   (createdLink ? (
                   <div className="flex gap-2">
                     <button
-                      onClick={() => copyToClipboard(createdLink.shortUrl, createdLink.id)}
+                      onClick={() => copyToClipboard(getDisplayUrl(createdLink.code), createdLink.id)}
                       className="px-6 py-3 bg-indigo-600 text-white font-bold rounded-xl hover:bg-indigo-700 flex items-center gap-2 transition-all shadow-lg shadow-indigo-200 hover:scale-105"
                     >
                       {copiedId === createdLink.id ? <Check size={20} /> : <Copy size={20} />}
