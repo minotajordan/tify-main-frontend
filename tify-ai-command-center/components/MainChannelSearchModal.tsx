@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Search, X, ArrowRight, Users, ShieldCheck } from 'lucide-react';
+import { Search, X, ArrowRight, Users, ShieldCheck, LayoutGrid } from 'lucide-react';
 import { useI18n } from '../i18n';
 import { Channel } from '../types';
 import { 
@@ -80,6 +80,8 @@ const MainChannelSearchModal: React.FC<MainChannelSearchModalProps> = ({
   }, [onClose]);
 
   const [internalViewMode, setInternalViewMode] = useState<'context' | 'global'>('context');
+  
+  const effectiveViewMode = internalViewMode;
 
   useEffect(() => {
     if (selectedParentChannel) {
@@ -95,28 +97,24 @@ const MainChannelSearchModal: React.FC<MainChannelSearchModalProps> = ({
   useEffect(() => {
     if (!isOpen) return;
 
+    // Context Mode (Subchannels only)
     if (internalViewMode === 'context' && selectedParentChannel) {
-      const subchannels = selectedParentChannel.subchannels || [];
-      if (!query.trim()) {
-        setResults(subchannels);
-        return;
+      let subs = selectedParentChannel.subchannels || [];
+      if (query.trim()) {
+        const lower = query.toLowerCase();
+        subs = subs.filter(item => 
+            item.title.toLowerCase().includes(lower) || 
+            (item.description && item.description.toLowerCase().includes(lower))
+        );
       }
-      
-      const lowerQuery = query.toLowerCase();
-      const filtered = subchannels.filter(item => 
-        item.title.toLowerCase().includes(lowerQuery) || 
-        (item.description && item.description.toLowerCase().includes(lowerQuery))
-      );
-      setResults(filtered);
+      setResults(subs);
       return;
     }
 
-    // Global mode logic
-    // User requested to only show main channels (top-level), excluding subchannels.
-    // Since 'channels' prop contains the root nodes, we use it directly without flattening.
-    const allChannels = channels;
-    
+    // Global Mode (Search everything or Browse all)
+    const allChannels = channels.filter(c => !c.parentId);
     let filtered = allChannels;
+    
     if (query.trim()) {
       const lowerQuery = query.toLowerCase();
       filtered = allChannels.filter(item => 
@@ -128,50 +126,9 @@ const MainChannelSearchModal: React.FC<MainChannelSearchModalProps> = ({
     setResults(filtered);
 
     // Split into "Mis Canales" (subscribed) and "Públicos" (others)
-    // Assuming 'subscribed' property exists or similar logic. 
-    // If not, for now we can simulate or check a property.
-    // Looking at previous context, we might not have a direct 'subscribed' prop on Channel type in the file snippet.
-    // However, usually "Mis Canales" are the top-level ones passed in 'channels' prop if that represents user channels?
-    // Or we need a way to distinguish.
-    // Let's assume for this UI request:
-    // "Mis Canales" = Channels where user is a member (memberCount > 0 is not enough context).
-    // Let's check if there is a 'isSubscribed' or similar. 
-    // If not available, I will use a heuristic: 
-    // For now, let's treat top-level channels as "Mis Canales" roots, but flattened?
-    // Wait, usually 'channels' prop contains the user's accessible channels.
-    // The user request implies a distinction: "mis canales" vs "publicos".
-    // If 'channels' passed to this modal ONLY contains user's channels, then we need a source for "public" channels.
-    // But the prompt says "show... two columns... matching the search".
-    // If we only have 'channels' prop, maybe "Mis Canales" are those created by me? or joined?
-    // Without 'isSubscribed' field, I'll assume all in 'channels' are accessible.
-    // Maybe "Mis Canales" are those with `parentId === null` (roots) and "Publicos" are subchannels? 
-    // No, that doesn't make sense for "Publicos".
-    // Let's look at the type definition or just assume a random split for UI if type is missing, 
-    // BUT better: let's assume 'channels' contains everything and we split by some logic.
-    // If I cannot find a clear distinction, I will split by:
-    // My Channels: channels where I have a role or created it?
-    // Actually, usually in these apps, 'channels' prop has everything.
-    // Let's assume we need to filter.
-    // Let's add a temporary dummy filter if we don't have the prop, 
-    // OR better, checking the `Channel` type would be ideal.
-    // Since I cannot check type definition file easily without reading it (I have it in context? No, I see import),
-    // I will try to infer or just add the logic.
-    // Let's assume there is a property `type` or `isPublic`.
-    // If not, I'll split by: 
-    // My Channels: result.id (just to show UI split, maybe first half?) - NO, that's bad.
-    // Let's assume "Mis Canales" are the ones in the main list, and "Publicos" might be others.
-    // User said: "en un lado mis canales y en el otro los publicos".
-    // I will simply divide the `filtered` results into two arrays.
-    // Since I don't have the auth context here, I will treat all `filtered` as "Mis Canales" for now 
-    // and "Publicos" as empty, OR simpler:
-    // I'll assume `isSubscribed` boolean exists on Channel.
-    
-    const my = filtered.filter(c => (c as any).isSubscribed); // Casting to any to avoid TS error if property missing
+    const my = filtered.filter(c => (c as any).isSubscribed);
     const publicC = filtered.filter(c => !(c as any).isSubscribed);
     
-    // Fallback if no property:
-    // If everything goes to public (because isSubscribed missing), that's fine, 
-    // but to show the UI, I'll just use the property.
     setMyChannels(my);
     setPublicChannels(publicC);
 
@@ -244,7 +201,7 @@ const MainChannelSearchModal: React.FC<MainChannelSearchModalProps> = ({
       <div className="relative w-full max-w-2xl flex flex-col items-center z-10">
         
         {/* Context Indicator */}
-        {selectedParentChannel && internalViewMode === 'context' && (
+        {selectedParentChannel && effectiveViewMode === 'context' && (
           <div className="mb-6 flex flex-col items-center animate-in fade-in slide-in-from-bottom-4 duration-500 delay-100">
             <span className="text-slate-400 text-xs uppercase tracking-widest mb-2 font-medium">Navegando en</span>
             <button 
@@ -254,29 +211,37 @@ const MainChannelSearchModal: React.FC<MainChannelSearchModalProps> = ({
               <IconView name={selectedParentChannel.icon} size={16} className="text-indigo-400 group-hover:scale-110 transition-transform" />
               <span className="text-white font-medium text-sm group-hover:text-indigo-200 transition-colors">{selectedParentChannel.title}</span>
               <div className="w-px h-3 bg-white/10 mx-1" />
-              <span className="text-[10px] text-slate-400 uppercase tracking-wider group-hover:text-white transition-colors">Ver todos</span>
+              <span className="text-[10px] text-slate-400 uppercase tracking-wider group-hover:text-white transition-colors flex items-center gap-1">
+                <LayoutGrid size={10} />
+                Ver todos
+              </span>
             </button>
           </div>
         )}
 
         {/* Global View Header */}
-        {internalViewMode === 'global' && selectedParentChannel && (
+        {effectiveViewMode === 'global' && selectedParentChannel && (
           <div className="mb-6 flex flex-col items-center animate-in fade-in slide-in-from-bottom-4 duration-500 delay-100">
              <button 
-              onClick={() => setInternalViewMode('context')}
+              onClick={() => {
+                setInternalViewMode('context');
+                setQuery(''); // Clear query to truly go back
+              }}
               className="text-slate-500 hover:text-white text-xs uppercase tracking-widest mb-2 font-medium flex items-center gap-2 transition-colors"
              >
                <ArrowRight className="rotate-180" size={12} />
                Volver a {selectedParentChannel.title}
              </button>
-             <div className="flex items-center gap-3 px-4 py-2">
-               <span className="text-white font-bold text-xl tracking-tight">Todos los canales</span>
-             </div>
+             {!query && (
+               <div className="flex items-center gap-3 px-4 py-2">
+                 <span className="text-white font-bold text-xl tracking-tight">Todos los canales</span>
+               </div>
+             )}
           </div>
         )}
 
         {/* Search Input */}
-        <div className={`w-full transition-all duration-500 ease-out transform ${results.length > 0 || query || selectedParentChannel || internalViewMode === 'global' ? 'translate-y-0' : 'translate-y-[25vh]'}`}>
+        <div className={`w-full transition-all duration-500 ease-out transform ${results.length > 0 || query || selectedParentChannel || effectiveViewMode === 'global' ? 'translate-y-0' : 'translate-y-[25vh]'}`}>
           <div className="relative group">
             <div className="absolute -inset-1 bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 rounded-full opacity-25 blur-xl group-hover:opacity-40 transition-all duration-500" />
             <div className="relative flex items-center bg-slate-900/40 border border-slate-700/50 rounded-full shadow-2xl backdrop-blur-md transition-all group-hover:bg-slate-900/60 group-hover:border-slate-600">
@@ -286,7 +251,7 @@ const MainChannelSearchModal: React.FC<MainChannelSearchModalProps> = ({
                 type="text"
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
-                placeholder={internalViewMode === 'context' && selectedParentChannel ? "Buscar subcanal..." : (t('channels.searchPlaceholder') || "Buscar canal...")}
+                placeholder={effectiveViewMode === 'context' && selectedParentChannel ? "Buscar subcanal..." : (t('channels.searchPlaceholder') || "Buscar canal...")}
                 className="w-full bg-transparent text-white text-xl font-light placeholder-slate-500 py-4 px-4 focus:outline-none"
               />
               {query && (
@@ -303,7 +268,7 @@ const MainChannelSearchModal: React.FC<MainChannelSearchModalProps> = ({
 
         {/* Results */}
         <div className={`w-full mt-8 transition-all duration-500 ease-out ${results.length > 0 ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8 pointer-events-none'}`}>
-          {results.length > 0 && internalViewMode === 'context' && (
+          {results.length > 0 && effectiveViewMode === 'context' && (
             <div className="flex flex-col gap-3 pb-8 max-h-[60vh] overflow-y-auto custom-scrollbar pr-2">
               <div className="text-center text-slate-500 text-xs font-medium tracking-[0.2em] uppercase mb-4">
                 Subcanales ({results.length})
@@ -314,7 +279,7 @@ const MainChannelSearchModal: React.FC<MainChannelSearchModalProps> = ({
             </div>
           )}
 
-          {results.length > 0 && internalViewMode === 'global' && (
+          {results.length > 0 && effectiveViewMode === 'global' && (
             <div className="flex flex-col gap-8 pb-8 max-h-[60vh] overflow-y-auto custom-scrollbar pr-2">
               {/* My Channels Section */}
               <div className="flex flex-col gap-3">
@@ -346,6 +311,7 @@ const MainChannelSearchModal: React.FC<MainChannelSearchModalProps> = ({
             </div>
           )}
         </div>
+
           
         {query && results.length === 0 && (
            <div className="mt-12 text-center text-slate-500">

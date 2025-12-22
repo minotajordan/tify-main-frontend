@@ -234,4 +234,28 @@ export interface TifyEvent {
   createdAt: string;
   updatedAt: string;
   organizerId: string;
+  // Local Event Fields
+  privacy?: 'public' | 'private_link' | 'private_password';
+  password?: string;
+  guestsPerInviteMode?: 'fixed' | 'variable';
+  guestsPerInvite?: number;
+  templateStyle?: 'card-1' | 'card-2'; // Visual template style
+  reservationMode?: 'predetermined' | 'random' | 'manual';
+  guestList?: LocalEventGuest[];
+}
+
+export interface LocalEventGuest {
+  id?: string;
+  name: string;
+  email?: string;
+  phoneNumber?: string;
+  country?: string;
+  quota?: number;
+  token?: string;
+  status?: 'pending' | 'confirmed' | 'declined';
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  additionalData?: Record<string, any>;
+  linkAccessCount?: number;
+  infoFilled?: boolean;
+  updatedAt?: string;
 }

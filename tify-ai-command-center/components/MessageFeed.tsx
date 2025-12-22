@@ -67,12 +67,22 @@ const AttachmentPreview: React.FC<{ attachment: any }> = ({ attachment }) => (
 const MessageTimelineItem: React.FC<{ message: Message }> = ({ message }) => {
   const isEmergency = message.isEmergency;
   
+  const getDotColor = () => {
+    if (isEmergency) return 'bg-red-600 animate-pulse';
+    switch (message.priority) {
+      case MessagePriority.HIGH: return 'bg-red-500';
+      case MessagePriority.MEDIUM: return 'bg-amber-500';
+      case MessagePriority.LOW: return 'bg-blue-500';
+      default: return 'bg-indigo-500';
+    }
+  };
+
   return (
     <div className="relative pl-8 py-4 group hover:bg-slate-50/50 transition-colors rounded-r-xl -ml-4 pr-4">
       {/* Timeline Connector */}
       <div className="absolute left-[19px] top-0 bottom-0 w-px bg-slate-200 group-hover:bg-slate-300 transition-colors" />
       <div className={`absolute left-[13px] top-6 w-3.5 h-3.5 rounded-full border-2 border-white shadow-sm z-10 
-        ${isEmergency ? 'bg-red-500' : 'bg-indigo-500'}
+        ${getDotColor()}
       `} />
 
       <div className="flex flex-col gap-2">
@@ -82,11 +92,7 @@ const MessageTimelineItem: React.FC<{ message: Message }> = ({ message }) => {
           <span className="text-slate-400 text-xs flex items-center gap-1">
             {format(new Date(message.createdAt), 'HH:mm', { locale: es })}
           </span>
-          {message.priority === MessagePriority.HIGH && (
-            <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-red-100 text-red-700 font-bold uppercase tracking-wide">
-              Alta Prioridad
-            </span>
-          )}
+
           {isEmergency && (
             <span className="flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-full bg-red-600 text-white font-bold uppercase tracking-wide animate-pulse">
               <AlertTriangle size={10} />
@@ -167,9 +173,7 @@ const MessageCardItem: React.FC<{ message: Message }> = ({ message }) => {
           </div>
         </div>
         
-        <div className={`px-2 py-1 rounded text-[10px] font-bold uppercase tracking-wider border ${priorityColor}`}>
-          {message.priority}
-        </div>
+        {/* Priority tag removed as requested, relying on color indicators */}
       </div>
 
       {/* Card Body */}

@@ -10,9 +10,27 @@ import {
   EventStatus,
   EventZone,
   EventSeat,
+  LocalEventGuest,
 } from '../types';
 
 let MOCK_EVENTS: TifyEvent[] = [];
+
+if (typeof window !== 'undefined') {
+  try {
+    const stored = localStorage.getItem('tify_mock_events');
+    if (stored) {
+      MOCK_EVENTS = JSON.parse(stored);
+    }
+  } catch (e) {
+    console.error('Failed to load mock events', e);
+  }
+}
+
+const saveMockEvents = () => {
+  if (typeof window !== 'undefined') {
+    localStorage.setItem('tify_mock_events', JSON.stringify(MOCK_EVENTS));
+  }
+};
 
 export const API_BASE = (() => {
   if (typeof window !== 'undefined') {
@@ -28,8 +46,8 @@ export const API_BASE = (() => {
   ) {
     return (process as any).env.TIFY_API_BASE;
   }
-  return 'https://tify-main-backend.vercel.app/api';
-  // return 'http://localhost:3333/api';
+  // return 'https://tify-main-backend.vercel.app/api';
+  return 'http://localhost:3333/api';
 })();
 export function getAuthToken(): string | null {
   return typeof localStorage !== 'undefined' ? localStorage.getItem('tify_token') : null;
@@ -616,6 +634,7 @@ export const api = {
       });
       return {
         ...event,
+        guestList: event.guestList || data.guestList || [],
         zones: event.zones || [],
         seats: event.seats || []
       };
@@ -637,21 +656,27 @@ export const api = {
         ...data,
       } as TifyEvent;
       MOCK_EVENTS.push(newEvent);
+      saveMockEvents();
       return newEvent;
     }
   },
 
   updateEvent: async (id: string, data: Partial<TifyEvent>): Promise<TifyEvent> => {
     try {
-      return await request<TifyEvent>(`${API_BASE}/events/${id}`, {
+      const event = await request<TifyEvent>(`${API_BASE}/events/${id}`, {
         method: 'PUT',
         body: JSON.stringify(data),
         headers: { 'Content-Type': 'application/json' },
       });
+      return {
+          ...event,
+          guestList: event.guestList || (data.guestList ? data.guestList : undefined) || event.guestList // If backend drops it, try to keep it from data, else keep existing (not perfect but better)
+      };
     } catch (e) {
       const idx = MOCK_EVENTS.findIndex((e) => e.id === id);
       if (idx === -1) throw new Error('Event not found');
       MOCK_EVENTS[idx] = { ...MOCK_EVENTS[idx], ...data, updatedAt: new Date().toISOString() };
+      saveMockEvents();
       return MOCK_EVENTS[idx];
     }
   },
@@ -671,6 +696,7 @@ export const api = {
       const idx = MOCK_EVENTS.findIndex((e) => e.id === id);
       if (idx === -1) throw new Error('Event not found');
       MOCK_EVENTS[idx] = { ...MOCK_EVENTS[idx], zones, seats };
+      saveMockEvents();
       return MOCK_EVENTS[idx];
     }
   },
@@ -684,6 +710,7 @@ export const api = {
       const idx = MOCK_EVENTS.findIndex((e) => e.id === id);
       if (idx !== -1) {
         MOCK_EVENTS.splice(idx, 1);
+        saveMockEvents();
       }
     }
   },
@@ -710,11 +737,28 @@ export const api = {
     return request<any[]>(`${API_BASE}/events/${eventId}/tickets`);
   },
 
+  getEventByToken: async (token: string): Promise<TifyEvent & { currentGuest?: LocalEventGuest }> => {
+    return request<TifyEvent & { currentGuest?: LocalEventGuest }>(`${API_BASE}/events/by-token/${token}`);
+  },
+
   checkInTicket: async (eventId: string, code: string): Promise<any> => {
     return request(`${API_BASE}/events/${eventId}/check-in`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ code })
+    });
+  },
+
+  recordGuestAccess: async (token: string): Promise<{ success: boolean; guest: any }> => {
+    return request<{ success: boolean; guest: any }>(`${API_BASE}/events/guests/${token}/access`, {
+      method: 'POST'
+    });
+  },
+
+  updateGuest: async (id: string, data: any): Promise<{ success: boolean; guest: any }> => {
+    return request<{ success: boolean; guest: any }>(`${API_BASE}/events/guests/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data)
     });
   },
 };

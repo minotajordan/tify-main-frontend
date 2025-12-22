@@ -84,6 +84,7 @@ import {
   MousePointer2,
   Download,
   Sidebar,
+  GitMerge,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { api, uploadFile } from '../services/api';
@@ -94,6 +95,7 @@ import {
   ApprovalPolicy,
   MessagePriority,
   DeliveryMethod,
+  User,
 } from '../types';
 import { SF_SYMBOLS } from '../constants';
 import { useI18n } from '../i18n';
@@ -515,7 +517,11 @@ const FontSizeSelector = ({
   );
 };
 
-const ChannelManager: React.FC = () => {
+interface ChannelManagerProps {
+  currentUser?: User | null;
+}
+
+const ChannelManager: React.FC<ChannelManagerProps> = ({ currentUser }) => {
   const { t } = useI18n();
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [subchannelModalOpen, setSubchannelModalOpen] = useState(false);
@@ -886,7 +892,7 @@ const ChannelManager: React.FC = () => {
 
   const [filterText, setFilterText] = useState('');
   const [viewMode, setViewMode] = useState<'table' | 'cards'>('table');
-  const [activeTab, setActiveTab] = useState<'details' | 'stats' | 'content' | 'messages'>('details');
+  const [activeTab, setActiveTab] = useState<'details' | 'stats' | 'content' | 'messages'>('messages');
   const [refreshKey, setRefreshKey] = useState(0);
   const [lastVisitedSubchannelId, setLastVisitedSubchannelId] = useState<string | null>(null);
 
@@ -2074,6 +2080,121 @@ const ChannelManager: React.FC = () => {
     ));
   };
 
+  const renderMobileDashboard = () => {
+    const myChannels = filteredChannels.filter(c => currentUser && c.ownerId === currentUser.id);
+    const otherChannels = filteredChannels.filter(c => !currentUser || c.ownerId !== currentUser.id);
+
+    const ChannelCardMobile = ({ channel }: { channel: Channel }) => (
+      <div
+        onClick={() => setSelectedChannel(channel)}
+        className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden mb-4 active:scale-[0.98] transition-transform"
+      >
+        {/* Banner */}
+        <div className={`h-20 ${channel.logoUrl ? '' : 'bg-gradient-to-r from-indigo-500 to-purple-600'}`}>
+           {channel.logoUrl && <img src={channel.logoUrl} alt="" className="w-full h-full object-cover" />}
+        </div>
+        
+        <div className="px-4 pb-4">
+           <div className="flex justify-between items-start -mt-6 mb-3">
+              <div className="bg-white p-1 rounded-xl shadow-sm">
+                 <div className="w-12 h-12 bg-gray-50 rounded-lg flex items-center justify-center text-indigo-600">
+                    <IconView name={channel.icon} size={24} />
+                 </div>
+              </div>
+              <div className="mt-7 flex gap-2">
+                 {channel.isPublic ? (
+                    <span className="px-2 py-0.5 bg-blue-50 text-blue-700 text-[10px] font-bold uppercase tracking-wider rounded-full">Público</span>
+                 ) : (
+                    <span className="px-2 py-0.5 bg-amber-50 text-amber-700 text-[10px] font-bold uppercase tracking-wider rounded-full flex items-center gap-1"><Lock size={8}/> Privado</span>
+                 )}
+              </div>
+           </div>
+           
+           <h3 className="font-bold text-gray-900 text-lg mb-1 leading-tight">{channel.title}</h3>
+           {channel.description && <p className="text-sm text-gray-500 line-clamp-2 mb-4">{channel.description}</p>}
+           
+           <div className="grid grid-cols-3 gap-2 py-3 border-t border-gray-50">
+              <div className="text-center">
+                 <div className="text-xs text-gray-400 uppercase tracking-wider font-semibold">Miembros</div>
+                 <div className="font-bold text-gray-700">{channel.memberCount}</div>
+              </div>
+              <div className="text-center border-l border-gray-100">
+                 <div className="text-xs text-gray-400 uppercase tracking-wider font-semibold">Subs</div>
+                 <div className="font-bold text-gray-700">{channel.subchannels?.length || 0}</div>
+              </div>
+              <div className="text-center border-l border-gray-100">
+                 <div className="text-xs text-gray-400 uppercase tracking-wider font-semibold">Mensajes</div>
+                 <div className="font-bold text-gray-700">{channel._count?.messages || '-'}</div>
+              </div>
+           </div>
+        </div>
+      </div>
+    );
+
+    return (
+      <div className="pb-20">
+        {myChannels.length > 0 && (
+          <div className="mb-6">
+            <h4 className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-3 pl-1">Mis Canales</h4>
+            {myChannels.map(c => <ChannelCardMobile key={c.id} channel={c} />)}
+          </div>
+        )}
+        
+        <div className="mb-6">
+           <h4 className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-3 pl-1">
+             {myChannels.length > 0 ? 'Otros Canales' : 'Todos los Canales'}
+           </h4>
+           {otherChannels.map(c => <ChannelCardMobile key={c.id} channel={c} />)}
+           {otherChannels.length === 0 && myChannels.length === 0 && (
+              <div className="text-center py-10 text-gray-400 italic">No se encontraron canales</div>
+           )}
+        </div>
+      </div>
+    );
+  };
+
+  const renderDesktopList = (list: Channel[]) => {
+      const flatList = flattenVisible(list);
+      return (
+        <div className="space-y-2">
+          {flatList.map(({ channel, parents }) => (
+            <div
+              key={channel.id}
+              onClick={() => setSelectedChannel(channel)}
+              className={`p-3 rounded-lg border cursor-pointer transition-all group ${
+                selectedChannel?.id === channel.id
+                  ? 'bg-indigo-50 border-indigo-200 shadow-sm'
+                  : 'bg-white border-gray-200 hover:border-indigo-200 hover:shadow-sm'
+              }`}
+            >
+              <div className="flex items-center gap-3">
+                 <div className={`p-2 rounded-lg shrink-0 ${selectedChannel?.id === channel.id ? 'bg-indigo-100 text-indigo-600' : 'bg-gray-50 text-gray-500 group-hover:bg-indigo-50 group-hover:text-indigo-600'}`}>
+                    <IconView name={channel.icon} size={18} />
+                 </div>
+                 <div className="min-w-0 flex-1">
+                    <div className="flex items-center justify-between">
+                       <h4 className={`text-sm font-semibold truncate ${selectedChannel?.id === channel.id ? 'text-indigo-900' : 'text-gray-900'}`}>{channel.title}</h4>
+                       {channel.subchannels && channel.subchannels.length > 0 && (
+                          <span className="text-[10px] bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded-full">{channel.subchannels.length}</span>
+                       )}
+                    </div>
+                    {parents.length > 0 ? (
+                       <div className="text-xs text-gray-400 truncate flex items-center gap-1 mt-0.5">
+                          {parents[parents.length-1]} <ChevronRight size={10} />
+                       </div>
+                    ) : (
+                       <div className="text-xs text-gray-500 truncate mt-0.5">
+                          {channel.memberCount} miembros
+                       </div>
+                    )}
+                 </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      );
+  };
+
   if (loading)
     return (
       <div className="h-[calc(100vh-140px)] flex flex-col md:p-8">
@@ -2101,10 +2222,14 @@ const ChannelManager: React.FC = () => {
     );
 
   return (
-    <div className="h-[calc(100vh-140px)] flex flex-col relative">
-      {/* Tree Sidebar */}
-      <div className={`w-full h-full bg-white rounded-xl shadow-sm flex flex-col ${selectedChannel ? 'hidden' : 'flex'}`}>
-        <div className="p-4 border-b border-gray-100 flex flex-col gap-4 sticky top-0 z-10 bg-white rounded-t-xl">
+    <div className="h-[calc(100vh-140px)] flex flex-col md:flex-row relative md:gap-4 md:p-4">
+      {/* Left Panel: Mobile Dashboard & Desktop Sidebar */}
+      <div className={`
+         flex flex-col bg-gray-50 md:bg-white md:rounded-xl md:shadow-sm md:border md:border-gray-100 h-full overflow-hidden
+         ${selectedChannel ? 'hidden md:flex' : 'flex w-full'}
+         md:w-1/3 lg:w-1/4
+      `}>
+        <div className="p-4 border-b border-gray-100 flex flex-col gap-4 sticky top-0 z-10 bg-white md:rounded-t-xl">
           <div className="flex items-center justify-between">
             <h3 className="font-semibold text-gray-900">{t('channels.title')}</h3>
             <div className="flex items-center gap-1">
@@ -2151,9 +2276,10 @@ const ChannelManager: React.FC = () => {
             />
           </div>
         </div>
-        <div className="p-0 md:p-1">
+        
+        <div className="flex-1 overflow-y-auto custom-scrollbar p-2">
           {showCreate && (
-            <div className="bg-gray-50 border border-gray-200 rounded-lg p-3 space-y-2">
+            <div className="bg-gray-50 border border-gray-200 rounded-lg p-3 space-y-2 mb-4">
               <input
                 value={form.title}
                 onChange={(e) => setForm({ ...form, title: e.target.value })}
@@ -2291,17 +2417,31 @@ const ChannelManager: React.FC = () => {
               </button>
             </div>
           )}
-        </div>
-        <div className="flex-1 h-full overflow-y-auto p-2 space-y-1 custom-scrollbar md:m-6 ">
-          {
-            // viewMode === 'table' ? renderTree(filteredChannels) : 
-            renderCards(filteredChannels) 
-          }
+
+           {/* Mobile View */}
+           <div className="md:hidden">
+              {renderMobileDashboard()}
+           </div>
+           
+           {/* Desktop View */}
+           <div className="hidden md:block">
+              {viewMode === 'table' ? renderTree(filteredChannels) : renderDesktopList(filteredChannels)}
+           </div>
         </div>
       </div>
 
-      {/* Details Panel  --  w-full*/}
-      <div className={` h-full md:m-8 bg-white rounded-xl shadow-sm border border-gray-100 flex flex-col ${selectedChannel ? 'flex' : 'hidden'}`}>
+      {/* Right Panel: Details */}
+      <div className={`
+          h-full bg-white md:rounded-xl md:shadow-sm md:border md:border-gray-100 flex flex-col overflow-hidden
+          ${selectedChannel ? 'flex w-full' : 'hidden md:flex md:items-center md:justify-center'}
+          md:flex-1
+      `}>
+         {!selectedChannel && (
+            <div className="text-center text-gray-400">
+               <GitMerge size={48} className="mx-auto mb-4 opacity-50" />
+               <p>Selecciona un canal para ver sus detalles</p>
+            </div>
+         )}
         {selectedChannel ? (
   detailsLoading ? (
     <div className="p-6 flex-1 overflow-y-auto animate-pulse space-y-4">
@@ -2326,7 +2466,7 @@ const ChannelManager: React.FC = () => {
   ) : (
     <>
       {/* Tu contenido aquí cuando detailsLoading es false */}
-      <div className="bg-white shrink-0 border-b border-gray-100 flex flex-col sticky top-0 z-10 rounded-t-xl">
+      <div className="bg-white shrink-0 shadow-sm flex flex-col sticky top-0 z-10 rounded-t-xl">
         {/* Top Bar: Navigation & Actions */}
         <div className="px-4 py-2 flex items-center justify-between">
           <div className="flex items-center gap-2 min-w-0">
@@ -2411,13 +2551,27 @@ const ChannelManager: React.FC = () => {
           </div>
 
           <div className="flex items-center gap-1">
-            <button
+            {/*<button
               onClick={() => setHeaderLayout(prev => prev === 'inline' ? 'drawer' : 'inline')}
               className="hidden md:flex items-center gap-2 px-2 py-1 text-xs font-medium text-gray-600 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors mr-2"
               title="Cambiar estilo de visualización"
             >
-              {headerLayout === 'inline' ? <LayoutList size={14} /> : <Sidebar size={14} />}
-              {headerLayout === 'inline' ? 'Expandible' : 'Lateral'}
+              { // headerLayout === 'inline' ? <LayoutList size={14} /> : <Sidebar size={14} />
+              }
+              { // headerLayout === 'inline' ? 'Expandible' : 'Lateral'
+              }
+            </button>
+            */} 
+            <button
+              onClick={() => setActiveTab(activeTab === 'details' ? 'messages' : 'details')}
+              className={`p-2 rounded-lg transition-colors ${
+                activeTab === 'details'
+                  ? 'bg-indigo-50 text-indigo-600'
+                  : 'text-gray-500 hover:text-gray-700 hover:bg-gray-100'
+              }`}
+              title="Detalles"
+            >
+              <Info size={20} />
             </button>
             <div className="relative">
               <button
@@ -2555,31 +2709,89 @@ const ChannelManager: React.FC = () => {
         )}
       </div>
       
-      <div className="flex items-center px-4 border-b border-gray-100 overflow-x-auto shrink-0 scrollbar-hide">
+      <div className="flex items-center pt-2 pb-2 px-4 shadow-sm overflow-x-auto shrink-0 scrollbar-hide">
         <button
           onClick={() => setActiveTab('messages')}
-          className={`flex items-center gap-2 px-4 py-3 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
+          className={`flex h-8 mr-4 rounded-md items-center gap-2 px-4 py-2 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
             activeTab === 'messages'
-              ? 'border-indigo-600 text-indigo-600'
-              : 'border-transparent text-gray-500 hover:text-gray-700'
+              ? 'bg-indigo-50 text-indigo-600'
+              : 'text-gray-500 hover:text-gray-700 hover:bg-gray-100'
           }`}
         >
           <MessagesSquare size={16} />
-          Mensajes
+          Mensajes 
         </button>
-        <button
-          onClick={() => setActiveTab('details')}
-          className={`flex items-center gap-2 px-4 py-3 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
-            activeTab === 'details'
-              ? 'border-indigo-600 text-indigo-600'
-              : 'border-transparent text-gray-500 hover:text-gray-700'
-          }`}
-        >
-          <Info size={16} />
-          Detalles
-        </button>
+
+        <div className="flex items-center gap-2 shrink-0 h-8">
+                      
+                      <button
+                        onClick={() => setShowChannelSearch(true)}
+                        className="flex items-center gap-2 hover:bg-gray-100 rounded-lg px-2 py-1 transition-colors group -ml-2"
+                      >
+                        {
+                          // <span className="mx-1">Subcanal:</span> 
+                          }
+                        <h3 className="text-sm font-semibold text-gray-900 truncate max-w-[100px] sm:max-w-[150px]">
+                        {(() => {
+                          const subId = messagesModalOpen
+                            ? messagesForSub
+                            : (selectedChannel?.parentId && activeTab === 'messages')
+                              ? selectedChannel?.id
+                              : (activeTab === 'messages' && selectedChannel && !selectedChannel.parentId)
+                                ? selectedChannel?.subchannels?.[0]?.id
+                                : null;
+
+                          if (!subId) return selectedChannel?.title;
+                          if (subId === selectedChannel?.id) return selectedChannel?.title;
+                          const sub = selectedChannel?.subchannels?.find(s => s.id === subId);
+                          return sub ? sub.title : selectedChannel?.title;
+                        })()}
+                      </h3>
+                      <ChevronDown size={14} className="text-gray-400 group-hover:text-gray-600" />
+                      </button>
+                    </div>
+
+        <div className="relative">
+                          <button
+                            onClick={(e) => {
+                              setRangeMenuOpen((v) => !v);
+                              setRangeMenuAnchorEl(e.currentTarget as HTMLElement);
+                            }}
+                            className="ml-2 h-8 px-6 py-1 rounded-lg bg-gray-100 text-[10px] text-gray-700 hover:bg-gray-50 inline-flex items-center gap-1"
+                          >
+                            {statsRange === '1h'
+                              ? '1h'
+                              : statsRange === '24h'
+                                ? '24h'
+                                : statsRange === '7d'
+                                  ? '1 Semana'
+                                  : statsRange === '1m'
+                                    ? '1 Mes'
+                                    : 'Historico'}
+                            <ChevronDown size={10} className="text-gray-500" />
+                          </button>
+                          {rangeMenuOpen && (
+                            <Popper
+                              open
+                              placement="bottom-start"
+                              anchorEl={rangeMenuAnchorEl}
+                              style={{ zIndex: 1000 }}
+                            >
+                              <div className="bg-white border border-gray-200 rounded shadow p-1 text-xs">
+                                <button onClick={() => { setStatsRange('1h'); setRangeMenuOpen(false); }} className="block w-full text-left px-2 py-1 rounded hover:bg-gray-50">1 h</button>
+                                <button onClick={() => { setStatsRange('24h'); setRangeMenuOpen(false); }} className="block w-full text-left px-2 py-1 rounded hover:bg-gray-50">24 h</button>
+                                <button onClick={() => { setStatsRange('7d'); setRangeMenuOpen(false); }} className="block w-full text-left px-2 py-1 rounded hover:bg-gray-50">1 Semana</button>
+                                <button onClick={() => { setStatsRange('1m'); setRangeMenuOpen(false); }} className="block w-full text-left px-2 py-1 rounded hover:bg-gray-50">1 Mes</button>
+                                <button onClick={() => { setStatsRange('all'); setRangeMenuOpen(false); }} className="block w-full text-left px-2 py-1 rounded hover:bg-gray-50">Histórico</button>
+                              </div>
+                            </Popper>
+                          )}
+                      </div>
       </div>
 
+{
+  // aqui
+}
       {/* Drawer Panel for Proposal 2 */}
       {headerLayout === 'drawer' && drawerOpen && (
         <div className="absolute top-0 right-0 bottom-0 w-80 bg-white border-l border-gray-200 shadow-xl z-30 flex flex-col animate-in slide-in-from-right duration-300">
@@ -3774,34 +3986,9 @@ const ChannelManager: React.FC = () => {
                   className={`bg-white w-full h-full v-full flex flex-col overflow-hidden ${(activeTab === 'messages') ? '' : 'max-w-3xl'} rounded-xl`}
                 >
                   <div className="p-2 border-b border-gray-100 flex items-center justify-between gap-2 bg-white sticky top-0 z-20">
-                    <div className="flex items-center gap-2 shrink-0">
-                      
-                      <button
-                        onClick={() => setShowChannelSearch(true)}
-                        className="flex items-center gap-2 hover:bg-gray-100 rounded-lg px-2 py-1 transition-colors group -ml-2"
-                      >
-                        <span className="mx-1">Subcanal:</span> 
-                        <h3 className="text-sm font-semibold text-gray-900 truncate max-w-[100px] sm:max-w-[150px]">
-                        {(() => {
-                          const subId = messagesModalOpen
-                            ? messagesForSub
-                            : (selectedChannel?.parentId && activeTab === 'messages')
-                              ? selectedChannel?.id
-                              : (activeTab === 'messages' && selectedChannel && !selectedChannel.parentId)
-                                ? selectedChannel?.subchannels?.[0]?.id
-                                : null;
+                    
 
-                          if (!subId) return selectedChannel?.title;
-                          if (subId === selectedChannel?.id) return selectedChannel?.title;
-                          const sub = selectedChannel?.subchannels?.find(s => s.id === subId);
-                          return sub ? sub.title : selectedChannel?.title;
-                        })()}
-                      </h3>
-                      <ChevronDown size={14} className="text-gray-400 group-hover:text-gray-600" />
-                      </button>
-                    </div>
-
-                    <div className="flex items-center gap-2 flex-1 justify-end">
+                    <div className="flex items-center gap-2 flex-1 justify-betweeny-">
                         <div className="relative group">
                             <div className="absolute left-2 top-1/2 -translate-y-1/2 text-gray-400">
                                 <Search size={12} />
@@ -3810,7 +3997,7 @@ const ChannelManager: React.FC = () => {
                                 value={messagesSearch}
                                 onChange={(e) => setMessagesSearch(e.target.value)}
                                 placeholder="Buscar..."
-                                className="w-24 sm:w-32 md:w-48 pl-7 pr-2 py-1 bg-gray-50 border border-gray-200 rounded text-xs focus:outline-none focus:bg-white focus:border-indigo-300 transition-all"
+                                className="w-24 sm:w-32 md:w-48 pl-7 pr-2 py-1 bg-gray-50  rounded-lg bg-gray-100  text-xs focus:outline-none focus:bg-white focus:border-indigo-300 transition-all"
                             />
                             {messagesSearch && (
                                 <button onClick={() => setMessagesSearch('')} className="absolute right-1 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
@@ -3819,47 +4006,12 @@ const ChannelManager: React.FC = () => {
                             )}
                         </div>
 
-                        <div className="relative">
-                          <button
-                            onClick={(e) => {
-                              setRangeMenuOpen((v) => !v);
-                              setRangeMenuAnchorEl(e.currentTarget as HTMLElement);
-                            }}
-                            className="px-6 py-1 rounded border border-gray-300 bg-white text-[10px] text-gray-700 hover:bg-gray-50 inline-flex items-center gap-1"
-                          >
-                            {statsRange === '1h'
-                              ? '1 Hora'
-                              : statsRange === '24h'
-                                ? '24 Horas'
-                                : statsRange === '7d'
-                                  ? '1 Semana'
-                                  : statsRange === '1m'
-                                    ? '1 Mes'
-                                    : 'Historico'}
-                            <ChevronDown size={10} className="text-gray-500" />
-                          </button>
-                          {rangeMenuOpen && (
-                            <Popper
-                              open
-                              placement="bottom-start"
-                              anchorEl={rangeMenuAnchorEl}
-                              style={{ zIndex: 1000 }}
-                            >
-                              <div className="bg-white border border-gray-200 rounded shadow p-1 text-xs">
-                                <button onClick={() => { setStatsRange('1h'); setRangeMenuOpen(false); }} className="block w-full text-left px-2 py-1 rounded hover:bg-gray-50">1 H</button>
-                                <button onClick={() => { setStatsRange('24h'); setRangeMenuOpen(false); }} className="block w-full text-left px-2 py-1 rounded hover:bg-gray-50">24 H</button>
-                                <button onClick={() => { setStatsRange('7d'); setRangeMenuOpen(false); }} className="block w-full text-left px-2 py-1 rounded hover:bg-gray-50">1 Semana</button>
-                                <button onClick={() => { setStatsRange('1m'); setRangeMenuOpen(false); }} className="block w-full text-left px-2 py-1 rounded hover:bg-gray-50">1 Mes</button>
-                                <button onClick={() => { setStatsRange('all'); setRangeMenuOpen(false); }} className="block w-full text-left px-2 py-1 rounded hover:bg-gray-50">Histórico</button>
-                              </div>
-                            </Popper>
-                          )}
-                      </div>
                         
-                        <div className="hidden md:flex items-center border border-gray-200 rounded overflow-hidden">
+                        
+                        <div className="flex items-center rounded-lg bg-gray-200  overflow-hidden">
                           <button
                             onClick={() => { setMessagesFilter(prev => ({ ...prev, priority: (prev.priority === MessagePriority.LOW ? undefined : MessagePriority.LOW) as MessagePriority | undefined })); setMessagesQuick('all'); }}
-                            className={`px-2 py-1 text-[10px] font-medium transition-colors flex items-center gap-1.5 ${messagesFilter.priority === MessagePriority.LOW ? 'bg-slate-800 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}
+                            className={`px-2 py-1 text-[10px] font-medium transition-colors flex items-center gap-1.5 ${messagesFilter.priority === MessagePriority.LOW ? 'bg-gray-150 text-gray-600' : 'bg-gray-50 text-gray-600 hover:bg-gray-50'}`}
                           >
                             <span className="w-1.5 h-1.5 rounded-full bg-blue-500"></span>
                             Baja
@@ -3867,7 +4019,7 @@ const ChannelManager: React.FC = () => {
                           <div className="w-px h-full bg-gray-200" />
                           <button
                             onClick={() => { setMessagesFilter(prev => ({ ...prev, priority: (prev.priority === MessagePriority.MEDIUM ? undefined : MessagePriority.MEDIUM) as MessagePriority | undefined })); setMessagesQuick('all'); }}
-                            className={`px-2 py-1 text-[10px] font-medium transition-colors flex items-center gap-1.5 ${messagesFilter.priority === MessagePriority.MEDIUM ? 'bg-slate-800 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}
+                            className={`px-2 py-1 text-[10px] font-medium transition-colors flex items-center gap-1.5 ${messagesFilter.priority === MessagePriority.MEDIUM ? 'bg-gray-150 text-gray-600' : 'bg-gray-50 text-gray-600 hover:bg-gray-50'}`}
                           >
                             <span className="w-1.5 h-1.5 rounded-full bg-yellow-500"></span>
                             Media
@@ -3875,7 +4027,7 @@ const ChannelManager: React.FC = () => {
                           <div className="w-px h-full bg-gray-200" />
                           <button
                             onClick={() => { setMessagesFilter(prev => ({ ...prev, priority: (prev.priority === MessagePriority.HIGH ? undefined : MessagePriority.HIGH) as MessagePriority | undefined })); setMessagesQuick('all'); }}
-                            className={`px-2 py-1 text-[10px] font-medium transition-colors flex items-center gap-1.5 ${messagesFilter.priority === MessagePriority.HIGH ? 'bg-slate-800 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}
+                            className={`px-2 py-1 text-[10px] font-medium transition-colors flex items-center gap-1.5 ${messagesFilter.priority === MessagePriority.HIGH ? 'bg-gray-150 text-gray-600' : 'bg-gray-50 text-gray-600 hover:bg-gray-50'}`}
                           >
                             <span className="w-1.5 h-1.5 rounded-full bg-red-500"></span>
                             Alta
@@ -4068,27 +4220,10 @@ const ChannelManager: React.FC = () => {
                                 <div className="text-sm text-gray-900 font-bold">
                                   {m.channel?.title || 'Canal'}
                                 </div>
-                                <span
-                                  className={`text-[10px] px-1.5 py-0.5 rounded border ${m.isEmergency ? 'bg-red-50 text-red-700 border-red-200' : m.priority === 'HIGH' ? 'bg-red-50 text-red-700 border-red-200' : m.priority === 'MEDIUM' ? 'bg-yellow-50 text-yellow-700 border-yellow-200' : 'bg-blue-50 text-blue-700 border-blue-200'}`}
-                                >
-                                    {m.isEmergency
-                                      ? 'Prioritario'
-                                      : m.priority === 'HIGH'
-                                        ? 'Alta'
-                                        : m.priority === 'MEDIUM'
-                                          ? 'Media'
-                                          : 'Baja'}
-                                  </span>
                                 {m.state === 'CANCELLED' && (
                                   <span className="text-[10px] px-1.5 py-0.5 rounded border bg-gray-100 text-gray-700 border-gray-200">
                                       Cancelado
                                     </span>
-                                )}
-                                {m.extra?.type === 'comunicado' && (
-                                  <span className="text-[10px] px-1.5 py-0.5 rounded border bg-amber-50 text-amber-700 border-amber-200 flex items-center gap-1">
-                                    <FileText size={10} />
-                                    Comunicado
-                                  </span>
                                 )}
                                 <span className="text-xs text-gray-500">
                                     hace:{' '}
@@ -4115,17 +4250,6 @@ const ChannelManager: React.FC = () => {
                               </div>
                               <div className="break-words min-w-0 flex-1">{m.content}</div>
                             </div>
-                            {m.extra?.type === 'comunicado' && (
-                              <div className="mt-2 mb-2">
-                                <button
-                                  onClick={() => setViewingComunicado(m)}
-                                  className="text-xs flex items-center gap-1 text-amber-600 hover:text-amber-700 font-medium"
-                                >
-                                  <Eye size={14} />
-                                  Ver comunicado oficial
-                                </button>
-                              </div>
-                            )}
                             {m.extra && m.extra.schedule && Array.isArray(m.extra.schedule) && m.extra.schedule.length > 0 && expandedSchedules[m.id] && (
                               <div className="mt-3 bg-indigo-50/50 rounded-lg p-3 border border-indigo-100 animate-in slide-in-from-top-2 fade-in duration-200">
                                 <div className="space-y-2">
@@ -4278,6 +4402,15 @@ const ChannelManager: React.FC = () => {
                                 >
                                   <MapPin size={12} />
                                   <span>{expandedLocations[m.id] ? 'Ocultar Mapa' : 'Ver Mapa'}</span>
+                                </button>
+                              )}
+                              {m.extra?.type === 'comunicado' && (
+                                <button
+                                  onClick={() => setViewingComunicado(m)}
+                                  className="inline-flex items-center gap-1 text-[11px] font-bold px-1.5 py-0.5 rounded border transition-colors mr-2 bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100"
+                                >
+                                  <Eye size={12} />
+                                  <span>Ver comunicado oficial</span>
                                 </button>
                               )}
                               {m.extra && m.extra.attachments && m.extra.attachments.length > 0 && (

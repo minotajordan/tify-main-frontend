@@ -30,6 +30,7 @@ import MonitoringDashboard from './components/monitoring/MonitoringDashboard';
 import FormsManager from './components/FormsManager';
 import PublicFormViewer from './components/forms/PublicFormViewer';
 import PublicTicketPurchase from './components/events/PublicTicketPurchase';
+import GuestRSVP from './components/events/GuestRSVP';
 
 type View = 'dashboard' | 'channels' | 'messages' | 'approvals' | 'users' | 'ai' | 'monitoring' | 'forms' | 'events';
 type BreadcrumbItem = { label: string; view?: View };
@@ -45,6 +46,7 @@ const App: React.FC = () => {
   const [resetForm, setResetForm] = useState({ identifier: '', code: '', newPassword: '' });
   const [publicSlug, setPublicSlug] = useState<string | null>(null);
   const [publicEventId, setPublicEventId] = useState<string | null>(null);
+  const [publicRSVPEventId, setPublicRSVPEventId] = useState<string | null>(null);
   const { t, lang, setLang } = useI18n();
 
   useEffect(() => {
@@ -52,11 +54,14 @@ const App: React.FC = () => {
       const path = window.location.pathname;
       const formMatch = path.match(/^\/forms\/([a-zA-Z0-9-]+)$/);
       const eventMatch = path.match(/^\/events\/([a-zA-Z0-9-]+)\/public$/);
+      const rsvpMatch = path.match(/^\/events\/([a-zA-Z0-9-]+)\/rsvp$/);
       
       if (formMatch) {
         setPublicSlug(formMatch[1]);
       } else if (eventMatch) {
         setPublicEventId(eventMatch[1]);
+      } else if (rsvpMatch) {
+        setPublicRSVPEventId(rsvpMatch[1]);
       }
     }
   }, []);
@@ -96,7 +101,7 @@ const App: React.FC = () => {
   const renderContent = () => {
     switch (currentView) {
       case 'dashboard': return <Dashboard onChangeView={(view) => setCurrentView(view as View)} />;
-      case 'channels': return <ChannelManager />;
+      case 'channels': return <ChannelManager currentUser={currentUser} />;
       case 'messages': return <MessageCenter />;
       case 'approvals': return <ApprovalQueue />;
       case 'users': return <UsersModule />;
@@ -141,6 +146,10 @@ const App: React.FC = () => {
 
   if (publicEventId) {
     return <PublicTicketPurchase eventId={publicEventId} />;
+  }
+
+  if (publicRSVPEventId) {
+    return <GuestRSVP eventId={publicRSVPEventId} />;
   }
 
   if (authMode !== 'ready') {
