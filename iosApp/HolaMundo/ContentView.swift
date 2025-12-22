@@ -603,6 +603,7 @@ struct ChannelsView: View {
     @State private var sheetChannel: Channel? = nil
     @State private var sheetDragOffset: CGFloat = 0
     @State private var longPressingChannelId: String? = nil
+    @State private var showShortlinks = false
     
     @ViewBuilder private func bottomFloatingBar() -> some View {
         HStack(spacing: 10) {
@@ -670,22 +671,91 @@ struct ChannelsView: View {
                     .onTapGesture { withAnimation { showHistoryDrawer = false } }
                 VStack(alignment: .leading) {
                     HStack {
-                        Text("Historial de búsqueda").font(.headline)
+                        Text("Navegación").font(.headline)
                         Spacer()
                         Button("Cerrar") { withAnimation { showHistoryDrawer = false } }
                     }
-                    .padding(.bottom, 4)
+                    .padding(.bottom, 16)
+                    
                     ScrollView {
                         LazyVStack(alignment: .leading, spacing: 0) {
-                            ForEach(searchHistory, id: \.self) { q in
-                                Button {
-                                    searchText = q
-                                    isSearchMode = true
-                                    withAnimation { showHistoryDrawer = false }
-                                    scheduleSearch()
-                                } label: {
-                                    HStack { Image(systemName: "magnifyingglass"); Text(q); Spacer() }
+                            if !viewModel.myChannels.isEmpty {
+                                Text("Mis Canales")
+                                    .font(.subheadline)
+                                    .foregroundColor(.secondary)
+                                    .padding(.horizontal, 4)
+                                    .padding(.bottom, 8)
+                                
+                                ForEach(viewModel.myChannels) { channel in
+                                    Button(action: {
+                                        tappedChannel = channel
+                                        goToChannel = true
+                                        withAnimation { showHistoryDrawer = false }
+                                    }) {
+                                        HStack(spacing: 12) {
+                                            Image(systemName: channel.icon)
+                                                .foregroundColor(.blue)
+                                                .frame(width: 24)
+                                            Text(channel.title)
+                                                .foregroundColor(.primary)
+                                                .lineLimit(1)
+                                            Spacer()
+                                        }
+                                        .padding(.vertical, 10)
+                                        .padding(.horizontal, 4)
+                                    }
+                                }
+                                
+                                Divider()
+                                    .padding(.vertical, 12)
+                            }
+
+                            Button(action: {
+                                withAnimation { showHistoryDrawer = false }
+                                showShortlinks = true
+                            }) {
+                                HStack(spacing: 12) {
+                                    Image(systemName: "qrcode")
+                                        .font(.title3)
+                                        .foregroundColor(.blue)
+                                        .frame(width: 24)
+                                    Text("Gestor de Enlaces y QR")
+                                        .foregroundColor(.primary)
+                                    Spacer()
+                                }
+                                .padding(.vertical, 12)
+                                .padding(.horizontal, 4)
+                                .background(Color(.systemGray6).opacity(0.5))
+                                .cornerRadius(10)
+                            }
+                            .buttonStyle(PlainButtonStyle())
+                            .padding(.bottom, 20)
+                            
+                            if !searchHistory.isEmpty {
+                                Divider()
+                                    .padding(.bottom, 16)
+
+                                Text("Historial de búsqueda").font(.subheadline).foregroundColor(.secondary)
+                                    .padding(.bottom, 8)
+                                    .padding(.horizontal, 4)
+
+                                ForEach(searchHistory, id: \.self) { q in
+                                    Button {
+                                        searchText = q
+                                        isSearchMode = true
+                                        withAnimation { showHistoryDrawer = false }
+                                        scheduleSearch()
+                                    } label: {
+                                        HStack {
+                                            Image(systemName: "magnifyingglass")
+                                                .foregroundColor(.secondary)
+                                            Text(q)
+                                                .foregroundColor(.primary)
+                                            Spacer()
+                                        }
                                         .padding(.vertical, 8)
+                                        .padding(.horizontal, 4)
+                                    }
                                 }
                             }
                         }
@@ -1421,6 +1491,9 @@ struct ChannelsView: View {
             }
             .sheet(isPresented: $showMessagesSheet) {
                 MessagesView()
+            }
+            .sheet(isPresented: $showShortlinks) {
+                ShortlinksListView()
             }
         }
     }

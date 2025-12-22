@@ -1,0 +1,58 @@
+[
+  {
+    "name": "Guest 1",
+    "status": "confirmed",
+    "id": "veh73iouq",
+    "eventId": "6vvs608yc",
+    "createdAt": "2025-12-21T21:34:43.095Z",
+    "updatedAt": "2025-12-21T21:34:43.096Z"
+  },
+  {
+    "name": "Guest 2",
+    "status": "pending",
+    "id": "17z1w8z60",
+    "eventId": "6vvs608yc",
+    "createdAt": "2025-12-21T21:34:43.096Z",
+    "updatedAt": "2025-12-21T21:34:43.096Z"
+  },
+  {
+    "name": "R-Guest 1",
+    "status": "confirmed",
+    "id": "3f8hinl7m",
+    "eventId": "52rrsfq2y",
+    "createdAt": "2025-12-21T21:38:02.982Z",
+    "updatedAt": "2025-12-21T21:38:02.989Z"
+  },
+  {
+    "name": "R-Guest 2",
+    "status": "pending",
+    "id": "kh8ssbyhh",
+    "eventId": "52rrsfq2y",
+    "createdAt": "2025-12-21T21:38:02.982Z",
+    "updatedAt": "2025-12-21T21:38:02.989Z"
+  },
+  {
+    "name": "R-Guest 3",
+    "status": "declined",
+    "id": "p67ao21y1",
+    "eventId": "52rrsfq2y",
+    "updatedAt": "2025-12-21T21:38:02.989Z",
+    "createdAt": "2025-12-21T21:38:02.989Z"
+  },
+  {
+    "name": "Jordan",
+    "phoneNumber": "3206083169",
+    "quota": 3,
+    "status": "pending",
+    "additionalData": {
+      "foo": "bar"
+    },
+    "linkAccessCount": 0,
+    "infoFilled": false,
+    "token": "03njj94d9ekgmsm6hlpelse",
+    "id": "f36a069b-7dcb-4d40-98f5-a0acc04fa5a5",
+    "eventId": "9lg420wmq",
+    "createdAt": "2025-12-21T21:54:23.215Z",
+    "updatedAt": "2025-12-21T21:54:23.215Z"
+  }
+]
