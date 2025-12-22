@@ -18,7 +18,7 @@ import {
 } from 'lucide-react';
 import { DEFAULT_AVATAR, DEFAULT_ORG_NAME } from './constants';
 import { useI18n } from './i18n';
-import { api } from './services/api';
+import { api, API_BASE } from './services/api';
 import { User } from './types';
 import Dashboard from './components/Dashboard';
 import ChannelManager from './components/ChannelManager';
@@ -33,6 +33,25 @@ import ShortLinkManager from './components/ShortLinkManager';
 import PublicFormViewer from './components/forms/PublicFormViewer';
 import PublicTicketPurchase from './components/events/PublicTicketPurchase';
 import GuestRSVP from './components/events/GuestRSVP';
+
+const ShortLinkRedirect: React.FC<{ code: string }> = ({ code }) => {
+  useEffect(() => {
+    alert(code);
+    // Redirect to backend root endpoint
+    const backendRoot = api.getBootstrap ? API_BASE.replace('/api', '') : 'http://localhost:3333';
+    window.location.href = `${backendRoot}/${code}`;
+  }, [code]);
+
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-gray-50">
+      <div className="text-center">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600 mx-auto mb-4"></div>
+        <h2 className="text-xl font-semibold text-gray-900">Redirecting...</h2>
+        <p className="text-gray-500">{code}</p>
+      </div>
+    </div>
+  );
+};
 
 type View = 'dashboard' | 'channels' | 'messages' | 'approvals' | 'users' | 'ai' | 'monitoring' | 'forms' | 'events' | 'shortlinks';
 type BreadcrumbItem = { label: string; view?: View };
