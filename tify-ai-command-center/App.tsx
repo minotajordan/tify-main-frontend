@@ -13,7 +13,8 @@ import {
   RadioTower,
   FileText,
   Ticket,
-  Globe
+  Globe,
+  QrCode
 } from 'lucide-react';
 import { DEFAULT_AVATAR, DEFAULT_ORG_NAME } from './constants';
 import { useI18n } from './i18n';
@@ -28,11 +29,12 @@ import AIChat from './components/AIChat';
 import UsersModule from './components/Users.tsx';
 import MonitoringDashboard from './components/monitoring/MonitoringDashboard';
 import FormsManager from './components/FormsManager';
+import ShortLinkManager from './components/ShortLinkManager';
 import PublicFormViewer from './components/forms/PublicFormViewer';
 import PublicTicketPurchase from './components/events/PublicTicketPurchase';
 import GuestRSVP from './components/events/GuestRSVP';
 
-type View = 'dashboard' | 'channels' | 'messages' | 'approvals' | 'users' | 'ai' | 'monitoring' | 'forms' | 'events';
+type View = 'dashboard' | 'channels' | 'messages' | 'approvals' | 'users' | 'ai' | 'monitoring' | 'forms' | 'events' | 'shortlinks';
 type BreadcrumbItem = { label: string; view?: View };
 
 const App: React.FC = () => {
@@ -107,6 +109,7 @@ const App: React.FC = () => {
       case 'users': return <UsersModule />;
       case 'forms': return <FormsManager />;
       case 'events': return <EventManager />;
+      case 'shortlinks': return <ShortLinkManager />;
       case 'ai': return <AIChat onNavigateToForms={() => setCurrentView('forms')} />;
       case 'monitoring': return <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100"><h3 className="text-lg font-semibold text-gray-900 mb-4">{t('nav.monitoring')}</h3><div className="mt-2"><MonitoringDashboard /></div></div>;
       default: return <div className="p-8 text-center text-gray-500">{t('module.underConstruction')}</div>;
@@ -236,6 +239,7 @@ const App: React.FC = () => {
           <NavItem view="events" icon={Ticket} label={t('nav.events')} />
           <NavItem view="approvals" icon={CheckCircle} label={t('nav.approvals')} count={currentUser?.pendingApprovalsCount} />
           <NavItem view="users" icon={Users} label={t('nav.users')} />
+          <NavItem view="shortlinks" icon={QrCode} label={t('nav.shortlinks')} />
           
           <div className="pt-6 pb-2 px-4">
             <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">{t('nav.intelligence')}</p>

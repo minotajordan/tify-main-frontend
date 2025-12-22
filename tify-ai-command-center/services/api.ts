@@ -46,8 +46,8 @@ export const API_BASE = (() => {
   ) {
     return (process as any).env.TIFY_API_BASE;
   }
-  return 'https://tify-main-backend.vercel.app/api';
-  // return 'http://localhost:3333/api';
+  // return 'https://tify-main-backend.vercel.app/api';
+  return 'http://localhost:3333/api';
 })();
 export function getAuthToken(): string | null {
   return typeof localStorage !== 'undefined' ? localStorage.getItem('tify_token') : null;
@@ -759,6 +759,25 @@ export const api = {
     return request<{ success: boolean; guest: any }>(`${API_BASE}/events/guests/${id}`, {
       method: 'PUT',
       body: JSON.stringify(data)
+    });
+  },
+
+  // --- SHORTLINKS API ---
+  getShortLinks: async (): Promise<any[]> => {
+    return request<any[]>(`${API_BASE}/shortlinks`);
+  },
+
+  createShortLink: async (data: any): Promise<any> => {
+    return request<any>(`${API_BASE}/shortlinks`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+      headers: { 'Content-Type': 'application/json' },
+    });
+  },
+
+  deleteShortLink: async (id: string): Promise<void> => {
+    return request<void>(`${API_BASE}/shortlinks/${id}`, {
+      method: 'DELETE',
     });
   },
 };
