@@ -580,9 +580,9 @@ export default function SeatDesigner({ event, onUpdate, onSaveStart }: SeatDesig
   const selectedZone = zones.find((z) => z.id === selectedZoneId);
 
   return (
-    <div className="flex h-full border-t border-gray-200">
+    <div className="flex flex-col lg:flex-row h-full border-t border-gray-200">
       {/* Sidebar Controls */}
-      <div className="w-80 bg-white border-r border-gray-200 p-4 flex flex-col overflow-y-auto shrink-0">
+      <div className="w-full lg:w-80 bg-white border-b lg:border-b-0 lg:border-r border-gray-200 p-4 flex flex-col overflow-y-auto shrink-0 max-h-[40vh] lg:max-h-full">
         <div className="mb-6">
           <h3 className="font-bold text-gray-900 mb-2">Herramientas</h3>
           <div className="grid grid-cols-2 gap-2">
@@ -944,30 +944,34 @@ export default function SeatDesigner({ event, onUpdate, onSaveStart }: SeatDesig
           </button>
         </div>
 
-        <div className="absolute top-4 right-4 z-10 bg-white p-2 rounded-lg shadow-sm border border-gray-200 flex gap-2">
+        <div className="absolute top-4 right-4 z-10 bg-white p-2 rounded-lg shadow-sm border border-gray-200 flex gap-2 flex-wrap justify-end max-w-[200px] md:max-w-none">
           <button
             onClick={() => setMode('layout')}
             className={`flex items-center gap-2 px-3 py-1.5 rounded text-xs font-medium transition-colors ${mode === 'layout' ? 'bg-indigo-100 text-indigo-700' : 'hover:bg-gray-50 text-gray-600'}`}
+            title="Mover Zonas"
           >
-            <Move size={14} /> Mover Zonas
+            <Move size={14} /> <span className="hidden md:inline">Mover Zonas</span>
           </button>
           <button
             onClick={() => setMode('select')}
             className={`flex items-center gap-2 px-3 py-1.5 rounded text-xs font-medium transition-colors ${mode === 'select' ? 'bg-indigo-100 text-indigo-700' : 'hover:bg-gray-50 text-gray-600'}`}
+            title="Editar Estado"
           >
-            <MousePointer2 size={14} /> Editar Estado
+            <MousePointer2 size={14} /> <span className="hidden md:inline">Editar Estado</span>
           </button>
           <button
             onClick={() => setMode('type')}
             className={`flex items-center gap-2 px-3 py-1.5 rounded text-xs font-medium transition-colors ${mode === 'type' ? 'bg-indigo-100 text-indigo-700' : 'hover:bg-gray-50 text-gray-600'}`}
+            title="Tipos de Silla"
           >
-            <Armchair size={14} /> Tipos de Silla
+            <Armchair size={14} /> <span className="hidden md:inline">Tipos de Silla</span>
           </button>
           <button
             onClick={() => setMode('individual')}
             className={`flex items-center gap-2 px-3 py-1.5 rounded text-xs font-medium transition-colors ${mode === 'individual' ? 'bg-indigo-100 text-indigo-700' : 'hover:bg-gray-50 text-gray-600'}`}
+            title="Silla Individual"
           >
-            <MousePointer2 size={14} /> Silla Individual
+            <MousePointer2 size={14} /> <span className="hidden md:inline">Silla Individual</span>
           </button>
         </div>
 

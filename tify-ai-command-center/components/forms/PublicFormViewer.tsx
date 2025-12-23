@@ -389,10 +389,10 @@ const PublicFormViewer: React.FC<{ slug: string }> = ({ slug }) => {
 
   if (loading)
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center bg-gray-50 p-4 animate-pulse">
+      <div className="min-h-screen flex flex-col items-center justify-center bg-gray-50 p-3 md:p-4 animate-pulse">
         <div className="w-full max-w-3xl bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-          <div className="h-48 bg-gray-200 w-full"></div>
-          <div className="p-8 space-y-6">
+          <div className="h-32 md:h-48 bg-gray-200 w-full"></div>
+          <div className="p-4 md:p-8 space-y-6">
             <div className="h-10 w-3/4 bg-gray-200 rounded"></div>
             <div className="h-4 w-1/2 bg-gray-200 rounded"></div>
             <div className="space-y-6 pt-6">
@@ -578,16 +578,16 @@ const PublicFormViewer: React.FC<{ slug: string }> = ({ slug }) => {
         />
       )}
 
-      <main className="flex-1 max-w-3xl w-full mx-auto p-4 md:p-8">
+      <main className="flex-1 max-w-3xl w-full mx-auto p-3 md:p-8">
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-          <div className="bg-indigo-600 px-8 py-6 text-white">
-            <h1 className="text-3xl font-bold">{form.title}</h1>
+          <div className="bg-indigo-600 px-6 py-6 md:px-8 text-white">
+            <h1 className="text-2xl md:text-3xl font-bold">{form.title}</h1>
             {form.description && (
-              <p className="mt-2 text-indigo-100 opacity-90">{form.description}</p>
+              <p className="mt-2 text-indigo-100 opacity-90 text-sm md:text-base">{form.description}</p>
             )}
           </div>
 
-          <form onSubmit={handleSubmit} className="p-8 space-y-6">
+          <form onSubmit={handleSubmit} className="p-5 md:p-8 space-y-6">
             {form.isWizard ? (
               <div className="space-y-6">
                 <div className="w-full bg-gray-200 rounded-full h-2.5">

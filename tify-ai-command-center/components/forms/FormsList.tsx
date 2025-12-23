@@ -298,15 +298,15 @@ const FormsList: React.FC<{
 
   return (
     <div className="h-full flex flex-col bg-white">
-      <div className="border-b border-gray-200 px-6 py-4 flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white sticky top-0 z-10">
+      <div className="border-b border-gray-200 px-4 py-4 flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white sticky top-0 z-10">
         <div>
           <h2 className="text-xl font-semibold text-gray-900">{t('forms.manager.title')}</h2>
           <p className="text-sm text-gray-500 hidden sm:block">{t('forms.manager.subtitle')}</p>
         </div>
 
-        <div className="flex items-center gap-3 flex-1 md:justify-end">
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 flex-1 md:justify-end">
           {/* Search Bar */}
-          <div className="relative w-full md:w-64">
+          <div className="relative w-full sm:w-64">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
             <input
               type="text"
@@ -317,20 +317,24 @@ const FormsList: React.FC<{
             />
           </div>
 
-          <button
-            onClick={() => setShowAIChat(true)}
-            className="flex items-center gap-2 bg-gradient-to-r from-purple-600 to-indigo-600 text-white px-4 py-2 rounded-lg hover:from-purple-700 hover:to-indigo-700 transition-colors shadow-sm whitespace-nowrap"
-            title="Crear con IA"
-          >
-            <Sparkles size={18} />
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setShowAIChat(true)}
+              className="flex-1 sm:flex-none flex items-center justify-center gap-2 bg-gradient-to-r from-purple-600 to-indigo-600 text-white px-4 py-2 rounded-lg hover:from-purple-700 hover:to-indigo-700 transition-colors shadow-sm whitespace-nowrap"
+              title="Crear con IA"
+            >
+              <Sparkles size={18} />
+              <span className="sm:hidden">Crear con IA</span>
+            </button>
 
-          <button
-            onClick={() => onEdit('new')}
-            className="flex items-center gap-2 bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700 transition-colors shadow-sm whitespace-nowrap"
-          >
-            <Plus size={18} />
-          </button>
+            <button
+              onClick={() => onEdit('new')}
+              className="flex-1 sm:flex-none flex items-center justify-center gap-2 bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700 transition-colors shadow-sm whitespace-nowrap"
+            >
+              <Plus size={18} />
+              <span className="sm:hidden">Nuevo</span>
+            </button>
+          </div>
         </div>
       </div>
 

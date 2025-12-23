@@ -176,13 +176,13 @@ export default function GuestRSVP({ eventId }: { eventId: string }) {
     : 'bg-pink-600 hover:bg-pink-700';
 
   return (
-    <div className="min-h-screen bg-gray-100 py-12 px-4 sm:px-6 lg:px-8 flex items-center justify-center">
+    <div className="min-h-screen bg-gray-100 py-6 px-4 sm:px-6 lg:px-8 flex items-center justify-center">
       <div className="max-w-xl w-full space-y-8">
         {/* Card Container */}
         <div className="bg-white rounded-3xl shadow-xl overflow-hidden transform transition-all hover:scale-[1.01] duration-300">
           {/* Header Image/Pattern */}
           <div
-            className={`h-48 ${headerBg} relative flex items-center justify-center overflow-hidden`}
+            className={`h-32 md:h-48 ${headerBg} relative flex items-center justify-center overflow-hidden`}
           >
             <div className="absolute inset-0 opacity-20">
               {/* Abstract pattern circles */}
@@ -192,32 +192,32 @@ export default function GuestRSVP({ eventId }: { eventId: string }) {
 
             <div className="relative z-10 text-center px-4">
               {isFestive ? (
-                <PartyPopper className="w-16 h-16 text-white mx-auto mb-2 animate-bounce" />
+                <PartyPopper className="w-12 h-12 md:w-16 md:h-16 text-white mx-auto mb-2 animate-bounce" />
               ) : (
-                <Gift className="w-16 h-16 text-white mx-auto mb-2" />
+                <Gift className="w-12 h-12 md:w-16 md:h-16 text-white mx-auto mb-2" />
               )}
-              <h1 className="text-3xl font-bold text-white tracking-tight drop-shadow-md">
+              <h1 className="text-2xl md:text-3xl font-bold text-white tracking-tight drop-shadow-md">
                 {isFestive ? '¡ESTÁS INVITADO!' : 'Invitación Especial'}
               </h1>
             </div>
           </div>
 
           {/* Content */}
-          <div className="p-8">
-            <div className="text-center mb-8">
-              <h2 className={`text-2xl font-bold ${textColor} mb-2`}>{event.title}</h2>
-              <p className="text-gray-500 italic">{event.description}</p>
+          <div className="p-4 md:p-8">
+            <div className="text-center mb-6 md:mb-8">
+              <h2 className={`text-xl md:text-2xl font-bold ${textColor} mb-2`}>{event.title}</h2>
+              <p className="text-sm md:text-base text-gray-500 italic">{event.description}</p>
             </div>
 
             {/* Event Details */}
-            <div className="space-y-4 mb-8 bg-gray-50 p-6 rounded-2xl border border-gray-100">
+            <div className="space-y-4 mb-8 bg-gray-50 p-4 md:p-6 rounded-2xl border border-gray-100 text-sm md:text-base">
               <div className="flex items-center gap-3 text-gray-700">
-                <Calendar className={`w-5 h-5 ${accentColor}`} />
+                <Calendar className={`w-5 h-5 flex-shrink-0 ${accentColor}`} />
                 <span className="font-medium">
                   {new Date(event.startDate).toLocaleDateString()}
                 </span>
                 <span className="text-gray-400">|</span>
-                <Clock className={`w-5 h-5 ${accentColor}`} />
+                <Clock className={`w-5 h-5 flex-shrink-0 ${accentColor}`} />
                 <span>
                   {new Date(event.startDate).toLocaleTimeString([], {
                     hour: '2-digit',
@@ -226,18 +226,18 @@ export default function GuestRSVP({ eventId }: { eventId: string }) {
                 </span>
               </div>
 
-              <div className="flex items-center gap-3 text-gray-700">
-                <MapPin className={`w-5 h-5 ${accentColor}`} />
+              <div className="flex items-start gap-3 text-gray-700">
+                <MapPin className={`w-5 h-5 flex-shrink-0 mt-0.5 ${accentColor}`} />
                 <span>{event.location}</span>
               </div>
 
               {guest && (
                 <div className="flex items-center gap-3 text-gray-700 border-t border-gray-200 pt-3 mt-3">
-                  <User className={`w-5 h-5 ${accentColor}`} />
+                  <User className={`w-5 h-5 flex-shrink-0 ${accentColor}`} />
                   <span>
                     Hola, <strong>{guest.name}</strong>
                   </span>
-                  <span className="text-xs bg-gray-200 px-2 py-1 rounded-full">
+                  <span className="text-xs bg-gray-200 px-2 py-1 rounded-full flex-shrink-0">
                     {guest.quota} cupos
                   </span>
                 </div>

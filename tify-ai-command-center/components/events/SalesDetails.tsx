@@ -99,68 +99,28 @@ export default function SalesDetails({ eventId }: SalesDetailsProps) {
           </div>
         </div>
 
-        {/* Table */}
-        <div className="flex-1 overflow-auto">
-          <table className="w-full text-left border-collapse">
-            <thead className="bg-gray-50 sticky top-0 z-10 shadow-sm">
-              <tr>
-                <th className="px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider bg-gray-50">
-                  ID Ticket
-                </th>
-                <th className="px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider bg-gray-50">
-                  Comprador
-                </th>
-                <th className="px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider bg-gray-50">
-                  Ubicación
-                </th>
-                <th className="px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider bg-gray-50">
-                  Estado
-                </th>
-                <th className="px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider bg-gray-50">
-                  Fecha Compra
-                </th>
-                <th className="px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider bg-gray-50">
-                  Check-in
-                </th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-200 bg-white">
-              {loading ? (
-                <tr>
-                  <td colSpan={6} className="px-6 py-12 text-center text-gray-500">
-                    Cargando ventas...
-                  </td>
-                </tr>
-              ) : filteredTickets.length === 0 ? (
-                <tr>
-                  <td colSpan={6} className="px-6 py-12 text-center text-gray-500">
-                    No se encontraron tickets.
-                  </td>
-                </tr>
-              ) : (
-                filteredTickets.map((ticket) => (
-                  <tr key={ticket.id} className="hover:bg-gray-50 transition-colors">
-                    <td
-                      className="px-6 py-4 text-sm font-mono text-gray-500 truncate max-w-[120px]"
-                      title={ticket.id}
-                    >
-                      {ticket.id.substring(0, 8)}...
-                    </td>
-                    <td className="px-6 py-4">
-                      <div className="text-sm font-medium text-gray-900">{ticket.customerName}</div>
-                      <div className="text-sm text-gray-500">{ticket.customerEmail}</div>
-                    </td>
-                    <td className="px-6 py-4 text-sm text-gray-700">
-                      <div>{ticket.zone?.name || 'General'}</div>
-                      {ticket.seat && (
-                        <div className="text-xs text-gray-500">
-                          Fila {ticket.seat.rowLabel}, Asiento {ticket.seat.colLabel}
-                        </div>
-                      )}
-                    </td>
-                    <td className="px-6 py-4">
+        {/* Content */}
+        <div className="flex-1 overflow-auto bg-gray-50 md:bg-white">
+          {loading ? (
+            <div className="p-12 text-center text-gray-500">Cargando ventas...</div>
+          ) : filteredTickets.length === 0 ? (
+            <div className="p-12 text-center text-gray-500">No se encontraron tickets.</div>
+          ) : (
+            <>
+              {/* Mobile Card View */}
+              <div className="block md:hidden p-4 space-y-3">
+                {filteredTickets.map((ticket) => (
+                  <div
+                    key={ticket.id}
+                    className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm space-y-3"
+                  >
+                    <div className="flex justify-between items-start">
+                      <div>
+                        <div className="text-sm font-bold text-gray-900">{ticket.customerName}</div>
+                        <div className="text-xs text-gray-500">{ticket.customerEmail}</div>
+                      </div>
                       <span
-                        className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium
+                        className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider
                         ${
                           ticket.status === 'VALID'
                             ? 'bg-green-100 text-green-800'
@@ -176,28 +136,127 @@ export default function SalesDetails({ eventId }: SalesDetailsProps) {
                         {ticket.status === 'REFUNDED' && 'Reembolsado'}
                         {ticket.status === 'CANCELLED' && 'Cancelado'}
                       </span>
-                    </td>
-                    <td className="px-6 py-4 text-sm text-gray-500">
-                      {dayjs(ticket.purchaseDate).format('DD MMM YYYY HH:mm')}
-                    </td>
-                    <td className="px-6 py-4 text-sm text-gray-500">
-                      {ticket.checkInTime ? (
-                        <div className="flex items-center gap-1 text-green-600">
-                          <CheckCircle size={14} />
-                          {dayjs(ticket.checkInTime).format('HH:mm:ss')}
-                        </div>
-                      ) : (
-                        <div className="flex items-center gap-1 text-gray-400">
-                          <Clock size={14} />
-                          Pendiente
-                        </div>
-                      )}
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2 text-xs text-gray-600 bg-gray-50 p-2 rounded-lg">
+                      <div>
+                        <span className="block text-gray-400 text-[10px] uppercase">ID Ticket</span>
+                        <span className="font-mono">{ticket.id.substring(0, 8)}...</span>
+                      </div>
+                      <div>
+                        <span className="block text-gray-400 text-[10px] uppercase">Fecha</span>
+                        {dayjs(ticket.purchaseDate).format('DD MMM HH:mm')}
+                      </div>
+                      <div>
+                        <span className="block text-gray-400 text-[10px] uppercase">Zona</span>
+                        {ticket.zone?.name || 'General'}
+                      </div>
+                      <div>
+                        <span className="block text-gray-400 text-[10px] uppercase">Asiento</span>
+                        {ticket.seat
+                          ? `Fila ${ticket.seat.rowLabel}, ${ticket.seat.colLabel}`
+                          : '—'}
+                      </div>
+                    </div>
+
+                    {ticket.checkInTime && (
+                      <div className="flex items-center gap-1.5 text-xs text-green-700 font-medium bg-green-50 p-2 rounded-lg border border-green-100">
+                        <CheckCircle size={14} />
+                        Check-in: {dayjs(ticket.checkInTime).format('HH:mm:ss')}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+
+              {/* Desktop Table View */}
+              <div className="hidden md:block">
+                <table className="w-full text-left border-collapse">
+                  <thead className="bg-gray-50 sticky top-0 z-10 shadow-sm">
+                    <tr>
+                      <th className="px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider bg-gray-50">
+                        ID Ticket
+                      </th>
+                      <th className="px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider bg-gray-50">
+                        Comprador
+                      </th>
+                      <th className="px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider bg-gray-50">
+                        Ubicación
+                      </th>
+                      <th className="px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider bg-gray-50">
+                        Estado
+                      </th>
+                      <th className="px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider bg-gray-50">
+                        Fecha Compra
+                      </th>
+                      <th className="px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider bg-gray-50">
+                        Check-in
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-200 bg-white">
+                    {filteredTickets.map((ticket) => (
+                      <tr key={ticket.id} className="hover:bg-gray-50 transition-colors">
+                        <td
+                          className="px-6 py-4 text-sm font-mono text-gray-500 truncate max-w-[120px]"
+                          title={ticket.id}
+                        >
+                          {ticket.id.substring(0, 8)}...
+                        </td>
+                        <td className="px-6 py-4">
+                          <div className="text-sm font-medium text-gray-900">{ticket.customerName}</div>
+                          <div className="text-sm text-gray-500">{ticket.customerEmail}</div>
+                        </td>
+                        <td className="px-6 py-4 text-sm text-gray-700">
+                          <div>{ticket.zone?.name || 'General'}</div>
+                          {ticket.seat && (
+                            <div className="text-xs text-gray-500">
+                              Fila {ticket.seat.rowLabel}, Asiento {ticket.seat.colLabel}
+                            </div>
+                          )}
+                        </td>
+                        <td className="px-6 py-4">
+                          <span
+                            className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium
+                            ${
+                              ticket.status === 'VALID'
+                                ? 'bg-green-100 text-green-800'
+                                : ticket.status === 'USED'
+                                  ? 'bg-blue-100 text-blue-800'
+                                  : ticket.status === 'REFUNDED'
+                                    ? 'bg-yellow-100 text-yellow-800'
+                                    : 'bg-red-100 text-red-800'
+                            }`}
+                          >
+                            {ticket.status === 'VALID' && 'Válido'}
+                            {ticket.status === 'USED' && 'Ingresado'}
+                            {ticket.status === 'REFUNDED' && 'Reembolsado'}
+                            {ticket.status === 'CANCELLED' && 'Cancelado'}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4 text-sm text-gray-500">
+                          {dayjs(ticket.purchaseDate).format('DD MMM YYYY HH:mm')}
+                        </td>
+                        <td className="px-6 py-4 text-sm text-gray-500">
+                          {ticket.checkInTime ? (
+                            <div className="flex items-center gap-1 text-green-600">
+                              <CheckCircle size={14} />
+                              {dayjs(ticket.checkInTime).format('HH:mm:ss')}
+                            </div>
+                          ) : (
+                            <div className="flex items-center gap-1 text-gray-400">
+                              <Clock size={14} />
+                              Pendiente
+                            </div>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </>
+          )}
         </div>
       </div>
     </div>

@@ -1,11 +1,10 @@
 // /Users/minotajordan/WebstormProjects/tify/tify-ai-command-center/components/Users.tsx
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { api, API_BASE } from '../services/api';
 import { User, Message } from '../types';
 import { DEFAULT_AVATAR } from '../constants';
 import {
   Search,
-  Loader2,
   RefreshCw,
   User as UserIcon,
   ShieldCheck,
@@ -20,7 +19,6 @@ import {
   Copy,
   Key,
   UserCheck,
-  SlidersHorizontal,
   Ban,
   Trash2,
 } from 'lucide-react';
@@ -264,7 +262,7 @@ const UsersModule: React.FC<{ currentUser: User | null }> = ({ currentUser }) =>
     const regex =
       /"(\\.|[^"\\])*"|\b(true|false|null)\b|-?\d+(?:\.\d+)?(?:[eE][+\-]?\d+)?|[{}\[\],:]/g;
     let lastIndex = 0;
-    let m;
+    let m: RegExpExecArray | null;
     while ((m = regex.exec(s)) !== null) {
       if (m.index > lastIndex)
         parts.push(
@@ -303,7 +301,7 @@ const UsersModule: React.FC<{ currentUser: User | null }> = ({ currentUser }) =>
       txt = typeof value === 'string' ? value : JSON.stringify(value || null);
     }
     if (txt.length > 300) txt = txt.slice(0, 300) + '…';
-    return <span className="font-mono text-[11px]">{colorizeJsonString(txt)}</span>;
+    return <span className="font-mono text-xs">{colorizeJsonString(txt)}</span>;
   };
 
   const [requestLog, setRequestLog] = useState<
@@ -417,16 +415,7 @@ const UsersModule: React.FC<{ currentUser: User | null }> = ({ currentUser }) =>
     };
   }, [usersPage, usersPages, usersLoadingMore, query, usersLimit]);
 
-  const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    if (!q) return users;
-    return users.filter(
-      (u) =>
-        (u.fullName || '').toLowerCase().includes(q) ||
-        (u.username || '').toLowerCase().includes(q) ||
-        (u.email || '').toLowerCase().includes(q)
-    );
-  }, [users, query]);
+  // Removed unused filtered memo
 
   const loadDetail = async (user: User | null, hours?: number) => {
     if (!user) return;
@@ -504,54 +493,58 @@ const UsersModule: React.FC<{ currentUser: User | null }> = ({ currentUser }) =>
   }
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-12 gap-6 h-screen  p-4 md:p-8">
+    <div className="grid grid-cols-1 md:grid-cols-12 gap-4 md:gap-6 h-[calc(100vh-64px)] md:h-screen p-2 md:p-8">
       {!selected && (
         <aside
-          className={`md:col-span-12 bg-white border border-gray-200 rounded-xl p-4 flex flex-col h-screen transition-all duration-300`}
+          className={`md:col-span-12 bg-white border border-gray-200 rounded-xl p-3 md:p-4 flex flex-col h-full transition-all duration-300 shadow-sm`}
         >
           {leftCollapsed ? (
             <div className="flex items-center justify-center mb-3">
               <button
                 onClick={() => setLeftCollapsed(false)}
-                className="px-2 py-1 border rounded flex items-center gap-1 text-xs"
+                className="p-2 border rounded-lg flex items-center gap-1 text-xs hover:bg-gray-50 active:scale-95 transition-transform"
                 title="Mostrar usuarios"
                 aria-label="Mostrar usuarios"
               >
-                <ChevronRight size={14} />
+                <ChevronRight size={16} />
               </button>
             </div>
           ) : (
             <>
               <div className="flex items-center justify-between mb-3">
-                <div className="text-sm font-semibold">Usuarios</div>
+                <div className="text-base font-semibold text-gray-800">Usuarios</div>
                 <button
                   onClick={() => setLeftCollapsed(true)}
-                  className="px-2 py-1 border rounded flex items-center gap-1 text-xs"
+                  className="p-2 border rounded-lg flex items-center gap-1 text-xs hover:bg-gray-50 active:scale-95 transition-transform"
                   title="Ocultar usuarios"
                   aria-label="Ocultar usuarios"
                 >
-                  <ChevronLeft size={14} />
+                  <ChevronLeft size={16} />
                 </button>
               </div>
               <div className="flex items-center gap-2 mb-3">
-                <Search size={16} className="text-gray-400" />
-                <input
-                  value={query}
-                  onChange={(e) => setQuery(e.target.value)}
-                  placeholder={t('users.searchPlaceholder')}
-                  className="flex-1 px-3 py-2 border rounded-md text-sm"
-                />
-                <button onClick={() => setQuery('')} className="text-xs text-gray-500">
-                  {t('users.clear')}
-                </button>
+                <div className="relative flex-1">
+                  <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                  <input
+                    value={query}
+                    onChange={(e) => setQuery(e.target.value)}
+                    placeholder={t('users.searchPlaceholder')}
+                    className="w-full pl-9 pr-3 py-2.5 border rounded-lg text-sm bg-gray-50 focus:bg-white focus:ring-2 focus:ring-indigo-500/20 transition-all"
+                  />
+                </div>
+                {query && (
+                  <button onClick={() => setQuery('')} className="p-2 text-gray-500 hover:bg-gray-100 rounded-lg">
+                    <Trash2 size={16} />
+                  </button>
+                )}
               </div>
 
-              <div className="mb-4 p-3 border rounded-lg">
+              <div className="mb-4 p-3 border rounded-lg bg-gray-50/50">
                 <div className="flex items-center justify-between">
-                  <div className="text-sm font-semibold">{t('users.createUser')}</div>
+                  <div className="text-sm font-semibold text-gray-700">{t('users.createUser')}</div>
                   <button
                     onClick={() => setShowCreateModal(true)}
-                    className="px-3 py-2 bg-indigo-600 text-white rounded text-xs"
+                    className="px-4 py-2 bg-indigo-600 text-white rounded-lg text-xs font-medium hover:bg-indigo-700 active:scale-95 transition-all shadow-sm"
                   >
                     {t('users.create')}
                   </button>
@@ -559,23 +552,23 @@ const UsersModule: React.FC<{ currentUser: User | null }> = ({ currentUser }) =>
               </div>
 
               {loadingUsers ? (
-                <div className="animate-pulse space-y-2">
+                <div className="animate-pulse space-y-3">
                   {Array.from({ length: 8 }).map((_, i) => (
                     <div
                       key={i}
                       className="w-full flex items-center gap-3 p-3 rounded-lg border border-gray-200"
                     >
-                      <div className="w-8 h-8 rounded-full bg-gray-200" />
+                      <div className="w-10 h-10 rounded-full bg-gray-200" />
                       <div className="flex-1 space-y-2">
-                        <div className="h-4 w-40 bg-gray-200 rounded" />
-                        <div className="h-3 w-24 bg-gray-200 rounded" />
+                        <div className="h-4 w-32 bg-gray-200 rounded" />
+                        <div className="h-3 w-20 bg-gray-200 rounded" />
                       </div>
-                      <div className="h-4 w-10 bg-gray-200 rounded" />
+                      <div className="h-4 w-8 bg-gray-200 rounded" />
                     </div>
                   ))}
                 </div>
               ) : (
-                <div className="overflow-y-auto flex-1 space-y-2">
+                <div className="overflow-y-auto flex-1 space-y-2 pr-1 custom-scrollbar">
                   {users.map((u) => (
                     <button
                       key={u.id}
@@ -583,7 +576,11 @@ const UsersModule: React.FC<{ currentUser: User | null }> = ({ currentUser }) =>
                         setSelected(u);
                         setLeftCollapsed(true);
                       }}
-                      className={`w-full flex items-center gap-3 p-3 rounded-lg border text-left ${selected?.id === u.id ? 'border-indigo-500 bg-indigo-50' : 'border-gray-200 hover:bg-gray-50'}`}
+                      className={`w-full flex items-center gap-3 p-3 rounded-xl border text-left transition-all duration-200 ${
+                        selected?.id === u.id
+                          ? 'border-indigo-500 bg-indigo-50 shadow-sm ring-1 ring-indigo-500/20'
+                          : 'border-gray-200 hover:bg-gray-50 hover:border-gray-300'
+                      }`}
                     >
                       <img
                         src={u.avatarUrl || DEFAULT_AVATAR}
@@ -620,75 +617,80 @@ const UsersModule: React.FC<{ currentUser: User | null }> = ({ currentUser }) =>
 
       {selected && (
         <section
-          className={`md:col-span-12 bg-white border border-gray-200 rounded-xl p-4 transition-all duration-300`}
+          className={`md:col-span-12 bg-white border border-gray-200 rounded-xl p-0 md:p-4 transition-all duration-300 flex flex-col h-full overflow-hidden shadow-sm`}
         >
           {!selected ? (
-            <div className="flex items-center justify-center h-48 text-gray-500">
-              <UserIcon size={18} className="mr-2" />
-              <span className="text-sm">{t('users.selectUser')}</span>
+            <div className="flex flex-col items-center justify-center h-full text-gray-400 gap-3 p-8">
+              <div className="w-16 h-16 rounded-full bg-gray-50 flex items-center justify-center">
+                <UserIcon size={32} className="opacity-50" />
+              </div>
+              <span className="text-sm font-medium">{t('users.selectUser')}</span>
             </div>
           ) : (
             <>
-              <div className="flex items-center justify-between border-b pb-4 mb-4">
+              <div className="flex flex-col md:flex-row md:items-center justify-between border-b p-4 gap-4">
                 <div className="flex items-center gap-4">
                   <img
                     src={selected.avatarUrl || DEFAULT_AVATAR}
                     alt={selected.fullName}
-                    className="w-12 h-12 rounded-full border border-gray-200"
+                    className="w-14 h-14 md:w-16 md:h-16 rounded-full border-2 border-white shadow-sm"
                   />
-                  <div className="min-w-0">
-                    <div className="flex items-center gap-2">
-                      <h2 className="text-xl font-semibold truncate max-w-[32rem]">
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <h2 className="text-lg md:text-xl font-bold text-gray-900 truncate max-w-[200px] md:max-w-md">
                         {selected.fullName || selected.username}
                       </h2>
                       {selected.isAdmin && (
-                        <span className="text-xs px-2 py-0.5 bg-indigo-100 text-indigo-700 rounded whitespace-nowrap">
-                          Admin
+                        <span className="text-[10px] px-2 py-0.5 bg-indigo-100 text-indigo-700 rounded-full font-medium border border-indigo-200">
+                          ADMIN
                         </span>
                       )}
-                      <span className="text-xs text-gray-400 whitespace-nowrap">
-                        · {formatAgo(selected.createdAt)}
-                      </span>
                     </div>
-                    <div className="flex items-center gap-1 text-xs text-gray-500 mt-1">
+                    <div className="flex items-center gap-2 text-xs text-gray-500 mt-1">
                       <Mail size={12} />
-                      <span className="truncate max-w-[32rem]">{selected.email}</span>
+                      <span className="truncate max-w-[200px] md:max-w-md">{selected.email}</span>
+                    </div>
+                    <div className="flex items-center gap-2 text-[10px] text-gray-400 mt-1">
+                      <span>Registrado {formatAgo(selected.createdAt)}</span>
                     </div>
                   </div>
                 </div>
-                <div className="ml-auto flex items-center gap-2 text-xs">
+                
+                <div className="flex flex-wrap items-center gap-2 text-xs w-full md:w-auto pt-2 md:pt-0 border-t md:border-t-0 border-gray-100">
                   <button
                     onClick={() => {
                       setSelected(null);
                       setLeftCollapsed(false);
                     }}
-                    className="px-2 py-1 border rounded flex items-center gap-1"
+                    className="px-3 py-1.5 border rounded-lg flex items-center gap-1.5 hover:bg-gray-50 active:bg-gray-100 text-gray-700 font-medium"
                     aria-label="Volver"
                   >
                     <ChevronLeft size={14} />
                     <span>Volver</span>
                   </button>
-                  <span className="px-2 py-0.5 border rounded">
-                    {windowRange === 'all' ? 'Hist' : windowRange === '7d' ? '7d' : windowRange}
-                  </span>
-                  <SlidersHorizontal size={14} className="text-gray-500" />
-                  <input
-                    type="range"
-                    min={0}
-                    max={4}
-                    value={rangeIndex}
-                    onChange={(e) => setRangeIndex(Number(e.target.value))}
-                    className="w-32"
-                  />
+                  
+                  <div className="flex items-center gap-2 bg-gray-50 p-1 rounded-lg border border-gray-200">
+                    <span className="px-2 py-0.5 bg-white border rounded text-[10px] shadow-sm font-medium">
+                      {windowRange === 'all' ? 'Hist' : windowRange === '7d' ? '7d' : windowRange}
+                    </span>
+                    <input
+                      type="range"
+                      min={0}
+                      max={4}
+                      value={rangeIndex}
+                      onChange={(e) => setRangeIndex(Number(e.target.value))}
+                      className="w-20 md:w-24 accent-indigo-600 cursor-pointer"
+                    />
+                  </div>
 
                   <button
                     onClick={onRefresh}
-                    className="px-2 py-1 border rounded flex items-center gap-1"
+                    className="px-3 py-1.5 border rounded-lg flex items-center gap-1.5 hover:bg-gray-50 active:bg-gray-100 text-gray-700 font-medium ml-auto md:ml-0"
                     title="Actualizar"
                     aria-label="Actualizar"
                   >
                     <RefreshCw size={14} />
-                    <span>Actualizar</span>
+                    <span className="hidden md:inline">Actualizar</span>
                   </button>
                 </div>
               </div>
@@ -847,10 +849,12 @@ const UsersModule: React.FC<{ currentUser: User | null }> = ({ currentUser }) =>
                 </div>
               </div>
 
-              <div className="mb-4 p-3 border rounded-lg flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <Phone size={14} className="text-gray-500" />
-                  <div className="text-sm font-medium">{selected.phoneNumber || 'Sin número'}</div>
+              <div className="mb-4 p-3 border rounded-lg flex flex-col md:flex-row md:items-center justify-between gap-3 md:gap-0">
+                <div className="flex items-center gap-3 w-full md:w-auto justify-between md:justify-start">
+                  <div className="flex items-center gap-3">
+                    <Phone size={14} className="text-gray-500" />
+                    <div className="text-sm font-medium">{selected.phoneNumber || 'Sin número'}</div>
+                  </div>
                   {selected.isPhoneVerified ? (
                     <span className="text-xs px-2 py-0.5 bg-green-100 text-green-700 rounded">
                       {t('users.verified')}
@@ -861,34 +865,38 @@ const UsersModule: React.FC<{ currentUser: User | null }> = ({ currentUser }) =>
                     </span>
                   )}
                 </div>
-                <div className="flex items-center gap-3">
-                  <Key size={14} className="text-gray-500" />
-                  <div className="text-sm font-mono">{selected.verificationCode || '—'}</div>
-                  {selected.verificationCodeExpiresAt && (
-                    <div className="text-xs text-gray-400">
-                      {t('users.expires')}{' '}
-                      {new Date(selected.verificationCodeExpiresAt as any).toLocaleTimeString()}
-                    </div>
-                  )}
-                  <button
-                    onClick={copyCode}
-                    disabled={!selected?.verificationCode}
-                    className={`px-2 py-1 border rounded flex items-center gap-1 text-xs ${!selected?.verificationCode ? 'opacity-50 cursor-not-allowed' : ''}`}
-                    title="Copiar código"
-                    aria-label="Copiar código"
-                  >
-                    <Copy size={14} />
-                    <span>Copiar</span>
-                  </button>
-                  <button
-                    onClick={generateCode}
-                    className="px-2 py-1 bg-indigo-600 text-white rounded flex items-center gap-1 text-xs"
-                    title="Generar código"
-                    aria-label="Generar código"
-                  >
-                    <Key size={14} />
-                    <span>Generar</span>
-                  </button>
+                <div className="flex items-center gap-3 w-full md:w-auto justify-between md:justify-end">
+                  <div className="flex items-center gap-3">
+                    <Key size={14} className="text-gray-500" />
+                    <div className="text-sm font-mono">{selected.verificationCode || '—'}</div>
+                    {selected.verificationCodeExpiresAt && (
+                      <div className="text-xs text-gray-400 hidden sm:block">
+                        {t('users.expires')}{' '}
+                        {new Date(selected.verificationCodeExpiresAt as any).toLocaleTimeString()}
+                      </div>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={copyCode}
+                      disabled={!selected?.verificationCode}
+                      className={`px-2 py-1 border rounded flex items-center gap-1 text-xs ${!selected?.verificationCode ? 'opacity-50 cursor-not-allowed' : ''}`}
+                      title="Copiar código"
+                      aria-label="Copiar código"
+                    >
+                      <Copy size={14} />
+                      <span className="hidden sm:inline">Copiar</span>
+                    </button>
+                    <button
+                      onClick={generateCode}
+                      className="px-2 py-1 bg-indigo-600 text-white rounded flex items-center gap-1 text-xs"
+                      title="Generar código"
+                      aria-label="Generar código"
+                    >
+                      <Key size={14} />
+                      <span className="hidden sm:inline">Generar</span>
+                    </button>
+                  </div>
                 </div>
               </div>
 
@@ -1002,8 +1010,8 @@ const UsersModule: React.FC<{ currentUser: User | null }> = ({ currentUser }) =>
                               alt={it.channel.title}
                               className="w-6 h-6 rounded border border-gray-200"
                             />
-                            <div className="flex-1">
-                              <div className="text-sm">{it.channel.title}</div>
+                            <div className="flex-1 min-w-0">
+                              <div className="text-sm truncate">{it.channel.title}</div>
                               <div className="text-[11px] text-gray-500">
                                 {it.channel.icon || 'icon'}
                               </div>
@@ -1080,15 +1088,18 @@ const UsersModule: React.FC<{ currentUser: User | null }> = ({ currentUser }) =>
                                 alt={s.channel.title}
                                 className="w-8 h-8 rounded border border-gray-200"
                               />
-                              <div className="flex-1">
-                                <div className="text-sm font-medium">{s.channel.title}</div>
+                              <div className="flex-1 min-w-0">
+                                <div className="text-sm font-medium truncate">{s.channel.title}</div>
                                 <div className="text-xs text-gray-500">
-                                  {s.channel.icon || 'icon'}
-                                </div>
-                                <div className="text-[11px] text-gray-500">
-                                  Sub ID: {s.id} · Channel ID: {s.channel.id} · Suscrito:{' '}
-                                  {new Date((s as any).subscribedAt).toLocaleString()}
-                                </div>
+                                {s.channel.icon || 'icon'}
+                              </div>
+                              <div className="text-xs text-gray-500 flex flex-col sm:block">
+                                <span className="truncate">Sub ID: {s.id}</span>
+                                <span className="hidden sm:inline"> · </span>
+                                <span className="truncate">Channel ID: {s.channel.id}</span>
+                                <span className="hidden sm:inline"> · </span>
+                                <span>Suscrito: {new Date((s as any).subscribedAt).toLocaleString()}</span>
+                              </div>
                               </div>
                             </div>
                           ))
@@ -1118,8 +1129,8 @@ const UsersModule: React.FC<{ currentUser: User | null }> = ({ currentUser }) =>
                               className="px-4 py-3 border-b last:border-b-0 flex items-center gap-3"
                             >
                               <ShieldCheck size={18} className="text-indigo-600" />
-                              <div className="flex-1">
-                                <div className="text-sm font-medium">{a.channel.title}</div>
+                              <div className="flex-1 min-w-0">
+                                <div className="text-sm font-medium truncate">{a.channel.title}</div>
                                 <div className="text-xs text-gray-500">
                                   {a.channel.icon || 'icon'}
                                   {a.channel.parentId ? ' · Subcanal' : ' · Canal'}
@@ -1151,17 +1162,17 @@ const UsersModule: React.FC<{ currentUser: User | null }> = ({ currentUser }) =>
                         ) : (
                           pending.map((m) => (
                             <div key={m.id} className="px-4 py-3 border-b last:border-b-0">
-                              <div className="flex items-center justify-between">
-                                <div className="flex items-center gap-2">
-                                  <ChevronRight size={14} className="text-gray-400" />
-                                  <div className="text-sm font-semibold">{m.channel?.title}</div>
+                              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 sm:gap-0">
+                                <div className="flex items-center gap-2 min-w-0">
+                                  <ChevronRight size={14} className="text-gray-400 flex-shrink-0" />
+                                  <div className="text-sm font-semibold truncate">{m.channel?.title}</div>
                                 </div>
-                                <div className="text-xs text-gray-500">
+                                <div className="text-xs text-gray-500 pl-6 sm:pl-0">
                                   {new Date(m.createdAt as any).toLocaleString()}
                                 </div>
                               </div>
-                              <div className="text-sm text-gray-700 mt-1">{m.content}</div>
-                              <div className="text-xs text-gray-500 mt-1">
+                              <div className="text-sm text-gray-700 mt-1 pl-6 sm:pl-0">{m.content}</div>
+                              <div className="text-xs text-gray-500 mt-1 pl-6 sm:pl-0">
                                 {t('approval.by')}: {m.sender?.fullName || m.sender?.username}
                               </div>
                             </div>
@@ -1192,23 +1203,46 @@ const UsersModule: React.FC<{ currentUser: User | null }> = ({ currentUser }) =>
                             Sin registros
                           </div>
                         ) : (
-                          auditLogs.map((l: any) => (
-                            <div key={l.id} className="px-4 py-3 border-b last:border-b-0">
-                              <div className="flex items-center justify-between">
-                                <div className="text-sm font-medium">{l.action}</div>
-                                <div
-                                  className="text-xs text-gray-500"
-                                  title={new Date(l.createdAt as any).toLocaleString()}
-                                >
-                                  {formatAgo(l.createdAt)}
+                          <>
+                            {/* Mobile Card View */}
+                            <div className="block md:hidden space-y-2 p-4">
+                              {auditLogs.map((l: any) => (
+                                <div key={l.id} className="bg-white border rounded-lg p-3 shadow-sm">
+                                  <div className="flex items-center justify-between mb-1">
+                                    <div className="text-sm font-medium text-gray-800">{l.action}</div>
+                                    <div className="text-xs text-gray-500">{formatAgo(l.createdAt)}</div>
+                                  </div>
+                                  <div className="text-xs text-gray-500 break-all">
+                                    <span className="font-medium text-gray-700">Actor:</span> {l.actorId}
+                                  </div>
+                                  <div className="text-xs text-gray-500 break-all">
+                                    <span className="font-medium text-gray-700">Target:</span> {l.targetUserId || l.targetChannelId || '—'}
+                                  </div>
                                 </div>
-                              </div>
-                              <div className="text-[11px] text-gray-500">
-                                Actor: {l.actorId} · Target:{' '}
-                                {l.targetUserId || l.targetChannelId || '—'}
-                              </div>
+                              ))}
                             </div>
-                          ))
+
+                            {/* Desktop Table View */}
+                            <div className="hidden md:block">
+                              {auditLogs.map((l: any) => (
+                                <div key={l.id} className="px-4 py-3 border-b last:border-b-0">
+                                  <div className="flex items-center justify-between">
+                                    <div className="text-sm font-medium">{l.action}</div>
+                                    <div
+                                      className="text-xs text-gray-500"
+                                      title={new Date(l.createdAt as any).toLocaleString()}
+                                    >
+                                      {formatAgo(l.createdAt)}
+                                    </div>
+                                  </div>
+                                  <div className="text-[11px] text-gray-500">
+                                    Actor: {l.actorId} · Target:{' '}
+                                    {l.targetUserId || l.targetChannelId || '—'}
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </>
                         )}
                       </div>
                     </div>
@@ -1233,8 +1267,63 @@ const UsersModule: React.FC<{ currentUser: User | null }> = ({ currentUser }) =>
                         </div>
                       </div>
                       <div className="max-h-[60vh] overflow-y-auto">
-                        <table className="min-w-full text-xs table-fixed">
-                          <thead>
+                        {/* Mobile Card View */}
+                        <div className="block md:hidden space-y-3 p-4">
+                          {requestLog.length === 0 ? (
+                            <div className="text-center text-xs text-gray-500 py-4">Sin actividad</div>
+                          ) : (
+                            requestLog.map((row, idx) => (
+                              <div key={idx} className="bg-white border rounded-lg p-3 shadow-sm space-y-2">
+                                <div className="flex items-center justify-between">
+                                  <span className={`px-2 py-0.5 rounded text-xs font-bold ${row.status >= 500 ? 'bg-red-100 text-red-700' : row.status >= 400 ? 'bg-yellow-100 text-yellow-700' : 'bg-green-100 text-green-700'}`}>
+                                    {row.status || 0}
+                                  </span>
+                                  <span className="text-xs text-gray-500">{formatElapsed(row.date)}</span>
+                                </div>
+                                <div className="font-mono text-xs break-all font-medium text-gray-800">
+                                  {row.endpoint}
+                                </div>
+                                <div className="grid grid-cols-2 gap-2 pt-2 border-t border-gray-100">
+                                  <button
+                                    onClick={async () => {
+                                      setJsonModalTitle('Payload');
+                                      try {
+                                        const full = await fetch(`${API_BASE}/streams/user-requests/${selected!.id}/events/${row.id}`).then((r) => r.json());
+                                        setJsonModalValue(full.payload);
+                                      } catch {
+                                        setJsonModalValue(row.payloadSnippet || '');
+                                      }
+                                      setJsonModalOpen(true);
+                                    }}
+                                    className="text-xs text-indigo-600 font-medium text-left"
+                                  >
+                                    Ver Payload
+                                  </button>
+                                  <button
+                                    onClick={async () => {
+                                      setJsonModalTitle('Response');
+                                      try {
+                                        const full = await fetch(`${API_BASE}/streams/user-requests/${selected!.id}/events/${row.id}`).then((r) => r.json());
+                                        setJsonModalValue(full.response);
+                                      } catch {
+                                        setJsonModalValue(row.responseSnippet || '');
+                                      }
+                                      setJsonModalOpen(true);
+                                    }}
+                                    className="text-xs text-indigo-600 font-medium text-right"
+                                  >
+                                    Ver Response
+                                  </button>
+                                </div>
+                              </div>
+                            ))
+                          )}
+                        </div>
+
+                        {/* Desktop Table View */}
+                        <div className="hidden md:block">
+                          <table className="min-w-full text-xs table-fixed">
+                            <thead>
                             <tr className="text-left text-gray-600 sticky top-0 bg-white/90 backdrop-blur border-b shadow-sm">
                               <th
                                 className="py-2 px-3 border-b relative select-none"
@@ -1382,6 +1471,7 @@ const UsersModule: React.FC<{ currentUser: User | null }> = ({ currentUser }) =>
                             )}
                           </tbody>
                         </table>
+                        </div>
                       </div>
                     </div>
                   )}
@@ -1487,16 +1577,17 @@ const UsersModule: React.FC<{ currentUser: User | null }> = ({ currentUser }) =>
           </div>
         </div>
       )}
-
       {requestsModalOpen && (
         <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center">
           <div className="bg-white w-full h-full rounded-none shadow-lg border border-gray-200 flex flex-col">
-            <div className="p-4 border-b border-gray-100 flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <h3 className="text-lg font-semibold text-gray-900">Actividad de peticiones</h3>
-                <span className="text-xs text-gray-500">{requestLog.length}</span>
+            <div className="p-4 border-b border-gray-100 flex flex-col md:flex-row items-center justify-between gap-3 md:gap-0">
+              <div className="flex items-center justify-between w-full md:w-auto gap-2">
+                <div className="flex items-center gap-2">
+                  <h3 className="text-lg font-semibold text-gray-900">Actividad de peticiones</h3>
+                  <span className="text-xs text-gray-500">{requestLog.length}</span>
+                </div>
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center justify-end w-full md:w-auto gap-2">
                 <button
                   onClick={() => {
                     setColWidths({
@@ -1544,8 +1635,63 @@ const UsersModule: React.FC<{ currentUser: User | null }> = ({ currentUser }) =>
               </div>
             </div>
             <div className="flex-1 overflow-auto p-4">
-              <table className="min-w-full text-xs table-fixed">
-                <thead>
+              {/* Mobile Card View */}
+              <div className="block md:hidden space-y-3">
+                {requestLog.length === 0 ? (
+                  <div className="text-center text-xs text-gray-500 py-4">Sin actividad</div>
+                ) : (
+                  requestLog.map((row, idx) => (
+                    <div key={idx} className="bg-white border rounded-lg p-3 shadow-sm space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className={`px-2 py-0.5 rounded text-xs font-bold ${row.status >= 500 ? 'bg-red-100 text-red-700' : row.status >= 400 ? 'bg-yellow-100 text-yellow-700' : 'bg-green-100 text-green-700'}`}>
+                          {row.status || 0}
+                        </span>
+                        <span className="text-xs text-gray-500">{formatElapsed(row.date)}</span>
+                      </div>
+                      <div className="font-mono text-xs break-all font-medium text-gray-800">
+                        {row.endpoint}
+                      </div>
+                      <div className="grid grid-cols-2 gap-2 pt-2 border-t border-gray-100">
+                        <button
+                          onClick={async () => {
+                            setJsonModalTitle('Payload');
+                            try {
+                              const full = await fetch(`${API_BASE}/streams/user-requests/${selected!.id}/events/${row.id}`).then((r) => r.json());
+                              setJsonModalValue(full.payload);
+                            } catch {
+                              setJsonModalValue(row.payloadSnippet || '');
+                            }
+                            setJsonModalOpen(true);
+                          }}
+                          className="text-xs text-indigo-600 font-medium text-left"
+                        >
+                          Ver Payload
+                        </button>
+                        <button
+                          onClick={async () => {
+                            setJsonModalTitle('Response');
+                            try {
+                              const full = await fetch(`${API_BASE}/streams/user-requests/${selected!.id}/events/${row.id}`).then((r) => r.json());
+                              setJsonModalValue(full.response);
+                            } catch {
+                              setJsonModalValue(row.responseSnippet || '');
+                            }
+                            setJsonModalOpen(true);
+                          }}
+                          className="text-xs text-indigo-600 font-medium text-right"
+                        >
+                          Ver Response
+                        </button>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+
+              {/* Desktop Table View */}
+              <div className="hidden md:block">
+                <table className="min-w-full text-xs table-fixed">
+                  <thead>
                   <tr className="text-left text-gray-600 sticky top-0 bg-white/90 backdrop-blur border-b shadow-sm relative before:content-[''] before:absolute before:top-0 before:left-0 before:right-0 before:h-8 before:-translate-y-full before:bg-gradient-to-b before:from-white/0 before:to-white/95 before:pointer-events-none before:[backdrop-filter:blur(50px)]">
                     <th
                       className="py-2 px-3 border-b relative select-none"
@@ -1687,6 +1833,7 @@ const UsersModule: React.FC<{ currentUser: User | null }> = ({ currentUser }) =>
             </div>
           </div>
         </div>
+      </div>
       )}
       {jsonModalOpen && (
         <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center">
@@ -1714,14 +1861,14 @@ const UsersModule: React.FC<{ currentUser: User | null }> = ({ currentUser }) =>
                 </button>
               </div>
             </div>
-            <div className="flex items-center justify-between px-4 py-2 border-b">
+            <div className="flex items-center justify-between px-4 py-2 border-b gap-2">
               <input
                 type="text"
                 placeholder="Buscar en JSON"
-                className="px-2 py-1 border rounded text-xs w-64"
+                className="px-2 py-1 border rounded text-xs flex-1 min-w-0"
                 onChange={(e) => setJsonSearch(e.target.value)}
               />
-              <div className="flex items-center gap-2 text-xs">
+              <div className="flex items-center gap-2 text-xs flex-shrink-0">
                 <button
                   onClick={() => {
                     const next = new Set(expanded);
@@ -1860,10 +2007,10 @@ const UsersModule: React.FC<{ currentUser: User | null }> = ({ currentUser }) =>
                       alt={s.channel.title}
                       className="w-8 h-8 rounded border border-gray-200"
                     />
-                    <div className="flex-1">
-                      <div className="text-sm font-medium">{s.channel.title}</div>
+                    <div className="flex-1 min-w-0">
+                      <div className="text-sm font-medium truncate">{s.channel.title}</div>
                       <div className="text-xs text-gray-500">{s.channel.icon || 'icon'}</div>
-                      <div className="text-[11px] text-gray-500">
+                      <div className="text-xs text-gray-500">
                         Suscrito {formatAgo((s as any).subscribedAt)}
                       </div>
                     </div>

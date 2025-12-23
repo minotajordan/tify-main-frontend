@@ -417,23 +417,24 @@ const FormEditor: React.FC<FormEditorProps> = ({ formId, onClose, onSave }) => {
   return (
     <div className="bg-white h-full flex flex-col relative">
       {/* Header */}
-      <div className="relative border-b border-gray-200 px-4 py-3 md:px-6 md:py-4 flex justify-between items-center bg-white sticky top-0 z-30">
-        <div className="flex items-center gap-4">
-          <button onClick={onClose} className="text-gray-500 hover:text-gray-700">
+      <div className="relative border-b border-gray-200 px-3 py-3 md:px-6 md:py-4 flex justify-between items-center bg-white sticky top-0 z-30">
+        <div className="flex items-center gap-2 md:gap-4">
+          <button onClick={onClose} className="text-gray-500 hover:text-gray-700 p-1">
             <ArrowLeft size={20} />
           </button>
-          <h2 className="text-xl font-semibold text-gray-900">
+          <h2 className="text-lg md:text-xl font-semibold text-gray-900 truncate max-w-[150px] md:max-w-none">
             {formId === 'new' ? t('forms.editor.createTitle') : t('forms.editor.editTitle')}
           </h2>
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-1 md:gap-2">
           {formId !== 'new' && (
             <>
               {!formData.isPublished && (
                 <button
                   onClick={() => executeStatusChange({ isPublished: true, isActive: true })}
                   disabled={isUpdatingStatus}
-                  className="flex items-center gap-2 bg-green-100 text-green-700 px-4 py-2 rounded-lg hover:bg-green-200 transition-colors disabled:opacity-50"
+                  className="flex items-center gap-2 bg-green-100 text-green-700 px-3 py-2 rounded-lg hover:bg-green-200 transition-colors disabled:opacity-50"
+                  title={t('forms.editor.publish')}
                 >
                   <Play size={18} />
                   <span className="hidden sm:inline">{t('forms.editor.publish')}</span>
@@ -442,7 +443,7 @@ const FormEditor: React.FC<FormEditorProps> = ({ formId, onClose, onSave }) => {
 
               <button
                 onClick={handleDeleteForm}
-                className="text-red-500 hover:text-red-700 transition-colors p-2"
+                className="text-red-500 hover:text-red-700 transition-colors p-2 rounded-lg hover:bg-red-50"
                 title={t('forms.editor.delete')}
               >
                 <Trash2 size={20} />
@@ -452,7 +453,7 @@ const FormEditor: React.FC<FormEditorProps> = ({ formId, onClose, onSave }) => {
           <button
             onClick={handleSaveClick}
             disabled={loading || isSaving}
-            className="text-indigo-600 hover:text-indigo-800 transition-colors disabled:opacity-50 p-2"
+            className="text-indigo-600 hover:text-indigo-800 transition-colors disabled:opacity-50 p-2 rounded-lg hover:bg-indigo-50"
             title={t('forms.editor.save')}
           >
             <Save size={20} />

@@ -15,14 +15,24 @@ interface RaffleSystemProps {
   eventId: string;
 }
 
-const CARD_WIDTH = 220; // Width of each card
-const GAP = 16; // Gap between cards
-const ITEM_SIZE = CARD_WIDTH + GAP;
-
 export default function RaffleSystem({ eventId }: RaffleSystemProps) {
   const [tickets, setTickets] = useState<Ticket[]>([]);
   const [loading, setLoading] = useState(true);
   const [zones, setZones] = useState<{ id: string; name: string }[]>([]);
+
+  // Responsive state
+  const [isMobile, setIsMobile] = useState(false);
+
+  useEffect(() => {
+    const checkMobile = () => setIsMobile(window.innerWidth < 768);
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
+
+  const cardWidth = isMobile ? 160 : 220;
+  const gap = isMobile ? 12 : 16;
+  const itemSize = cardWidth + gap;
 
   // Filters
   const [selectedZones, setSelectedZones] = useState<string[]>([]);
@@ -189,12 +199,12 @@ export default function RaffleSystem({ eventId }: RaffleSystemProps) {
     // We want the WINNER_INDEX item to be centered.
     // With pl-[50%], the list starts at the center of the container.
     // To center the item at WINNER_INDEX, we need to shift left by:
-    // (WINNER_INDEX * ITEM_SIZE) + (CARD_WIDTH / 2)
+    // (WINNER_INDEX * itemSize) + (cardWidth / 2)
 
-    const targetX = -1 * (WINNER_INDEX * ITEM_SIZE + CARD_WIDTH / 2);
+    const targetX = -1 * (WINNER_INDEX * itemSize + cardWidth / 2);
 
     // Add a small random jitter to land somewhere within the card
-    const jitter = Math.random() * CARD_WIDTH * 0.8 - CARD_WIDTH * 0.4;
+    const jitter = Math.random() * cardWidth * 0.8 - cardWidth * 0.4;
 
     // 2. Animate
     await controls.start({
@@ -210,9 +220,9 @@ export default function RaffleSystem({ eventId }: RaffleSystemProps) {
   };
 
   return (
-    <div className="h-full flex gap-6 p-6 bg-gray-50 overflow-hidden">
+    <div className="h-full flex flex-col lg:flex-row gap-6 p-4 lg:p-6 bg-gray-50 overflow-y-auto lg:overflow-hidden">
       {/* Sidebar - Controls */}
-      <div className="w-80 flex flex-col gap-4 bg-white p-6 rounded-xl shadow-sm border border-gray-200 h-full overflow-y-auto shrink-0">
+      <div className="w-full lg:w-80 flex flex-col gap-4 bg-white p-4 lg:p-6 rounded-xl shadow-sm border border-gray-200 h-auto lg:h-full overflow-y-visible lg:overflow-y-auto shrink-0 order-2 lg:order-1">
         <h3 className="font-bold text-lg text-gray-900 flex items-center gap-2">
           <Filter size={20} />
           Configuración
@@ -282,7 +292,7 @@ export default function RaffleSystem({ eventId }: RaffleSystemProps) {
       </div>
 
       {/* Main Area - Visual */}
-      <div className="flex-1 flex flex-col items-center bg-gray-900 rounded-xl shadow-inner relative overflow-hidden p-4">
+      <div className="flex-1 flex flex-col items-center bg-gray-900 rounded-xl shadow-inner relative overflow-hidden p-4 min-h-[500px] lg:min-h-0 order-1 lg:order-2">
         <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-indigo-900/40 via-gray-900 to-gray-900"></div>
 
         {/* Title */}
@@ -320,7 +330,7 @@ export default function RaffleSystem({ eventId }: RaffleSystemProps) {
                 <div
                   key={`${ticket.id}-${index}`}
                   className="shrink-0 relative"
-                  style={{ width: CARD_WIDTH, height: 220 }}
+                  style={{ width: cardWidth, height: 220 }}
                 >
                   <div
                     className={`

@@ -184,17 +184,17 @@ const FormSubmissions: React.FC<{ formId: string; onClose: () => void }> = ({
 
   return (
     <div className="bg-white h-full flex flex-col">
-      <div className="border-b border-gray-200 px-6 py-4 flex justify-between items-center bg-white sticky top-0 z-10">
-        <div className="flex items-center gap-4">
-          <button onClick={onClose} className="text-gray-500 hover:text-gray-700">
+      <div className="border-b border-gray-200 px-4 py-4 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-white sticky top-0 z-10">
+        <div className="flex items-center gap-2 md:gap-4 w-full md:w-auto">
+          <button onClick={onClose} className="text-gray-500 hover:text-gray-700 p-1">
             <ArrowLeft size={20} />
           </button>
-          <div>
-            <h2 className="text-xl font-semibold text-gray-900">{t('forms.submissions.title')}</h2>
-            <p className="text-sm text-gray-500">{formTitle}</p>
+          <div className="min-w-0 flex-1">
+            <h2 className="text-lg md:text-xl font-semibold text-gray-900 truncate">{t('forms.submissions.title')}</h2>
+            <p className="text-sm text-gray-500 truncate">{formTitle}</p>
           </div>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 w-full md:w-auto justify-end">
           <div className="flex items-center bg-gray-100 rounded-lg p-1 mr-2">
             <button
               onClick={() => setViewMode('table')}
@@ -222,7 +222,7 @@ const FormSubmissions: React.FC<{ formId: string; onClose: () => void }> = ({
           <button
             onClick={exportCSV}
             disabled={submissions.length === 0}
-            className="flex items-center gap-2 bg-white border border-gray-300 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-50 disabled:opacity-50"
+            className="flex items-center gap-2 bg-white border border-gray-300 text-gray-700 px-3 py-2 rounded-lg hover:bg-gray-50 disabled:opacity-50 text-sm"
           >
             <Download size={18} />
             <span className="hidden sm:inline">{t('forms.submissions.export')}</span>

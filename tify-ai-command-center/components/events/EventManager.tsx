@@ -268,7 +268,7 @@ const GuestDetailModal = ({
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-md p-4 animate-in fade-in duration-300">
       <div className="bg-white rounded-3xl shadow-2xl w-full max-w-2xl overflow-hidden animate-in zoom-in-95 duration-300 flex flex-col max-h-[90vh] border border-gray-100">
         {/* Header */}
-        <div className="relative px-8 py-6 bg-gradient-to-r from-indigo-600 to-violet-600">
+        <div className="relative px-4 md:px-8 py-6 bg-gradient-to-r from-indigo-600 to-violet-600">
           <div className="absolute top-4 right-4">
             <button
               onClick={onClose}
@@ -278,11 +278,11 @@ const GuestDetailModal = ({
             </button>
           </div>
           <div className="flex items-center gap-4">
-            <div className="w-12 h-12 bg-white/20 backdrop-blur-md rounded-2xl flex items-center justify-center shadow-inner">
+            <div className="w-12 h-12 bg-white/20 backdrop-blur-md rounded-2xl flex items-center justify-center shadow-inner shrink-0">
               <Users size={24} className="text-white" />
             </div>
             <div>
-              <h3 className="text-2xl font-bold text-white tracking-tight">
+              <h3 className="text-xl md:text-2xl font-bold text-white tracking-tight">
                 Detalles del Invitado
               </h3>
               <p className="text-indigo-100 text-sm font-medium opacity-90">
@@ -293,7 +293,7 @@ const GuestDetailModal = ({
         </div>
 
         <div className="flex-1 overflow-y-auto custom-scrollbar">
-          <form id="guest-form" onSubmit={handleSubmit} className="p-8 space-y-8">
+          <form id="guest-form" onSubmit={handleSubmit} className="p-4 md:p-8 space-y-8">
             {/* Main Info Section */}
             <div className="space-y-6">
               <div className="flex items-center justify-between">
@@ -1174,7 +1174,7 @@ export default function EventManager() {
 
   if (view === 'create') {
     return (
-      <div className="h-full flex flex-col bg-gray-50 p-6">
+      <div className="h-full flex flex-col bg-gray-50 p-4 md:p-6">
         <div className="max-w-2xl mx-auto w-full">
           <button
             onClick={() => setView('list')}
@@ -1184,7 +1184,7 @@ export default function EventManager() {
             Volver a eventos
           </button>
 
-          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-8">
+          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 md:p-8">
             <h2 className="text-xl font-bold text-gray-900 mb-6">Nuevo Evento</h2>
             <form onSubmit={handleCreateEvent} className="space-y-6">
               {templates.length > 0 && (
@@ -1234,7 +1234,7 @@ export default function EventManager() {
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Inicio</label>
                   <input
@@ -1391,7 +1391,7 @@ export default function EventManager() {
                     />
                   </div>
 
-                  <div className="grid grid-cols-2 gap-6">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">Inicio</label>
                       <input
@@ -2737,7 +2737,102 @@ export default function EventManager() {
               </div>
             )}
 
-            <div className="bg-white rounded-xl shadow-sm border border-gray-200 flex-1 overflow-hidden flex flex-col">
+            {/* Mobile View (Cards) */}
+            <div className="md:hidden flex-1 overflow-y-auto bg-gray-50 p-4 space-y-4">
+              {(!selectedEvent.guestList || selectedEvent.guestList.length === 0) ? (
+                <div className="text-center text-gray-500 py-12 flex flex-col items-center justify-center">
+                  <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mb-3">
+                    <Users size={24} className="text-gray-300" />
+                  </div>
+                  <p className="font-medium">No hay invitados</p>
+                  <p className="text-xs mt-1 max-w-[200px]">Agrega invitados manualmente o importa una lista.</p>
+                </div>
+              ) : (
+                selectedEvent.guestList.map((guest, idx) => (
+                  <div
+                    key={idx}
+                    onClick={() => {
+                      setSelectedGuest(guest);
+                      setIsGuestModalOpen(true);
+                    }}
+                    className="bg-white p-4 rounded-xl shadow-sm border border-gray-100 active:scale-[0.98] transition-transform"
+                  >
+                    <div className="flex justify-between items-start mb-3">
+                      <div>
+                        <h4 className="font-bold text-gray-900">{guest.name}</h4>
+                        <p className="text-xs text-gray-500">{guest.phoneNumber}</p>
+                      </div>
+                      <span
+                        className={`px-2 py-1 rounded-full text-xs font-bold ${
+                          guest.status === 'confirmed'
+                            ? 'bg-green-100 text-green-700'
+                            : guest.status === 'declined'
+                              ? 'bg-red-100 text-red-700'
+                              : 'bg-yellow-100 text-yellow-700'
+                        }`}
+                      >
+                        {guest.status === 'confirmed'
+                          ? 'Confirmado'
+                          : guest.status === 'declined'
+                            ? 'Rechazado'
+                            : 'Pendiente'}
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-3 gap-2 text-xs text-gray-600 mb-4">
+                      <div className="bg-gray-50 p-2 rounded-lg text-center">
+                        <span className="block text-gray-400 text-[10px] uppercase mb-1">Cupos</span>
+                        <span className="font-bold text-gray-700 text-sm">{guest.quota}</span>
+                      </div>
+                      <div className="bg-gray-50 p-2 rounded-lg text-center">
+                        <span className="block text-gray-400 text-[10px] uppercase mb-1">Vistas</span>
+                        <span className="font-bold text-gray-700 text-sm">{guest.linkAccessCount || 0}</span>
+                      </div>
+                      <div className="bg-gray-50 p-2 rounded-lg text-center flex flex-col items-center justify-center">
+                        <span className="block text-gray-400 text-[10px] uppercase mb-1">Info</span>
+                        {guest.infoFilled ? (
+                          <CheckCircle size={16} className="text-green-500" />
+                        ) : (
+                          <span className="text-gray-300 text-sm">-</span>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="flex gap-2">
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          const link = `${window.location.origin}/events/${selectedEvent.id}/rsvp?token=${guest.token}`;
+                          navigator.clipboard.writeText(link);
+                          alert('Link copiado al portapapeles');
+                        }}
+                        className="flex-1 py-2.5 bg-indigo-50 text-indigo-600 rounded-lg text-xs font-bold flex items-center justify-center gap-2 hover:bg-indigo-100 transition-colors"
+                      >
+                        <Link size={14} /> Copiar Link
+                      </button>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if(confirm('¿Estás seguro de eliminar este invitado?')) {
+                              const newGuestList = selectedEvent.guestList?.filter((_, i) => i !== idx);
+                              const updated = { ...selectedEvent, guestList: newGuestList };
+                              setSelectedEvent(updated);
+                              setEvents(events.map((e) => (e.id === updated.id ? updated : e)));
+                              api.updateEvent(updated.id, { guestList: newGuestList }).catch(console.error);
+                          }
+                        }}
+                        className="w-10 flex items-center justify-center bg-red-50 text-red-500 rounded-lg hover:bg-red-100 transition-colors"
+                      >
+                        <Trash2 size={16} />
+                      </button>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+
+            {/* Desktop View (Table) */}
+            <div className="hidden md:flex bg-white rounded-xl shadow-sm border border-gray-200 flex-1 overflow-hidden flex-col">
               <div className="overflow-auto flex-1">
                 <table className="w-full text-left border-collapse">
                   <thead className="bg-gray-50 sticky top-0 z-10">

@@ -310,7 +310,7 @@ export default function PublicTicketPurchase({ eventId }: PublicTicketPurchasePr
     return (
       <div
         ref={containerRef}
-        className={`relative w-full h-[600px] bg-slate-50 border border-slate-200 rounded-xl overflow-hidden shadow-inner ${isDragging ? 'cursor-grabbing' : 'cursor-grab'}`}
+        className={`relative w-full h-[50vh] md:h-[600px] bg-slate-50 border border-slate-200 rounded-xl overflow-hidden shadow-inner ${isDragging ? 'cursor-grabbing' : 'cursor-grab'}`}
         onMouseDown={(e) => {
           // Ignore clicks on buttons
           if ((e.target as HTMLElement).closest('button')) return;
@@ -322,6 +322,15 @@ export default function PublicTicketPurchase({ eventId }: PublicTicketPurchasePr
             y: e.clientY - transform.y,
           };
         }}
+        onTouchStart={(e) => {
+          if ((e.target as HTMLElement).closest('button')) return;
+          setIsDragging(true);
+          const touch = e.touches[0];
+          dragStartRef.current = {
+            x: touch.clientX - transform.x,
+            y: touch.clientY - transform.y,
+          };
+        }}
         onMouseMove={(e) => {
           if (isDragging) {
             setTransform((prev) => ({
@@ -331,30 +340,41 @@ export default function PublicTicketPurchase({ eventId }: PublicTicketPurchasePr
             }));
           }
         }}
+        onTouchMove={(e) => {
+           if (isDragging) {
+             const touch = e.touches[0];
+             setTransform((prev) => ({
+               ...prev,
+               x: touch.clientX - dragStartRef.current.x,
+               y: touch.clientY - dragStartRef.current.y,
+             }));
+           }
+        }}
         onMouseUp={() => setIsDragging(false)}
         onMouseLeave={() => setIsDragging(false)}
+        onTouchEnd={() => setIsDragging(false)}
       >
         <div className="absolute top-4 right-4 flex flex-col gap-2 z-20 bg-white rounded-lg shadow-md border border-slate-200 p-1">
           <button
             onClick={handleZoomIn}
-            className="p-2 hover:bg-slate-100 rounded text-slate-600 hover:text-indigo-600 transition-colors"
+            className="p-3 md:p-2 hover:bg-slate-100 rounded text-slate-600 hover:text-indigo-600 transition-colors"
             title="Acercar"
           >
-            <ZoomIn size={20} />
+            <ZoomIn size={24} className="md:w-5 md:h-5" />
           </button>
           <button
             onClick={handleZoomOut}
-            className="p-2 hover:bg-slate-100 rounded text-slate-600 hover:text-indigo-600 transition-colors"
+            className="p-3 md:p-2 hover:bg-slate-100 rounded text-slate-600 hover:text-indigo-600 transition-colors"
             title="Alejar"
           >
-            <ZoomOut size={20} />
+            <ZoomOut size={24} className="md:w-5 md:h-5" />
           </button>
           <button
             onClick={handleResetZoom}
-            className="p-2 hover:bg-slate-100 rounded text-slate-600 hover:text-indigo-600 transition-colors"
+            className="p-3 md:p-2 hover:bg-slate-100 rounded text-slate-600 hover:text-indigo-600 transition-colors"
             title="Restablecer vista"
           >
-            <Maximize size={20} />
+            <Maximize size={24} className="md:w-5 md:h-5" />
           </button>
         </div>
 
