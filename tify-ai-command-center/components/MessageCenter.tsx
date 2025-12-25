@@ -259,12 +259,12 @@ const MessageCenter: React.FC<MessageCenterProps> = ({ channelId }) => {
             )}
           </h2>
 
-          <div className="flex p-1 bg-gray-200/50 rounded-lg self-start sm:self-auto">
+          <div className="flex p-1 bg-gray-100/80 rounded-lg self-start sm:self-auto">
             <button
               onClick={() => setViewMode('compose')}
               className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-all ${
                 viewMode === 'compose'
-                  ? 'bg-white text-indigo-600 shadow-sm'
+                  ? 'bg-white text-sky-700 shadow-sm ring-1 ring-black/5'
                   : 'text-gray-600 hover:text-gray-900 hover:bg-gray-200/50'
               }`}
             >
@@ -275,7 +275,7 @@ const MessageCenter: React.FC<MessageCenterProps> = ({ channelId }) => {
               onClick={() => setViewMode('feed')}
               className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-all ${
                 viewMode === 'feed'
-                  ? 'bg-white text-indigo-600 shadow-sm'
+                  ? 'bg-white text-sky-700 shadow-sm ring-1 ring-black/5'
                   : 'text-gray-600 hover:text-gray-900 hover:bg-gray-200/50'
               }`}
             >
@@ -373,7 +373,7 @@ const MessageCenter: React.FC<MessageCenterProps> = ({ channelId }) => {
                   <button
                     onClick={handleAIAssist}
                     disabled={isGenerating}
-                    className="absolute bottom-3 right-3 flex items-center gap-1.5 px-3 py-1.5 bg-indigo-50 text-indigo-600 hover:bg-indigo-100 rounded-md text-sm font-medium transition-colors disabled:opacity-50"
+                    className="absolute bottom-3 right-3 flex items-center gap-1.5 px-3 py-1.5 bg-sky-50 text-sky-600 hover:bg-sky-100 rounded-md text-sm font-medium transition-colors disabled:opacity-50"
                   >
                     <Sparkles size={14} />
                     {isGenerating ? t('ai.drafting') : t('ai.polish')}
@@ -420,7 +420,7 @@ const MessageCenter: React.FC<MessageCenterProps> = ({ channelId }) => {
                   </div>
 
                   <div className="flex gap-2">
-                    <label className="cursor-pointer flex items-center gap-2 text-sm text-indigo-600 hover:text-indigo-700 font-medium w-fit px-3 py-2 bg-indigo-50 rounded-lg hover:bg-indigo-100 transition-colors border border-indigo-100">
+                    <label className="cursor-pointer flex items-center gap-2 text-sm text-sky-600 hover:text-sky-700 font-medium w-fit px-3 py-2 bg-sky-50 rounded-lg hover:bg-sky-100 transition-colors border border-sky-100">
                       <Paperclip size={16} />
                       <span>{t('compose.addAttachment')}</span>
                       <input
@@ -433,7 +433,7 @@ const MessageCenter: React.FC<MessageCenterProps> = ({ channelId }) => {
 
                     <button
                       onClick={() => setShowLocationPicker(true)}
-                      className="flex items-center gap-2 text-sm text-indigo-600 hover:text-indigo-700 font-medium w-fit px-3 py-2 bg-indigo-50 rounded-lg hover:bg-indigo-100 transition-colors border border-indigo-100"
+                      className="flex items-center gap-2 text-sm text-sky-600 hover:text-sky-700 font-medium w-fit px-3 py-2 bg-sky-50 rounded-lg hover:bg-sky-100 transition-colors border border-sky-100"
                     >
                       <MapPin size={16} />
                       <span>Add Location</span>
@@ -463,10 +463,10 @@ const MessageCenter: React.FC<MessageCenterProps> = ({ channelId }) => {
                               type="button"
                               disabled={isEmergency}
                               onClick={() => setPriority(p)}
-                              className={`px-4 py-2 text-sm font-medium border first:rounded-l-lg last:rounded-r-lg flex-1 capitalize
+                              className={`px-4 py-2 text-sm font-medium border first:rounded-l-lg last:rounded-r-lg flex-1 capitalize transition-colors
                               ${
                                 priority === p
-                                  ? 'bg-slate-800 text-white border-slate-800'
+                                  ? 'bg-sky-600 text-white border-sky-600'
                                   : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
                               } ${isEmergency ? 'opacity-50 cursor-not-allowed' : ''}`}
                             >

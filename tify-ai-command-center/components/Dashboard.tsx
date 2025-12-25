@@ -67,13 +67,13 @@ const Dashboard: React.FC<DashboardProps> = ({ onChangeView }) => {
                 <tool.icon size={32} />
               </div>
               <div className="flex-1">
-                <h3 className="text-2xl font-bold text-gray-900 mb-2 group-hover:text-indigo-600 transition-colors">
+                <h3 className="text-2xl font-bold text-gray-900 mb-2 group-hover:text-sky-600 transition-colors">
                   {tool.title}
                 </h3>
                 <p className="text-gray-500 leading-relaxed mb-4">
                   {tool.description}
                 </p>
-                <div className="flex items-center text-indigo-600 font-medium opacity-0 group-hover:opacity-100 transition-opacity transform translate-x-[-10px] group-hover:translate-x-0 duration-300">
+                <div className="flex items-center text-sky-600 font-medium opacity-0 group-hover:opacity-100 transition-opacity transform translate-x-[-10px] group-hover:translate-x-0 duration-300">
                   <span>Acceder</span>
                   <ArrowRight size={16} className="ml-2" />
                 </div>

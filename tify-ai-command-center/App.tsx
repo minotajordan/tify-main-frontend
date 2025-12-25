@@ -2,7 +2,6 @@ import React, { useState, useEffect, useRef } from 'react';
 import {
   LayoutDashboard,
   GitMerge,
-  CheckCircle,
   Users,
   Bot,
   Bell,
@@ -10,16 +9,15 @@ import {
   Menu,
   X,
   LogOut,
-  RadioTower,
   FileText,
   Ticket,
   Globe,
   QrCode,
   Settings,
-  ChevronUp,
   CreditCard,
   Shield,
   User as UserIcon,
+  Palette,
 } from 'lucide-react';
 import { DEFAULT_AVATAR, DEFAULT_ORG_NAME } from './constants';
 import { useI18n } from './i18n';
@@ -29,7 +27,6 @@ import Dashboard from './components/Dashboard';
 import ChannelManager from './components/ChannelManager';
 import EventManager from './components/events/EventManager';
 import MessageCenter from './components/MessageCenter';
-import ApprovalQueue from './components/ApprovalQueue';
 import AIChat from './components/AIChat';
 import UsersModule from './components/Users.tsx';
 import MonitoringDashboard from './components/monitoring/MonitoringDashboard';
@@ -39,6 +36,7 @@ import PublicFormViewer from './components/forms/PublicFormViewer';
 import PublicTicketPurchase from './components/events/PublicTicketPurchase';
 import GuestRSVP from './components/events/GuestRSVP';
 import PublicShortener from './components/PublicShortener';
+import StyleDemo from './components/StyleDemo';
 
 const ShortLinkRedirect: React.FC<{ code: string }> = ({ code }) => {
   useEffect(() => {
@@ -72,7 +70,8 @@ type View =
   | 'forms'
   | 'events'
   | 'shortlinks'
-  | 'settings';
+  | 'settings'
+  | 'style-demo';
 type BreadcrumbItem = { label: string; view?: View };
 
 const App: React.FC = () => {
@@ -203,6 +202,8 @@ const App: React.FC = () => {
             </div>
           </div>
         );
+      case 'style-demo':
+        return <StyleDemo />;
       default:
         return <div className="p-8 text-center text-gray-500">{t('module.underConstruction')}</div>;
     }
@@ -225,20 +226,18 @@ const App: React.FC = () => {
         setIsMobileMenuOpen(false);
         setBreadcrumbs([{ label }]);
       }}
-      className={`w-full flex items-center justify-between px-4 py-3 rounded-lg transition-colors ${
+      className={`flex items-center gap-2 px-3 py-2 rounded-xl text-sm font-medium transition-all duration-200 ${
         currentView === view
-          ? 'bg-indigo-600 text-white shadow-md'
-          : 'text-slate-400 hover:bg-slate-800 hover:text-white'
+          ? 'bg-sky-100 text-sky-700'
+          : 'text-gray-500 hover:bg-gray-50 hover:text-gray-900'
       }`}
     >
-      <div className="flex items-center gap-3">
-        <Icon size={20} />
-        <span className="font-medium">{label}</span>
-      </div>
+      <Icon size={18} className={currentView === view ? 'text-sky-600' : 'text-gray-400 group-hover:text-gray-500'} />
+      <span>{label}</span>
       {count !== undefined && count > 0 && (
         <span
-          className={`text-xs font-bold px-2 py-0.5 rounded-full ${
-            currentView === view ? 'bg-white text-indigo-600' : 'bg-slate-700 text-slate-200'
+          className={`text-xs font-bold px-1.5 py-0.5 rounded-full ${
+            currentView === view ? 'bg-sky-200 text-sky-800' : 'bg-gray-100 text-gray-600'
           }`}
         >
           {count}
@@ -417,270 +416,250 @@ const App: React.FC = () => {
   }
 
   return (
-    <div className="flex h-screen bg-gray-50 overflow-hidden">
+    <div className="flex flex-col h-screen bg-[#F8F9FA] overflow-hidden font-sans text-gray-900">
+      {/* Mobile Navigation Menu (Overlay) */}
       {isMobileMenuOpen && (
-        <div
-          className="fixed inset-0 bg-black/50 z-40 lg:hidden"
-          onClick={() => setIsMobileMenuOpen(false)}
-        />
+        <div className="lg:hidden bg-white border-b border-gray-200 absolute top-16 left-0 right-0 z-20 shadow-lg animate-in slide-in-from-top-2 p-4">
+          <div className="flex flex-col space-y-2">
+            <NavItem view="channels" icon={GitMerge} label={t('nav.channels')} />
+            <NavItem view="forms" icon={FileText} label={t('nav.forms')} />
+            <NavItem view="events" icon={Ticket} label={t('nav.events')} />
+            <NavItem view="shortlinks" icon={QrCode} label={t('nav.shortlinks')} />
+          </div>
+        </div>
       )}
 
-      <aside
-        className={`
-        fixed lg:static inset-y-0 left-0 z-50 w-64 bg-slate-900 text-white flex flex-col transition-transform duration-300
-        ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
-      `}
-      >
-        <div className="p-6 border-b border-slate-800 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center font-bold text-xl">
-              T
-            </div>
-            <div>
-              <h1 className="font-bold text-lg leading-none">Tify</h1>
-              <p className="text-xs text-slate-400">Command Center</p>
-            </div>
-          </div>
-          <button onClick={() => setIsMobileMenuOpen(false)} className="lg:hidden text-slate-400">
-            <X size={20} />
-          </button>
-        </div>
-
-        <nav className="flex-1 p-4 space-y-2 overflow-y-auto">
-          <NavItem view="dashboard" icon={LayoutDashboard} label={t('nav.dashboard')} />
-          <NavItem view="channels" icon={GitMerge} label={t('nav.channels')} />
-          <NavItem view="forms" icon={FileText} label={t('nav.forms')} />
-          <NavItem view="events" icon={Ticket} label={t('nav.events')} />
-          {currentUser?.isAdmin && (
-            <NavItem view="users" icon={Users} label={t('nav.users')} />
-          )}
-          <NavItem view="shortlinks" icon={QrCode} label={t('nav.shortlinks')} />
-          
-
-          <div className="pt-6 pb-2 px-4">
-            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
-              {t('nav.intelligence')}
-            </p>
-          </div>
-          <NavItem view="ai" icon={Bot} label={t('nav.ai')} />
-        </nav>
-
-        <div className="p-4 border-t border-slate-800 relative" ref={userMenuRef}>
-          {currentUser ? (
-            <>
-              {/* User Menu Popup */}
-              {isUserMenuOpen && (
-                <>
-                  {/* Mobile Modal Overlay */}
-                  <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[60] lg:hidden flex items-end sm:items-center justify-center p-4 animate-in fade-in duration-200">
-                    <div 
-                      className="bg-white w-full max-w-sm rounded-3xl shadow-2xl overflow-hidden animate-in slide-in-from-bottom-10 sm:slide-in-from-bottom-0 sm:zoom-in-95 duration-300"
-                      onClick={(e) => e.stopPropagation()}
-                    >
-                      <div className="p-6 border-b border-gray-100 flex items-center justify-between bg-gray-50/50">
-                        <div className="flex items-center gap-4">
-                          <img 
-                            src={currentUser.avatarUrl || DEFAULT_AVATAR} 
-                            alt={currentUser.fullName}
-                            className="w-12 h-12 rounded-full border-2 border-white shadow-sm" 
-                          />
-                          <div>
-                            <h3 className="font-bold text-gray-900 text-lg">{currentUser.fullName}</h3>
-                            <p className="text-sm text-gray-500">{DEFAULT_ORG_NAME}</p>
-                          </div>
-                        </div>
-                        <button 
-                          onClick={() => setIsUserMenuOpen(false)} 
-                          className="p-2 bg-gray-100 hover:bg-gray-200 rounded-full text-gray-500 transition-colors"
-                        >
-                          <X size={20} />
-                        </button>
-                      </div>
-                      <div className="p-3 space-y-1">
-                        <button className="w-full flex items-center gap-3 px-4 py-3 text-gray-700 hover:bg-indigo-50 hover:text-indigo-600 rounded-xl transition-colors font-medium text-left">
-                          <UserIcon size={20} />
-                          <span>Mi Perfil</span>
-                        </button>
-                        <button
-                          onClick={() => {
-                            setCurrentView('settings');
-                            setIsUserMenuOpen(false);
-                            setBreadcrumbs([{ label: 'Configuración' }]);
-                          }}
-                          className="w-full flex items-center gap-3 px-4 py-3 text-gray-700 hover:bg-indigo-50 hover:text-indigo-600 rounded-xl transition-colors font-medium text-left"
-                        >
-                          <Settings size={20} />
-                          <span>Configuración</span>
-                        </button>
-                        <button className="w-full flex items-center gap-3 px-4 py-3 text-gray-700 hover:bg-indigo-50 hover:text-indigo-600 rounded-xl transition-colors font-medium text-left">
-                          <CreditCard size={20} />
-                          <span>Precios</span>
-                        </button>
-                        <button className="w-full flex items-center gap-3 px-4 py-3 text-gray-700 hover:bg-indigo-50 hover:text-indigo-600 rounded-xl transition-colors font-medium text-left">
-                          <Shield size={20} />
-                          <span>Política de Privacidad</span>
-                        </button>
-                        <div className="h-px bg-gray-100 my-2" />
-                        <button 
-                          onClick={() => {
-                            localStorage.removeItem('tify_token');
-                            setCurrentUser(null);
-                            setAuthMode('login');
-                            setIsUserMenuOpen(false);
-                          }}
-                          className="w-full flex items-center gap-3 px-4 py-3 text-red-600 hover:bg-red-50 rounded-xl transition-colors font-medium text-left"
-                        >
-                          <LogOut size={20} />
-                          <span>Cerrar Sesión</span>
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Desktop Popover */}
-                  <div className="hidden lg:block absolute bottom-full left-0 w-[240px] mb-3 ml-2 bg-white rounded-2xl shadow-xl border border-gray-200 overflow-hidden animate-in slide-in-from-bottom-2 fade-in zoom-in-95 duration-200 origin-bottom-left">
-                    <div className="p-3 border-b border-gray-100 bg-gray-50/50">
-                      <p className="text-xs font-bold text-gray-400 uppercase tracking-wider px-2">Mi Cuenta</p>
-                    </div>
-                    <div className="p-1.5 space-y-0.5">
-                      <button className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded-lg transition-colors font-medium text-left">
-                        <UserIcon size={16} />
-                        <span>Mi Perfil</span>
-                      </button>
-                      <button
-                        onClick={() => {
-                          setCurrentView('settings');
-                          setIsUserMenuOpen(false);
-                          setBreadcrumbs([{ label: 'Configuración' }]);
-                        }}
-                        className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded-lg transition-colors font-medium text-left"
-                      >
-                        <Settings size={16} />
-                        <span>Configuración</span>
-                      </button>
-                      <button className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded-lg transition-colors font-medium text-left">
-                        <CreditCard size={16} />
-                        <span>Precios</span>
-                      </button>
-                      <button className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded-lg transition-colors font-medium text-left">
-                        <Shield size={16} />
-                        <span>Política de Privacidad</span>
-                      </button>
-                      <div className="h-px bg-gray-100 my-1" />
-                      <button 
-                        onClick={() => {
-                          localStorage.removeItem('tify_token');
-                          setCurrentUser(null);
-                          setAuthMode('login');
-                          setIsUserMenuOpen(false);
-                        }}
-                        className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-red-600 hover:bg-red-50 rounded-lg transition-colors font-medium text-left"
-                      >
-                        <LogOut size={16} />
-                        <span>Cerrar Sesión</span>
-                      </button>
-                    </div>
-                  </div>
-                </>
-              )}
-
-              {/* Trigger Button */}
-              <button
-                onClick={() => setIsUserMenuOpen(!isUserMenuOpen)}
-                className={`w-full flex items-center gap-3 px-3 py-3 rounded-xl border transition-all duration-200 group relative ${
-                  isUserMenuOpen 
-                    ? 'bg-slate-800 border-indigo-500/50 shadow-lg' 
-                    : 'bg-slate-800/50 border-slate-700/50 hover:bg-slate-800 hover:border-slate-600'
-                }`}
-              >
-                <div className="relative">
-                  <img
-                    src={currentUser.avatarUrl || DEFAULT_AVATAR}
-                    alt={currentUser.fullName}
-                    className="w-9 h-9 rounded-full border-2 border-slate-700 group-hover:border-indigo-500 transition-colors object-cover"
-                  />
-                  <div className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-green-500 border-2 border-slate-800 rounded-full"></div>
-                </div>
-                <div className="flex-1 min-w-0 text-left">
-                  <p className="text-sm font-bold text-white truncate">{currentUser.fullName}</p>
-                  <p className="text-xs text-slate-400 truncate group-hover:text-slate-300 transition-colors">{DEFAULT_ORG_NAME}</p>
-                </div>
-                <div className={`text-slate-500 transition-transform duration-300 ${isUserMenuOpen ? 'rotate-180 text-indigo-400' : 'group-hover:text-white'}`}>
-                  <ChevronUp size={18} />
-                </div>
-              </button>
-            </>
-          ) : (
-            <div className="text-xs text-slate-500 text-center">{t('status.connecting')}</div>
-          )}
-        </div>
-      </aside>
-
       {/* Main Content */}
-      <main className="flex-1 flex flex-col h-screen overflow-hidden">
-        {/* Top Header */}
-        <header className="h-16 bg-white border-b border-gray-200 flex items-center justify-between px-6 shadow-sm shrink-0">
-          <div className="flex items-center gap-4">
-            <button
-              onClick={() => setIsMobileMenuOpen(true)}
-              className="lg:hidden p-2 text-gray-500 hover:bg-gray-100 rounded-md"
-            >
-              <Menu size={20} />
-            </button>
-            <div className="hidden md:flex items-center text-sm text-gray-500">
-              <span className="font-medium text-gray-900"></span>
-              {([{ label: currentView }, ...breadcrumbs] as BreadcrumbItem[]).map((bc, idx) => (
-                <span key={idx} className="flex items-center">
-                  <span className="mx-2 text-gray-300">/</span>
-                  {bc.view ? (
-                    <button
-                      className="capitalize hover:underline"
-                      onClick={() => setCurrentView(bc.view!)}
-                    >
-                      {bc.label}
-                    </button>
-                  ) : (
-                    <span className="capitalize">{bc.label}</span>
-                  )}
-                </span>
-              ))}
+      <main className="flex-1 overflow-y-auto bg-[#F8F9FA] p-4 lg:p-8">
+        <div className="max-w-7xl mx-auto h-full flex flex-col">
+          {/* Header & Nav */}
+          <header className="flex justify-between items-center mb-8">
+            <div className="flex items-center gap-8">
+              <div className="flex items-center gap-2 cursor-pointer" onClick={() => setCurrentView('dashboard')}>
+                <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-sky-400 to-indigo-500 flex items-center justify-center text-white font-bold text-lg shadow-sm">
+                  T
+                </div>
+                <span className="font-bold text-xl tracking-tight text-gray-900 hidden sm:block">Tify</span>
+              </div>
+
+              {/* Desktop Navigation */}
+              <nav className="hidden lg:flex bg-white rounded-2xl p-1 shadow-sm border border-gray-100">
+                {[
+                  { id: 'channels', label: t('nav.channels') },
+                  { id: 'forms', label: t('nav.forms') },
+                  { id: 'events', label: t('nav.events') },
+                  { id: 'shortlinks', label: t('nav.shortlinks') },
+                ].map((tab) => (
+                  <button
+                    key={tab.id}
+                    onClick={() => setCurrentView(tab.id as View)}
+                    className={`px-4 py-2 rounded-xl text-sm font-medium transition-all duration-200 ${
+                      currentView === tab.id
+                        ? 'bg-sky-100 text-sky-700'
+                        : 'text-gray-500 hover:bg-gray-50'
+                    }`}
+                  >
+                    {tab.label}
+                  </button>
+                ))}
+              </nav>
             </div>
-            <div className="flex items-center gap-2">
-              <Globe size={16} className="text-gray-500" />
-              <select
-                value={lang}
-                onChange={(e) => setLang(e.target.value as any)}
-                className="px-2 py-1 border rounded text-sm"
+
+            <div className="flex items-center gap-3 lg:gap-4">
+               {/* Search */}
+               <div className="relative hidden md:flex items-center group">
+                 <div className="p-2 bg-white border border-gray-200 text-gray-400 group-hover:text-sky-500 group-hover:border-sky-200 rounded-xl transition-all cursor-pointer z-10">
+                   <Search size={16} />
+                 </div>
+                 <input
+                   type="text"
+                   placeholder={t('common.searchPlaceholder')}
+                   className="absolute right-0 top-0 h-full pl-10 pr-4 py-2 bg-white border border-gray-200 rounded-xl text-sm w-10 opacity-0 group-hover:w-64 group-hover:opacity-100 group-focus-within:w-64 group-focus-within:opacity-100 focus:ring-2 focus:ring-sky-100 transition-all duration-300 ease-in-out outline-none"
+                 />
+               </div>
+
+               {/* Notification */}
+               <button className="p-2 bg-white border border-gray-200 text-gray-400 hover:bg-gray-50 hover:text-gray-600 rounded-xl relative transition-colors">
+                 <Bell size={20} />
+                 <span className="absolute top-2 right-2 w-2 h-2 bg-rose-500 rounded-full border-2 border-white"></span>
+               </button>
+
+               {/* Language & User */}
+               <div className="flex items-center gap-3" ref={userMenuRef}>
+                 {/* Language Selector */}
+                 <div className="relative group">
+                   <button className="p-2 bg-white border border-gray-200 text-gray-500 hover:bg-gray-50 rounded-xl flex items-center gap-1 transition-colors">
+                     <Globe size={18} />
+                     <span className="text-xs font-medium uppercase">{lang}</span>
+                   </button>
+                   <select
+                     value={lang}
+                     onChange={(e) => setLang(e.target.value as any)}
+                     className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
+                   >
+                     <option value="es">ES</option>
+                     <option value="en">EN</option>
+                     <option value="pt">PT</option>
+                   </select>
+                 </div>
+
+                 {/* User Avatar */}
+                 <div className="relative">
+                   <button
+                     onClick={() => setIsUserMenuOpen(!isUserMenuOpen)}
+                     className="flex items-center gap-2 focus:outline-none"
+                   >
+                     <img
+                       src={currentUser?.avatarUrl || DEFAULT_AVATAR}
+                       alt="User"
+                       className={`w-10 h-10 rounded-full border-2 transition-all object-cover ${isUserMenuOpen ? 'border-sky-400 shadow-md ring-2 ring-sky-100' : 'border-white shadow-sm hover:border-gray-200'}`}
+                     />
+                   </button>
+
+                   {/* User Dropdown */}
+                   {isUserMenuOpen && (
+                     <div className="absolute right-0 top-full mt-2 w-64 bg-white rounded-2xl shadow-xl border border-gray-100 overflow-hidden z-50 animate-in slide-in-from-top-2 fade-in duration-200">
+                       <div className="p-4 border-b border-gray-50 bg-gray-50/50">
+                         <p className="font-bold text-gray-900 truncate">{currentUser?.fullName}</p>
+                         <p className="text-xs text-gray-500 truncate">{currentUser?.email || DEFAULT_ORG_NAME}</p>
+                       </div>
+                       <div className="p-2 space-y-1">
+                         <button className="w-full flex items-center gap-3 px-3 py-2 text-sm text-gray-600 hover:bg-gray-50 hover:text-gray-900 rounded-xl transition-colors text-left">
+                           <UserIcon size={16} />
+                           <span>Mi Perfil</span>
+                         </button>
+                         {currentUser?.isAdmin && (
+                           <button
+                             onClick={() => {
+                               setCurrentView('users');
+                               setIsUserMenuOpen(false);
+                             }}
+                             className="w-full flex items-center gap-3 px-3 py-2 text-sm text-gray-600 hover:bg-gray-50 hover:text-gray-900 rounded-xl transition-colors text-left"
+                           >
+                             <Users size={16} />
+                             <span>{t('nav.users')}</span>
+                           </button>
+                         )}
+                         <button
+                           onClick={() => {
+                             setCurrentView('ai');
+                             setIsUserMenuOpen(false);
+                           }}
+                           className="w-full flex items-center gap-3 px-3 py-2 text-sm text-gray-600 hover:bg-gray-50 hover:text-gray-900 rounded-xl transition-colors text-left"
+                         >
+                           <Bot size={16} />
+                           <span>{t('nav.ai')}</span>
+                         </button>
+                         <div className="h-px bg-gray-100 my-1"></div>
+                         <button
+                           onClick={() => {
+                             setCurrentView('settings');
+                             setIsUserMenuOpen(false);
+                           }}
+                           className="w-full flex items-center gap-3 px-3 py-2 text-sm text-gray-600 hover:bg-gray-50 hover:text-gray-900 rounded-xl transition-colors text-left"
+                         >
+                           <Settings size={16} />
+                           <span>Configuración</span>
+                         </button>
+                         <button className="w-full flex items-center gap-3 px-3 py-2 text-sm text-gray-600 hover:bg-gray-50 hover:text-gray-900 rounded-xl transition-colors text-left">
+                            <CreditCard size={16} />
+                            <span>Precios</span>
+                         </button>
+                         <button className="w-full flex items-center gap-3 px-3 py-2 text-sm text-gray-600 hover:bg-gray-50 hover:text-gray-900 rounded-xl transition-colors text-left">
+                            <Shield size={16} />
+                            <span>Privacidad</span>
+                         </button>
+                         <div className="h-px bg-gray-100 my-1"></div>
+                         <button
+                           onClick={() => {
+                             localStorage.removeItem('tify_token');
+                             setCurrentUser(null);
+                             setAuthMode('login');
+                             setIsUserMenuOpen(false);
+                           }}
+                           className="w-full flex items-center gap-3 px-3 py-2 text-sm text-rose-600 hover:bg-rose-50 rounded-xl transition-colors text-left"
+                         >
+                           <LogOut size={16} />
+                           <span>Cerrar Sesión</span>
+                         </button>
+                       </div>
+                     </div>
+                   )}
+                 </div>
+               </div>
+
+               {/* Mobile Menu Button */}
+               <button
+                 onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+                 className="lg:hidden p-2 bg-white border border-gray-200 text-gray-500 hover:bg-gray-100 rounded-xl transition-colors"
+               >
+                 {isMobileMenuOpen ? <X size={24} /> : <Menu size={24} />}
+               </button>
+            </div>
+          </header>
+
+          {/* Mobile Navigation Modal */}
+          {isMobileMenuOpen && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center lg:hidden">
+              {/* Backdrop with Blur */}
+              <div 
+                className="absolute inset-0 bg-black/20 backdrop-blur-sm transition-opacity"
+                onClick={() => setIsMobileMenuOpen(false)}
+              ></div>
+              
+              {/* Modal Content */}
+              <div className="relative bg-white rounded-3xl shadow-2xl p-6 w-[90%] max-w-sm animate-in zoom-in-95 duration-200 border border-white/20">
+                <div className="flex justify-between items-center mb-6">
+                  <h3 className="text-lg font-bold text-gray-900">Menú</h3>
+                  <button 
+                    onClick={() => setIsMobileMenuOpen(false)}
+                    className="p-2 bg-gray-50 text-gray-400 hover:text-gray-600 rounded-full transition-colors"
+                  >
+                    <X size={20} />
+                  </button>
+                </div>
+                
+                <div className="flex flex-col space-y-3">
+                  <NavItem view="channels" icon={GitMerge} label={t('nav.channels')} />
+                  <NavItem view="forms" icon={FileText} label={t('nav.forms')} />
+                  <NavItem view="events" icon={Ticket} label={t('nav.events')} />
+                  <NavItem view="shortlinks" icon={QrCode} label={t('nav.shortlinks')} />
+                </div>
+              </div>
+            </div>
+          )}
+
+
+          <div className="flex-1">
+            {renderContent()}
+          </div>
+
+          {/* Footer */}
+          <footer className="mt-12 py-6 border-t border-gray-100">
+            <div className="flex justify-center gap-8 text-sm text-gray-400">
+              <button 
+                onClick={() => setCurrentView('dashboard')}
+                className="hover:text-sky-600 transition-colors flex items-center gap-2"
               >
-                <option value="es">ES</option>
-                <option value="en">EN</option>
-                <option value="pt">PT</option>
-              </select>
+                <LayoutDashboard size={16} />
+                {t('nav.dashboard')}
+              </button>
+              <button 
+                onClick={() => setCurrentView('ai')}
+                className="hover:text-sky-600 transition-colors flex items-center gap-2"
+              >
+                <Bot size={16} />
+                {t('nav.ai')}
+              </button>
+              <button 
+                onClick={() => setCurrentView('style-demo')}
+                className="hover:text-sky-600 transition-colors flex items-center gap-2"
+              >
+                <Palette size={16} />
+                Style Demo
+              </button>
             </div>
-          </div>
-
-          <div className="flex items-center gap-4">
-            <div className="relative hidden sm:block">
-              <Search
-                className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
-                size={16}
-              />
-              <input
-                type="text"
-                placeholder={t('common.searchPlaceholder')}
-                className="pl-10 pr-4 py-2 bg-gray-100 border-transparent rounded-full text-sm focus:bg-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 outline-none w-64 transition-all"
-              />
-            </div>
-            <button className="relative p-2 text-gray-400 hover:bg-gray-100 rounded-full transition-colors">
-              <Bell size={20} />
-              <span className="absolute top-2 right-2 w-2 h-2 bg-red-500 rounded-full border-2 border-white"></span>
-            </button>
-          </div>
-        </header>
-
-        {/* View Content */}
-        <div className="flex-1 bg-gray-50 overflow-y-auto p-0 md:p-0">
-          <div className="max-w-7xl mx-auto h-full">{renderContent()}</div>
+          </footer>
         </div>
       </main>
     </div>

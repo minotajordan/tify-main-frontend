@@ -242,7 +242,7 @@ const resources: Record<Lang, Record<string, string>> = {
     'nav.events': 'Eventos',
     'nav.intelligence': 'Inteligencia',
     'nav.monitoring': 'Monitoreo',
-    'nav.shortlinks': 'QR y Enlaces Cortos',
+    'nav.shortlinks': 'QR - Links',
     'shortlinks.manage': 'Gestiona tus códigos QR y enlaces cortos',
     'shortlinks.create': 'Crear Enlace Corto',
     'shortlinks.targetUrl': 'URL de Destino',
