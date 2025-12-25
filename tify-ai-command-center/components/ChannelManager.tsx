@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 // @ts-ignore
 import html2pdf from 'html2pdf.js';
+import { ImageUpload } from './ImageUpload';
 import {
   ChevronRight,
   ChevronLeft,
@@ -543,6 +544,7 @@ const ChannelManager: React.FC<ChannelManagerProps> = ({ currentUser }) => {
     twitter: string;
     tiktok: string;
     logoUrl: string;
+    coverUrl: string;
     icon: string;
     isPublic: boolean;
     isHidden: boolean;
@@ -556,11 +558,13 @@ const ChannelManager: React.FC<ChannelManagerProps> = ({ currentUser }) => {
     twitter: '',
     tiktok: '',
     logoUrl: '',
+    coverUrl: '',
     icon: '',
     isPublic: true,
     isHidden: false,
     asSub: false,
   });
+  const [createStep, setCreateStep] = useState(1);
   const [owners, setOwners] = useState<any[]>([]);
   const [ownerId, setOwnerId] = useState<string>('');
   const [orgName, setOrgName] = useState<string>('');
@@ -1606,6 +1610,7 @@ const ChannelManager: React.FC<ChannelManagerProps> = ({ currentUser }) => {
       websiteUrl: form.websiteUrl || undefined,
       socialLinks: Object.keys(social).length ? social : undefined,
       logoUrl: form.logoUrl || undefined,
+      coverUrl: form.coverUrl || undefined,
       icon: form.icon || undefined,
       ownerId: ownerId || selectedChannel?.owner?.id,
       isPublic: form.isPublic,
@@ -1634,6 +1639,7 @@ const ChannelManager: React.FC<ChannelManagerProps> = ({ currentUser }) => {
       twitter: '',
       tiktok: '',
       logoUrl: '',
+      coverUrl: '',
       icon: '',
       isPublic: true,
       isHidden: false,
@@ -2481,8 +2487,8 @@ const ChannelManager: React.FC<ChannelManagerProps> = ({ currentUser }) => {
                     <div className="space-y-3">
                       <button 
                           onClick={() => {
-                            setActiveMainTab('channels');
                             setShowCreate(true);
+                            setActiveMainTab('channels');
                           }}
                           className="w-full flex items-center gap-3 p-3 bg-white border border-gray-200 rounded-xl hover:border-sky-300 hover:shadow-sm transition-all text-left group"
                         >
@@ -2573,146 +2579,6 @@ const ChannelManager: React.FC<ChannelManagerProps> = ({ currentUser }) => {
           </div>
 
           <div className="flex-1 overflow-y-auto custom-scrollbar p-2">
-            {showCreate && (
-              <div className="bg-gray-50 border border-gray-200 rounded-lg p-3 space-y-2 mb-4">
-                <input
-                  value={form.title}
-                  onChange={(e) => setForm({ ...form, title: e.target.value })}
-                  placeholder="Title"
-                  className="w-full px-2 py-1 text-base md:text-sm border border-gray-300 rounded"
-                />
-                <textarea
-                  value={form.description}
-                  onChange={(e) => setForm({ ...form, description: e.target.value })}
-                  placeholder="Description"
-                  className="w-full px-2 py-1 text-base md:text-sm border border-gray-300 rounded"
-                />
-                <input
-                  value={form.websiteUrl}
-                  onChange={(e) => setForm({ ...form, websiteUrl: e.target.value })}
-                  placeholder="Website URL"
-                  className="w-full px-2 py-1 text-base md:text-sm border border-gray-300 rounded"
-                />
-                <div className="grid grid-cols-2 gap-2">
-                  <input
-                    value={form.instagram}
-                    onChange={(e) => setForm({ ...form, instagram: e.target.value })}
-                    placeholder="Instagram URL"
-                    className="px-2 py-1 text-base md:text-sm border border-gray-300 rounded"
-                  />
-                  <input
-                    value={form.facebook}
-                    onChange={(e) => setForm({ ...form, facebook: e.target.value })}
-                    placeholder="Facebook URL"
-                    className="px-2 py-1 text-base md:text-sm border border-gray-300 rounded"
-                  />
-                  <input
-                    value={form.twitter}
-                    onChange={(e) => setForm({ ...form, twitter: e.target.value })}
-                    placeholder="Twitter URL"
-                    className="px-2 py-1 text-base md:text-sm border border-gray-300 rounded"
-                  />
-                  <input
-                    value={form.tiktok}
-                    onChange={(e) => setForm({ ...form, tiktok: e.target.value })}
-                    placeholder="TikTok URL"
-                    className="px-2 py-1 text-base md:text-sm border border-gray-300 rounded"
-                  />
-                </div>
-                <input
-                  value={form.logoUrl}
-                  onChange={(e) => setForm({ ...form, logoUrl: e.target.value })}
-                  placeholder="Logo image URL"
-                  className="w-full px-2 py-1 text-base md:text-sm border border-gray-300 rounded"
-                />
-                <div className="space-y-2">
-                  <input
-                    value={form.icon}
-                    onChange={(e) => setForm({ ...form, icon: e.target.value })}
-                    placeholder="Icon (SF Symbol)"
-                    className="w-full px-2 py-1 text-base md:text-sm border border-gray-300 rounded"
-                  />
-                  <div className="max-h-32 overflow-y-auto border border-gray-200 rounded">
-                    {SF_SYMBOLS.filter((s) => s.includes(form.icon)).map((name) => (
-                      <button
-                        key={name}
-                        onClick={() => setForm({ ...form, icon: name })}
-                        className={`w-full text-left px-2 py-1 text-xs flex items-center gap-2 ${form.icon === name ? 'bg-sky-100' : 'hover:bg-gray-100'}`}
-                      >
-                        <IconView name={name} size={14} />
-                        <span>{name}</span>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-                <div className="space-y-2">
-                  <label className="text-xs font-semibold text-gray-600">Propietario</label>
-                  <select
-                    value={ownerId}
-                    onChange={(e) => setOwnerId(e.target.value)}
-                    className="w-full px-2 py-1 text-base md:text-sm border border-gray-300 rounded"
-                  >
-                    <option value="">Selecciona un propietario</option>
-                    {owners.map((u) => (
-                      <option key={u.id} value={u.id}>
-                        {u.fullName || u.username} ({u.email})
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div className="grid grid-cols-2 gap-2">
-                  <input
-                    value={orgName}
-                    onChange={(e) => setOrgName(e.target.value)}
-                    placeholder="Nombre de organización"
-                    className="px-2 py-1 text-base md:text-sm border border-gray-300 rounded col-span-2"
-                  />
-                  <input
-                    value={orgNit}
-                    onChange={(e) => setOrgNit(e.target.value)}
-                    placeholder="NIT"
-                    className="px-2 py-1 text-base md:text-sm border border-gray-300 rounded"
-                  />
-                </div>
-                <div className="text-[11px] text-gray-500">
-                  Si no existe organización, se crea automáticamente con estos datos.
-                </div>
-                <div className="flex items-center gap-3">
-                  <label className="flex items-center gap-1 text-sm">
-                    <input
-                      type="checkbox"
-                      checked={form.isPublic}
-                      onChange={(e) => setForm({ ...form, isPublic: e.target.checked })}
-                    />{' '}
-                    Public
-                  </label>
-                  <label className="flex items-center gap-1 text-sm">
-                    <input
-                      type="checkbox"
-                      checked={form.isHidden}
-                      onChange={(e) => setForm({ ...form, isHidden: e.target.checked })}
-                    />{' '}
-                    Hidden
-                  </label>
-                  <label className="flex items-center gap-1 text-sm">
-                    <input
-                      type="checkbox"
-                      checked={form.asSub}
-                      onChange={(e) => setForm({ ...form, asSub: e.target.checked })}
-                    />{' '}
-                    Create as subchannel
-                  </label>
-                </div>
-                <button
-                  onClick={handleCreate}
-                  disabled={!ownerId || ((!orgName || !orgNit) && !selectedChannel?.organizationId)}
-                  className={`px-3 py-1.5 text-sm rounded ${!ownerId || ((!orgName || !orgNit) && !selectedChannel?.organizationId) ? 'bg-gray-300 text-white cursor-not-allowed' : 'bg-sky-600 text-white'}`}
-                >
-                  {t('channels.create')}
-                </button>
-              </div>
-            )}
-
             {/* Mobile View */}
             <div className="md:hidden">{renderMobileDashboard()}</div>
 
@@ -8214,6 +8080,308 @@ const ChannelManager: React.FC<ChannelManagerProps> = ({ currentUser }) => {
             initialData={composeLocationData}
           />
         )}
+
+        <AnimatePresence>
+          {showCreate && (
+            <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+              <motion.div
+                initial={{ opacity: 0, scale: 0.95 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.95 }}
+                className="bg-white rounded-2xl shadow-xl w-full max-w-2xl max-h-[90vh] overflow-hidden flex flex-col"
+              >
+                {/* Header with Stepper */}
+                <div className="p-6 border-b border-gray-100 bg-gray-50/50">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h3 className="text-xl font-bold text-gray-900">Crear Nuevo Canal</h3>
+                    </div>
+                    <button
+                      onClick={() => setShowCreate(false)}
+                      className="p-2 hover:bg-gray-100 rounded-full transition-colors text-gray-500"
+                    >
+                      <X size={20} />
+                    </button>
+                  </div>
+                </div>
+                
+                <div className="p-6 overflow-y-auto custom-scrollbar flex-1">
+                     <AnimatePresence mode="wait">
+                        <motion.div
+                          key={createStep}
+                          initial={{ opacity: 0, x: 20 }}
+                          animate={{ opacity: 1, x: 0 }}
+                          exit={{ opacity: 0, x: -20 }}
+                          transition={{ duration: 0.2 }}
+                          className="space-y-6"
+                        >
+                          {createStep === 1 && (
+                            <div className="space-y-4">
+                                <h4 className="font-semibold text-gray-900 flex items-center gap-2">
+                                  <div className="w-6 h-6 rounded-full bg-sky-100 text-sky-600 flex items-center justify-center text-xs">1</div>
+                                  Perfil del Canal
+                                </h4>
+                                
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-1">Nombre del Canal</label>
+                                    <input
+                                      value={form.title}
+                                      onChange={(e) => setForm({ ...form, title: e.target.value })}
+                                      placeholder="Ej: Anuncios Generales"
+                                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-sky-500 focus:border-sky-500 outline-none transition-all"
+                                      autoFocus
+                                    />
+                                </div>
+                                
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-1">Descripción</label>
+                                    <textarea
+                                      value={form.description}
+                                      onChange={(e) => setForm({ ...form, description: e.target.value })}
+                                      placeholder="¿De qué trata este canal?"
+                                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-sky-500 focus:border-sky-500 outline-none transition-all h-24 resize-none"
+                                    />
+                                </div>
+
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-2">Icono del Sistema</label>
+                                    <div className="space-y-2">
+                                      <input
+                                        value={form.icon}
+                                        onChange={(e) => setForm({ ...form, icon: e.target.value })}
+                                        placeholder="Buscar icono (SF Symbol)"
+                                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-sky-500 focus:border-sky-500 outline-none transition-all"
+                                      />
+                                      <div className="h-32 overflow-y-auto border border-gray-200 rounded-lg p-1 grid grid-cols-4 gap-1 custom-scrollbar">
+                                        {SF_SYMBOLS.filter((s) => s.includes(form.icon)).slice(0, 50).map((name) => (
+                                          <button
+                                            key={name}
+                                            onClick={() => setForm({ ...form, icon: name })}
+                                            className={`flex flex-col items-center justify-center p-2 text-xs rounded hover:bg-gray-50 transition-colors ${form.icon === name ? 'bg-sky-50 text-sky-600 ring-1 ring-sky-200' : 'text-gray-500'}`}
+                                            title={name}
+                                          >
+                                            <IconView name={name} size={20} />
+                                          </button>
+                                        ))}
+                                      </div>
+                                    </div>
+                                </div>
+                            </div>
+                          )}
+
+                          {createStep === 2 && (
+                            <div className="space-y-6">
+                                <h4 className="font-semibold text-gray-900 flex items-center gap-2">
+                                  <div className="w-6 h-6 rounded-full bg-sky-100 text-sky-600 flex items-center justify-center text-xs">2</div>
+                                  Conectividad y Marca
+                                </h4>
+
+                                <div className="space-y-4">
+                                     <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-1">Sitio Web</label>
+                                        <input
+                                          value={form.websiteUrl}
+                                          onChange={(e) => setForm({ ...form, websiteUrl: e.target.value })}
+                                          placeholder="https://"
+                                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-sky-500 focus:border-sky-500 outline-none transition-all"
+                                        />
+                                     </div>
+
+                                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                        <div className="md:col-span-1">
+                                          <ImageUpload
+                                            label="Logo del Canal"
+                                            value={form.logoUrl}
+                                            onChange={(url) => setForm({ ...form, logoUrl: url })}
+                                            aspectRatio="square"
+                                            placeholder="Logo"
+                                          />
+                                        </div>
+                                        <div className="md:col-span-2">
+                                          <ImageUpload
+                                            label="Portada del Canal"
+                                            value={form.coverUrl}
+                                            onChange={(url) => setForm({ ...form, coverUrl: url })}
+                                            aspectRatio="wide"
+                                            placeholder="Imagen de portada"
+                                          />
+                                        </div>
+                                     </div>
+                                </div>
+
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-3">Redes Sociales</label>
+                                    <div className="grid grid-cols-2 gap-4">
+                                      {['instagram', 'facebook', 'twitter', 'tiktok'].map((social) => (
+                                        <div key={social} className="relative">
+                                          <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-gray-400 capitalize text-xs">
+                                            {social}
+                                          </div>
+                                          <input
+                                            value={(form as any)[social]}
+                                            onChange={(e) => setForm({ ...form, [social]: e.target.value })}
+                                            placeholder="URL"
+                                            className="w-full pl-20 px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm focus:bg-white focus:ring-2 focus:ring-sky-500 focus:border-sky-500 outline-none transition-all hover:border-gray-400"
+                                          />
+                                        </div>
+                                      ))}
+                                    </div>
+                                </div>
+                            </div>
+                          )}
+
+                          {createStep === 3 && (
+                            <div className="space-y-6">
+                                <h4 className="font-semibold text-gray-900 flex items-center gap-2">
+                                  <div className="w-6 h-6 rounded-full bg-sky-100 text-sky-600 flex items-center justify-center text-xs">3</div>
+                                  Administración y Configuración
+                                </h4>
+
+                                <div className="space-y-4 p-4 bg-gray-50 rounded-xl border border-gray-100">
+                                     <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-1">Propietario del Canal</label>
+                                        <select
+                                            value={ownerId}
+                                            onChange={(e) => setOwnerId(e.target.value)}
+                                            className="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg focus:bg-white focus:ring-2 focus:ring-sky-500 focus:border-sky-500 outline-none transition-all hover:border-gray-400"
+                                          >
+                                            <option value="">Selecciona un propietario</option>
+                                            {owners.map((u) => (
+                                              <option key={u.id} value={u.id}>
+                                                {u.fullName || u.username} ({u.email})
+                                              </option>
+                                            ))}
+                                          </select>
+                                     </div>
+                                      
+                                      <div className="grid grid-cols-2 gap-3">
+                                          <div>
+                                              <label className="block text-sm font-medium text-gray-700 mb-1">Organización</label>
+                                              <input
+                                                value={orgName}
+                                                onChange={(e) => setOrgName(e.target.value)}
+                                                placeholder="Nombre"
+                                                className="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm focus:bg-white focus:ring-2 focus:ring-sky-500 focus:border-sky-500 outline-none transition-all hover:border-gray-400"
+                                              />
+                                          </div>
+                                          <div>
+                                              <label className="block text-sm font-medium text-gray-700 mb-1">NIT</label>
+                                              <input
+                                                value={orgNit}
+                                                onChange={(e) => setOrgNit(e.target.value)}
+                                                placeholder="Identificación"
+                                                className="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm focus:bg-white focus:ring-2 focus:ring-sky-500 focus:border-sky-500 outline-none transition-all hover:border-gray-400"
+                                              />
+                                          </div>
+                                      </div>
+                                </div>
+
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-3">Visibilidad y Tipo</label>
+                                    <div className="space-y-3">
+                                      <label className={`flex items-center gap-3 p-3 rounded-lg border transition-all cursor-pointer ${form.isPublic ? 'bg-sky-50 border-sky-200' : 'bg-white border-gray-200 hover:bg-gray-50'}`}>
+                                        <input
+                                          type="checkbox"
+                                          checked={form.isPublic}
+                                          onChange={(e) => setForm({ ...form, isPublic: e.target.checked })}
+                                          className="w-4 h-4 text-sky-600 focus:ring-sky-500 border-gray-300 rounded"
+                                        />
+                                        <div>
+                                            <div className="font-medium text-gray-900 text-sm">Canal Público</div>
+                                            <div className="text-xs text-gray-500">Visible para todos los usuarios de la plataforma</div>
+                                        </div>
+                                      </label>
+                                      
+                                      <label className={`flex items-center gap-3 p-3 rounded-lg border transition-all cursor-pointer ${form.isHidden ? 'bg-amber-50 border-amber-200' : 'bg-white border-gray-200 hover:bg-gray-50'}`}>
+                                        <input
+                                          type="checkbox"
+                                          checked={form.isHidden}
+                                          onChange={(e) => setForm({ ...form, isHidden: e.target.checked })}
+                                          className="w-4 h-4 text-amber-600 focus:ring-amber-500 border-gray-300 rounded"
+                                        />
+                                        <div>
+                                            <div className="font-medium text-gray-900 text-sm">Canal Oculto</div>
+                                            <div className="text-xs text-gray-500">No aparecerá en listas públicas ni búsquedas</div>
+                                        </div>
+                                      </label>
+
+                                      <label className={`flex items-center gap-3 p-3 rounded-lg border transition-all cursor-pointer ${form.asSub ? 'bg-purple-50 border-purple-200' : 'bg-white border-gray-200 hover:bg-gray-50'}`}>
+                                        <input
+                                          type="checkbox"
+                                          checked={form.asSub}
+                                          onChange={(e) => setForm({ ...form, asSub: e.target.checked })}
+                                          className="w-4 h-4 text-purple-600 focus:ring-purple-500 border-gray-300 rounded"
+                                        />
+                                        <div>
+                                            <div className="font-medium text-gray-900 text-sm">Crear como Subcanal</div>
+                                            <div className="text-xs text-gray-500">Se anidará dentro del canal actualmente seleccionado</div>
+                                        </div>
+                                      </label>
+                                    </div>
+                                </div>
+                            </div>
+                          )}
+                        </motion.div>
+                     </AnimatePresence>
+                </div>
+
+                <div className="p-6 border-t border-gray-100 bg-white flex flex-col gap-6">
+                     <div className="flex items-center gap-4">
+                         <div className="flex-1 h-2 bg-gray-100 rounded-full overflow-hidden">
+                             <motion.div 
+                                 className="h-full bg-sky-500 rounded-full"
+                                 initial={{ width: 0 }}
+                                 animate={{ width: `${(createStep / 3) * 100}%` }}
+                                 transition={{ type: "spring", stiffness: 300, damping: 30 }}
+                             />
+                         </div>
+                         <span className="text-xs font-medium text-gray-400 whitespace-nowrap">
+                             Paso {createStep} de 3
+                         </span>
+                     </div>
+
+                     <div className="flex items-center justify-between">
+                         <button
+                            onClick={() => {
+                                if (createStep > 1) {
+                                    setCreateStep(createStep - 1);
+                                } else {
+                                    setShowCreate(false);
+                                }
+                            }}
+                            className="px-4 py-2 text-sm font-medium text-gray-600 hover:text-gray-900 hover:bg-gray-50 rounded-lg transition-colors"
+                         >
+                            {createStep > 1 ? 'Atrás' : 'Cancelar'}
+                         </button>
+                         
+                         <button
+                            onClick={() => {
+                                if (createStep < 3) {
+                                    setCreateStep(createStep + 1);
+                                } else {
+                                    handleCreate();
+                                }
+                            }}
+                            disabled={createStep === 3 && (!ownerId || ((!orgName || !orgNit) && !selectedChannel?.organizationId))}
+                            className={`px-6 py-2.5 text-sm font-medium text-white rounded-lg shadow-sm shadow-sky-100 transition-all flex items-center gap-2 ${
+                                createStep === 3 && (!ownerId || ((!orgName || !orgNit) && !selectedChannel?.organizationId))
+                                ? 'bg-gray-300 cursor-not-allowed shadow-none' 
+                                : 'bg-sky-600 hover:bg-sky-700 hover:shadow-md hover:shadow-sky-200 hover:-translate-y-0.5'
+                            }`}
+                         >
+                            {createStep < 3 ? (
+                                <>Siguiente <ChevronRight size={16} /></>
+                            ) : (
+                                t('channels.create')
+                            )}
+                         </button>
+                     </div>
+                </div>
+
+              </motion.div>
+            </div>
+          )}
+        </AnimatePresence>
 
         <MainChannelSearchModal
           isOpen={showChannelSearch}
