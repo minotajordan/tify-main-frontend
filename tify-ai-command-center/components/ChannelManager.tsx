@@ -89,9 +89,11 @@ import {
   Download,
   Sidebar,
   GitMerge,
+  Layout,
   LayoutDashboard,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import ChannelMessageCard from './ChannelMessageCard';
 import { api, uploadFile } from '../services/api';
 import { generateMessageDraft } from '../services/geminiService';
 import {
@@ -118,6 +120,7 @@ import RichTextEditor from './forms/RichTextEditor';
 import MainChannelSearchModal from './MainChannelSearchModal';
 import relativeTime from 'dayjs/plugin/relativeTime';
 import 'dayjs/locale/es';
+import MessageDesignPreview from './MessageDesignPreview';
 
 dayjs.extend(relativeTime);
 dayjs.locale('es');
@@ -140,6 +143,17 @@ const SmartDate = ({ date }: { date: string | Date }) => {
       </div>
     </div>
   );
+};
+
+const findChannelById = (channels: Channel[], id: string): Channel | undefined => {
+  for (const channel of channels) {
+    if (channel.id === id) return channel;
+    if (channel.subchannels) {
+      const found = findChannelById(channel.subchannels, id);
+      if (found) return found;
+    }
+  }
+  return undefined;
 };
 
 const splitHtmlContent = (html: string, initialOffset: number = 0): string[] => {
@@ -1492,7 +1506,8 @@ const ChannelManager: React.FC<ChannelManagerProps> = ({ currentUser }) => {
       items.push({ label: selectedChannel.title || selectedChannel.id });
     } else if (selectedChannel && selectedChannel.parentId) {
       items.push({ label: t('nav.channels'), view: 'channels' });
-      if (parentChannel) items.push({ label: parentChannel.title || parentChannel.id });
+      const parent = parentChannel || findChannelById(channels, selectedChannel.parentId);
+      if (parent) items.push({ label: parent.title || parent.id });
       items.push({ label: selectedChannel.title || selectedChannel.id });
     } else {
       items.push({ label: t('nav.channels'), view: 'channels' });
@@ -1500,7 +1515,7 @@ const ChannelManager: React.FC<ChannelManagerProps> = ({ currentUser }) => {
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent('tify_breadcrumbs', { detail: items }));
     }
-  }, [selectedChannel?.id, selectedChannel?.parentId, parentChannel?.id]);
+  }, [selectedChannel?.id, selectedChannel?.parentId, parentChannel?.id, channels]);
 
   useEffect(() => {
     if (!pendingModalOpen || !pendingForSub) return;
@@ -1568,7 +1583,15 @@ const ChannelManager: React.FC<ChannelManagerProps> = ({ currentUser }) => {
         {flatList.map(({ channel, parents }) => (
           <div
             key={channel.id}
-            onClick={() => setSelectedChannel(channel)}
+            onClick={() => {
+              if (channel.parentId) {
+                const parent = channels.find((c) => c.id === channel.parentId) || findChannelById(channels, channel.parentId);
+                if (parent) setParentChannel(parent);
+              } else {
+                setParentChannel(null);
+              }
+              setSelectedChannel(channel);
+            }}
             className={`p-3 rounded-lg border cursor-pointer transition-all ${
               selectedChannel?.id === channel.id
                 ? 'bg-sky-50 border-sky-200 shadow-sm'
@@ -2008,6 +2031,7 @@ const ChannelManager: React.FC<ChannelManagerProps> = ({ currentUser }) => {
   }, [selectedChannel?.id]);
 
   const [isHeaderCompact, setIsHeaderCompact] = useState(true);
+  const [showDesignPreview, setShowDesignPreview] = useState(false);
 
   const StatusBadge = ({ status }: { status?: VerificationStatus }) => {
     switch (status) {
@@ -2396,9 +2420,33 @@ const ChannelManager: React.FC<ChannelManagerProps> = ({ currentUser }) => {
                 transition={{ duration: 0.2, ease: "easeInOut" }}
               >
                 <button 
-                  onClick={() => setActiveMainTab('dashboard')}
+                  onClick={() => {
+                    if (activeMainTab === 'channels' && selectedChannel) {
+                      if (selectedChannel.parentId) {
+                        const target = (parentChannel && parentChannel.id === selectedChannel.parentId)
+                          ? parentChannel
+                          : findChannelById(channels, selectedChannel.parentId);
+                        
+                        if (target) {
+                          if (target.parentId) {
+                            const newParent = findChannelById(channels, target.parentId);
+                            setParentChannel(newParent || null);
+                          } else {
+                            setParentChannel(null);
+                          }
+                          setSelectedChannel(target);
+                        } else {
+                          setSelectedChannel(null);
+                        }
+                      } else {
+                        setSelectedChannel(null);
+                      }
+                    } else {
+                      setActiveMainTab('dashboard');
+                    }
+                  }}
                   className="p-1 hover:bg-gray-100 rounded-full transition-colors text-gray-600 shrink-0"
-                  aria-label="Volver al panel principal"
+                  aria-label="Volver"
                 >
                   <ChevronLeft size={24} />
                 </button>
@@ -2451,6 +2499,16 @@ const ChannelManager: React.FC<ChannelManagerProps> = ({ currentUser }) => {
             )}
           </motion.div>
         </div>
+
+        {!selectedChannel && activeMainTab === 'channels' && (
+          <button
+             onClick={() => setShowDesignPreview(true)}
+             className="flex items-center gap-2 px-4 py-2 bg-amber-100 text-amber-700 rounded-lg text-sm font-bold hover:bg-amber-200 transition-colors border border-amber-200"
+          >
+             <Sparkles size={16} />
+             Ver Nuevo Diseño
+          </button>
+        )}
 
         {activeMainTab === 'channels' && (
           selectedChannel ? (
@@ -2530,11 +2588,19 @@ const ChannelManager: React.FC<ChannelManagerProps> = ({ currentUser }) => {
                              All time 
                            </button> 
                          </div> 
-                       </Popper> 
-                     )} 
-                   </div>
-               
-               <div className="flex items-center bg-gray-100 rounded-lg p-1 border border-gray-200">
+                      </Popper> 
+                    )} 
+                  </div>
+
+                  <button 
+                    onClick={() => setShowDesignPreview(true)} 
+                    className="h-9 px-4 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-medium shadow-sm inline-flex items-center gap-2 transition-all"
+                  >
+                    <Layout size={14} />
+                    Vista Previa
+                  </button>
+              
+              <div className="flex items-center bg-gray-100 rounded-lg p-1 border border-gray-200">
                   <button 
                     onClick={() => setIsDetailsModalOpen(true)}
                     className="p-2 text-gray-600 hover:text-sky-600 hover:bg-white rounded-md transition-all" 
@@ -2949,7 +3015,10 @@ const ChannelManager: React.FC<ChannelManagerProps> = ({ currentUser }) => {
                 selectedChannel.subchannels.map((sub) => (
                   <div
                     key={sub.id}
-                    onClick={() => setSelectedChannel(sub)}
+                    onClick={() => {
+                      setParentChannel(selectedChannel);
+                      setSelectedChannel(sub);
+                    }}
                     className="p-3 rounded-lg border border-gray-200 hover:border-sky-200 hover:shadow-sm cursor-pointer transition-all group bg-white"
                   >
                     <div className="flex items-center gap-3">
@@ -3314,7 +3383,10 @@ const ChannelManager: React.FC<ChannelManagerProps> = ({ currentUser }) => {
                                           ? 'bg-sky-50/50 border-sky-200 ring-2 ring-sky-100'
                                           : 'bg-white border-gray-200'
                                       }`}
-                                      onClick={() => setSelectedChannel(sc as any)}
+                                      onClick={() => {
+                                        setParentChannel(selectedChannel);
+                                        setSelectedChannel(sc as any);
+                                      }}
                                     >
                                       <div className="absolute top-0 right-0 p-4 opacity-0 group-hover:opacity-100 transition-opacity z-10">
                                         <ChevronRight size={16} className="text-gray-400" />
@@ -4343,678 +4415,38 @@ const ChannelManager: React.FC<ChannelManagerProps> = ({ currentUser }) => {
                             ) : (
                               <div className="space-y-3">
                                 {messagesItems.map((m) => (
-                                  <div
+                                  <ChannelMessageCard
                                     key={m.id}
-                                    onClick={() => {
-                                      setViewMessageData(m);
+                                    message={m}
+                                    currentUser={currentUser}
+                                    selectedChannel={selectedChannel}
+                                    onView={(msg) => {
+                                      setViewMessageData(msg);
                                       setViewMessageOpen(true);
+                                      try { api.viewMessage(msg.id); } catch {}
                                     }}
-                                    className={`relative p-5 rounded-2xl bg-white shadow-sm border border-gray-100 hover:shadow-md transition-all group cursor-pointer`}
-                                    onMouseEnter={() => {
+                                    onShare={(msg) => {
+                                      setShareMessage(msg);
+                                      setShareModalOpen(true);
+                                    }}
+                                    onCalendarEvent={(item) => {
+                                      setCalendarConfirmEvent(item);
+                                      setCalendarConfirmOpen(true);
+                                    }}
+                                    onCancel={async (id) => {
                                       try {
-                                        api.viewMessage(m.id);
+                                        await api.cancelMessage(id);
+                                        setMessagesItems((prev) =>
+                                          prev.map((x) =>
+                                            x.id === id
+                                              ? { ...x, state: 'CANCELLED', expiresAt: new Date().toISOString() }
+                                              : x
+                                          )
+                                        );
                                       } catch {}
                                     }}
-                                  >
-                                    {m.isEmergency && (
-                                      <span className="pointer-events-none absolute inset-0 bg-red-50/30 animate-pulse rounded-2xl"></span>
-                                    )}
-
-                                    <div className="flex items-start justify-between mb-3">
-                                      <div className="flex items-center gap-3">
-                                        <div
-                                          className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 ${
-                                            m.isEmergency
-                                              ? 'bg-red-100 text-red-600'
-                                              : 'bg-slate-100 text-slate-600'
-                                          }`}
-                                        >
-                                          {m.channel?.icon ? (
-                                            <IconView name={m.channel.icon} size={20} />
-                                          ) : (
-                                            <MessagesSquare size={20} />
-                                          )}
-                                        </div>
-                                        <div>
-                                          <div className="text-sm font-semibold text-gray-900 leading-tight">
-                                            {m.channel?.title || 'Canal'}
-                                          </div>
-                                          <div className="text-xs text-gray-500 mt-1 flex items-center gap-1">
-                                            <span>
-                                              {(relativeFrom(m.createdAt) || '').replace(
-                                                /\b(en|hace)\b\s*/,
-                                                ''
-                                              )}
-                                            </span>
-                                            {m.state === 'CANCELLED' && (
-                                              <span className="text-[10px] px-1.5 py-0.5 rounded border bg-gray-100 text-gray-700 border-gray-200 ml-1">
-                                                Cancelado
-                                              </span>
-                                            )}
-                                          </div>
-                                        </div>
-                                      </div>
-
-                                      <div className="flex items-center gap-2">
-                                        {m.isEmergency ? (
-                                          <span className="px-2 py-1 rounded-full bg-red-100 text-red-700 text-[10px] font-bold tracking-wide border border-red-200">
-                                            URGENTE
-                                          </span>
-                                        ) : m.priority === 'HIGH' ? (
-                                          <span className="px-2 py-1 rounded-full bg-orange-100 text-orange-700 text-[10px] font-medium border border-orange-200">
-                                            ALTA
-                                          </span>
-                                        ) : null}
-
-                                        <div className="flex items-center gap-2 text-xs ml-2">
-                                          {(selectedChannel?.isPublic || m.channel?.isPublic) && (
-                                            <button
-                                              type="button"
-                                              onClick={(e) => {
-                                                e.stopPropagation();
-                                                setShareMessage(m);
-                                                setShareModalOpen(true);
-                                              }}
-                                              className="p-1 rounded hover:bg-gray-100 cursor-pointer text-gray-500 hover:text-indigo-600 transition-colors"
-                                              title="Compartir mensaje público"
-                                            >
-                                              <Share2 size={14} />
-                                            </button>
-                                          )}
-                                          <span className="text-[10px] text-gray-400 font-medium">
-                                            {m.viewsCount ?? (m._count?.views || 0)} vistas
-                                          </span>
-                                          {m.eventAt && (
-                                            <span className="relative inline-flex items-center gap-1">
-                                              <button
-                                                type="button"
-                                                onClick={(e) => {
-                                                  e.stopPropagation();
-                                                  setEventTipId(
-                                                    eventTipId === m.id ? null : m.id
-                                                  );
-                                                }}
-                                                className="p-1 rounded hover:bg-gray-100 cursor-pointer text-gray-500 hover:text-indigo-600 transition-colors"
-                                                title="Ver fecha evento"
-                                              >
-                                                <Calendar
-                                                  size={14}
-                                                  className={
-                                                    new Date(m.eventAt) <= new Date()
-                                                      ? 'text-red-500'
-                                                      : 'text-indigo-500'
-                                                  }
-                                                />
-                                              </button>
-                                              {eventTipId === m.id && (
-                                                <>
-                                                  <div
-                                                    className="fixed inset-0 z-40"
-                                                    onClick={(e) => {
-                                                      e.stopPropagation();
-                                                      setEventTipId(null);
-                                                    }}
-                                                  />
-                                                  <div className="absolute right-0 top-full z-50 bg-white rounded-lg shadow-lg border border-gray-200 px-2 py-1 text-xs text-gray-700 whitespace-nowrap">
-                                                    <span className="font-semibold">Evento:</span>{' '}
-                                                    {formatLocal(m.eventAt)}
-                                                  </div>
-                                                </>
-                                              )}
-                                            </span>
-                                          )}
-
-                                          {(!m.state || m.state === 'ACTIVE') &&
-                                            m.expiresAt &&
-                                            new Date(m.expiresAt) > new Date() &&
-                                            (m.sender?.id || m.senderId) ===
-                                              api.getCurrentUserId() && (
-                                              <button
-                                                onClick={async (e) => {
-                                                  e.stopPropagation();
-                                                  try {
-                                                    await api.cancelMessage(m.id);
-                                                    setMessagesItems((prev) =>
-                                                      prev.map((x) =>
-                                                        x.id === m.id
-                                                          ? {
-                                                              ...x,
-                                                              state: 'CANCELLED',
-                                                              expiresAt: new Date().toISOString(),
-                                                            }
-                                                          : x
-                                                      )
-                                                    );
-                                                  } catch {}
-                                                }}
-                                                className="p-1 rounded text-gray-400 hover:bg-red-50 hover:text-red-600 transition-colors"
-                                                title="Cancelar mensaje"
-                                              >
-                                                <Trash size={14} />
-                                              </button>
-                                            )}
-                                        </div>
-                                      </div>
-                                    </div>
-
-                                    <div
-                                      className={`p-4 rounded-2xl text-sm leading-relaxed whitespace-pre-wrap relative z-10 ${
-                                        m.isEmergency
-                                          ? 'bg-red-50 text-gray-900 border border-red-100'
-                                          : 'bg-slate-100 text-gray-800'
-                                      }`}
-                                    >
-                                      {m.content}
-                                    </div>
-
-                                    {/* Expanded Sections - Attached to bubble */}
-                                    <div className="pl-4 space-y-2">
-                                      {m.extra &&
-                                        m.extra.schedule &&
-                                        Array.isArray(m.extra.schedule) &&
-                                        m.extra.schedule.length > 0 &&
-                                        expandedSchedules[m.id] && (
-                                          <div className="mt-2 space-y-2 animate-in slide-in-from-top-2 fade-in duration-200">
-                                            {m.extra.schedule
-                                              .sort(
-                                                (a: any, b: any) =>
-                                                  new Date(a.date).getTime() -
-                                                  new Date(b.date).getTime()
-                                              )
-                                              .map((item: any, idx: number) => (
-                                                <div
-                                                  key={idx}
-                                                  className="group flex items-center p-3 rounded-xl bg-white border border-gray-100 hover:border-indigo-100 hover:shadow-sm transition-all cursor-default"
-                                                >
-                                                  <div className="w-14 text-center flex flex-col justify-center shrink-0 pr-2">
-                                                    <span className="text-xs font-bold text-gray-600">
-                                                      {item.time || 'Día'}
-                                                    </span>
-                                                    <span className="text-[10px] text-gray-400 uppercase tracking-wide leading-none mt-0.5">
-                                                      {new Date(
-                                                        item.date
-                                                      ).toLocaleDateString(
-                                                        'es-ES',
-                                                        {
-                                                          month: 'short',
-                                                          day: 'numeric',
-                                                        }
-                                                      )}
-                                                    </span>
-                                                  </div>
-                                                  <div className="flex-1 border-l-2 border-indigo-200 pl-4 py-0.5 min-w-0">
-                                                    <h4 className="font-bold text-gray-900 text-sm truncate">
-                                                      {item.activity}
-                                                    </h4>
-                                                    <div className="flex items-center mt-1 text-xs text-gray-500">
-                                                      <span className="capitalize">
-                                                        {new Date(
-                                                          item.date
-                                                        ).toLocaleDateString(
-                                                          'es-ES',
-                                                          { weekday: 'long' }
-                                                        )}
-                                                      </span>
-                                                    </div>
-                                                  </div>
-                                                  <button
-                                                    onClick={(e) => {
-                                                      e.stopPropagation();
-                                                      setCalendarConfirmEvent(
-                                                        item
-                                                      );
-                                                      setCalendarConfirmOpen(
-                                                        true
-                                                      );
-                                                    }}
-                                                    className="p-2 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-full transition-all opacity-0 group-hover:opacity-100 focus:opacity-100"
-                                                    title="Agregar a calendario"
-                                                  >
-                                                    <CalendarPlus size={16} />
-                                                  </button>
-                                                </div>
-                                              ))}
-                                          </div>
-                                        )}
-
-                                      {m.extra &&
-                                        m.extra.location &&
-                                        (m.extra.location.markers?.length > 0 ||
-                                          m.extra.location.polylines?.length > 0) &&
-                                        expandedLocations[m.id] && (
-                                          <div className="mt-2 rounded-lg overflow-hidden border border-gray-200 animate-in slide-in-from-top-2 fade-in duration-200">
-                                            <div className="h-64 w-full relative z-0">
-                                              <MapContainer
-                                                center={
-                                                  m.extra.location.markers?.[0] ||
-                                                  (Array.isArray(m.extra.location.polylines?.[0])
-                                                    ? m.extra.location.polylines?.[0]?.[0]
-                                                    : m.extra.location.polylines?.[0]?.points?.[0]) || [
-                                                    0, 0,
-                                                  ]
-                                                }
-                                                zoom={13}
-                                                style={{ height: '100%', width: '100%' }}
-                                              >
-                                                <TileLayer
-                                                  url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-                                                  attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-                                                />
-                                                {m.extra.location.markers?.map(
-                                                  (pos: [number, number], idx: number) => (
-                                                    <Marker key={idx} position={pos} />
-                                                  )
-                                                )}
-                                                {m.extra.location.polylines?.map(
-                                                  (poly: any, idx: number) => (
-                                                    <Polyline
-                                                      key={idx}
-                                                      positions={
-                                                        Array.isArray(poly) ? poly : poly.points
-                                                      }
-                                                      color={
-                                                        Array.isArray(poly) ? '#4F46E5' : poly.color
-                                                      }
-                                                    />
-                                                  )
-                                                )}
-                                              </MapContainer>
-                                            </div>
-                                          </div>
-                                        )}
-
-                                      {m.extra &&
-                                        m.extra.attachments &&
-                                        m.extra.attachments.length > 0 &&
-                                        expandedAttachments[m.id] && (
-                                          <div className="mt-2 grid grid-cols-1 gap-2 animate-in slide-in-from-top-2 fade-in duration-200">
-                                            {m.extra.attachments.map((att: any, idx: number) => (
-                                              <a
-                                                key={idx}
-                                                href={att.url}
-                                                target="_blank"
-                                                rel="noopener noreferrer"
-                                                onClick={(e) => e.stopPropagation()}
-                                                className="flex items-center gap-3 p-2 bg-gray-50 rounded border border-gray-200 hover:bg-indigo-50 hover:border-indigo-200 transition-all group"
-                                              >
-                                                <div className="p-2 bg-white text-indigo-600 rounded-lg shadow-sm group-hover:scale-110 transition-all">
-                                                  {getFileIcon(att.name || att.url)}
-                                                </div>
-                                                <div className="flex-1 min-w-0">
-                                                  <div className="text-sm font-medium text-gray-900 truncate">
-                                                    {att.name || 'Adjunto sin nombre'}
-                                                  </div>
-                                                  <div className="text-[10px] text-gray-500 uppercase tracking-wider">
-                                                    {att.type || 'ARCHIVO'}
-                                                  </div>
-                                                </div>
-                                                <div className="text-gray-400 group-hover:text-indigo-600">
-                                                  <Download size={16} />
-                                                </div>
-                                              </a>
-                                            ))}
-                                          </div>
-                                        )}
-                                    </div>
-
-                                    <div className="mt-3 flex items-center gap-2 flex-wrap">
-                                      {m.expiresAt && (
-                                        <span className="relative inline-flex items-center gap-1 mr-2 px-2 py-1 rounded bg-gray-50 text-xs text-gray-500">
-                                          <button
-                                            type="button"
-                                            onClick={(e) => {
-                                              e.stopPropagation();
-                                              setExpiresTipId(
-                                                expiresTipId === m.id ? null : m.id
-                                              );
-                                            }}
-                                            className="hover:text-indigo-600 cursor-pointer"
-                                            aria-label="Ver fecha exacta"
-                                          >
-                                            <Hourglass size={12} />
-                                          </button>
-                                          <span className="font-semibold">
-                                            {(relativeIn(m.expiresAt) || '')
-                                              .replace(/en:\s*/, '')
-                                              .replace(/segundos?/, 's')
-                                              .replace(/minutos?/, 'min')
-                                              .replace(/horas?/, 'h')
-                                              .replace(/días?/, 'd')
-                                              .replace(/mes(es)?/, 'm')
-                                              .replace(/años?/, 'a')}
-                                          </span>
-                                          {expiresTipId === m.id && (
-                                            <>
-                                              <div
-                                                className="fixed inset-0 z-40"
-                                                onClick={(e) => {
-                                                  e.stopPropagation();
-                                                  setExpiresTipId(null);
-                                                }}
-                                              />
-                                              <div className="absolute left-0 bottom-full mb-2 z-50 bg-white rounded-lg shadow-lg border border-gray-200 px-2 py-1 text-xs text-gray-700 whitespace-nowrap">
-                                                <span className="font-semibold">Expira:</span>{' '}
-                                                {formatLocal(m.expiresAt)}
-                                              </div>
-                                            </>
-                                          )}
-                                        </span>
-                                      )}
-
-                                      {m.extra &&
-                                        m.extra.schedule &&
-                                        Array.isArray(m.extra.schedule) &&
-                                        m.extra.schedule.length > 0 && (
-                                          <button
-                                            onClick={(e) => {
-                                              e.stopPropagation();
-                                              setExpandedSchedules((prev) => ({
-                                                ...prev,
-                                                [m.id]: !prev[m.id],
-                                              }));
-                                            }}
-                                            className={`inline-flex items-center gap-1.5 text-[11px] font-bold px-2 py-1 rounded-full border transition-all ${
-                                              expandedSchedules[m.id]
-                                                ? 'bg-indigo-100 text-indigo-700 border-indigo-200'
-                                                : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50 hover:text-indigo-600'
-                                            }`}
-                                          >
-                                            <Calendar size={12} />
-                                            <span>
-                                              {expandedSchedules[m.id]
-                                                ? 'Ocultar Horario'
-                                                : 'Ver Horario'}
-                                            </span>
-                                          </button>
-                                        )}
-                                      {m.extra &&
-                                        m.extra.location &&
-                                        (m.extra.location.markers?.length > 0 ||
-                                          m.extra.location.polylines?.length > 0) && (
-                                          <button
-                                            onClick={(e) => {
-                                              e.stopPropagation();
-                                              setExpandedLocations((prev) => ({
-                                                ...prev,
-                                                [m.id]: !prev[m.id],
-                                              }));
-                                            }}
-                                            className={`inline-flex items-center gap-1.5 text-[11px] font-bold px-2 py-1 rounded-full border transition-all ${
-                                              expandedLocations[m.id]
-                                                ? 'bg-indigo-100 text-indigo-700 border-indigo-200'
-                                                : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50 hover:text-indigo-600'
-                                            }`}
-                                          >
-                                            <MapPin size={12} />
-                                            <span>
-                                              {expandedLocations[m.id]
-                                                ? 'Ocultar Mapa'
-                                                : 'Ver Mapa'}
-                                            </span>
-                                          </button>
-                                        )}
-                                      {m.extra?.type === 'comunicado' && (
-                                        <button
-                                          onClick={(e) => {
-                                            e.stopPropagation();
-                                            setViewingComunicado(m);
-                                          }}
-                                          className="inline-flex items-center gap-1.5 text-[11px] font-bold px-2 py-1 rounded-full border transition-all bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100"
-                                        >
-                                          <Eye size={12} />
-                                          <span>Ver comunicado</span>
-                                        </button>
-                                      )}
-                                      {m.extra &&
-                                        m.extra.attachments &&
-                                        m.extra.attachments.length > 0 && (
-                                          <button
-                                            onClick={(e) => {
-                                              e.stopPropagation();
-                                              setExpandedAttachments((prev) => ({
-                                                ...prev,
-                                                [m.id]: !prev[m.id],
-                                              }));
-                                            }}
-                                            className={`inline-flex items-center gap-1.5 text-[11px] font-bold px-2 py-1 rounded-full border transition-all ${
-                                              expandedAttachments[m.id]
-                                                ? 'bg-indigo-100 text-indigo-700 border-indigo-200'
-                                                : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50 hover:text-indigo-600'
-                                            }`}
-                                          >
-                                            <Paperclip size={12} />
-                                            <span>
-                                              {expandedAttachments[m.id]
-                                                ? 'Ocultar Adjuntos'
-                                                : 'Ver Adjuntos'}
-                                            </span>
-                                          </button>
-                                        )}
-                                      {(m.approvals || []).length > 0 && (
-                                        <button
-                                          onClick={(e) => {
-                                            e.stopPropagation();
-                                            setExpandedApprovers((prev) => ({
-                                              ...prev,
-                                              [m.id]: !prev[m.id],
-                                            }));
-                                          }}
-                                          className="ml-auto inline-flex items-center gap-1 text-purple-600 transition-all hover:text-purple-700 hover:scale-110"
-                                        >
-                                          <Shield
-                                            size={14}
-                                            className={`${
-                                              expandedApprovers[m.id]
-                                                ? 'animate-pulse'
-                                                : 'animate-[pulse_2s_ease-in-out_infinite]'
-                                            }`}
-                                            strokeWidth={2.5}
-                                          />
-                                        </button>
-                                      )}
-                                      {expandedApprovers[m.id] &&
-                                        (m.approvals || []).map((a) =>
-                                          a.status === 'APPROVED' ? (
-                                            <span
-                                              key={a.userId}
-                                              className="inline-flex items-center gap-1 text-[11px] text-green-700 bg-green-50 border border-green-200 px-1.5 py-0.5 rounded"
-                                            >
-                                              <CheckIcon size={12} className="text-green-700" />{' '}
-                                              <button
-                                                className="hover:underline"
-                                                onClick={(e) => e.stopPropagation()}
-                                                onMouseEnter={(e) => {
-                                                  setApproverHoverUserId(a.user?.id || a.approverId);
-                                                  setApproverHoverAnchorEl(
-                                                    e.currentTarget as HTMLElement
-                                                  );
-                                                }}
-                                                onMouseLeave={() => {
-                                                  setApproverHoverUserId(null);
-                                                  setApproverHoverAnchorEl(null);
-                                                }}
-                                              >
-                                                {a.approver?.fullName ||
-                                                  a.user?.fullName ||
-                                                  a.approver?.username ||
-                                                  a.user?.username ||
-                                                  a.approverId}
-                                              </button>
-                                              {approverHoverUserId ===
-                                                (a.user?.id || a.approverId) && (
-                                                <Popper
-                                                  open
-                                                  placement="top"
-                                                  anchorEl={approverHoverAnchorEl}
-                                                  style={{ zIndex: 1000 }}
-                                                >
-                                                  <div className="text-[10px] px-2 py-1 rounded bg-gray-900 text-white shadow">
-                                                    @{a.approver?.username || a.user?.username || ''}
-                                                  </div>
-                                                </Popper>
-                                              )}
-                                              {a.removed && (
-                                                <span className="text-[10px] text-gray-500">
-                                                  (removido)
-                                                </span>
-                                              )}
-                                            </span>
-                                          ) : a.status === 'REJECTED' ? (
-                                            <span
-                                              key={a.userId}
-                                              className="inline-flex items-center gap-1 text-[11px] text-red-700 bg-red-50 border border-red-200 px-1.5 py-0.5 rounded"
-                                            >
-                                              <X size={12} className="text-red-700" />{' '}
-                                              <button
-                                                className="hover:underline"
-                                                onClick={(e) => e.stopPropagation()}
-                                                onMouseEnter={(e) => {
-                                                  setApproverHoverUserId(a.user?.id || a.approverId);
-                                                  setApproverHoverAnchorEl(
-                                                    e.currentTarget as HTMLElement
-                                                  );
-                                                }}
-                                                onMouseLeave={() => {
-                                                  setApproverHoverUserId(null);
-                                                  setApproverHoverAnchorEl(null);
-                                                }}
-                                              >
-                                                {a.approver?.fullName ||
-                                                  a.user?.fullName ||
-                                                  a.approver?.username ||
-                                                  a.user?.username ||
-                                                  a.approverId}
-                                              </button>
-                                              {approverHoverUserId ===
-                                                (a.user?.id || a.approverId) && (
-                                                <Popper
-                                                  open
-                                                  placement="top"
-                                                  anchorEl={approverHoverAnchorEl}
-                                                  style={{ zIndex: 1000 }}
-                                                >
-                                                  <div className="text-[10px] px-2 py-1 rounded bg-gray-900 text-white shadow">
-                                                    @{a.approver?.username || a.user?.username || ''}
-                                                  </div>
-                                                </Popper>
-                                              )}
-                                              {a.removed && (
-                                                <span className="text-[10px] text-gray-500">
-                                                  (removido)
-                                                </span>
-                                              )}
-                                            </span>
-                                          ) : m.expiresAt && new Date(m.expiresAt) <= new Date() ? (
-                                            <span
-                                              key={a.userId}
-                                              className="inline-flex items-center gap-1 text-[11px] text-gray-700 bg-gray-50 border border-gray-200 px-1.5 py-0.5 rounded"
-                                            >
-                                              <Hourglass size={12} className="text-red-600" />{' '}
-                                              <button
-                                                className="hover:underline"
-                                                onClick={(e) => e.stopPropagation()}
-                                                onMouseEnter={(e) => {
-                                                  setApproverHoverUserId(a.user?.id || a.approverId);
-                                                  setApproverHoverAnchorEl(
-                                                    e.currentTarget as HTMLElement
-                                                  );
-                                                }}
-                                                onMouseLeave={() => {
-                                                  setApproverHoverUserId(null);
-                                                  setApproverHoverAnchorEl(null);
-                                                }}
-                                              >
-                                                {a.approver?.fullName ||
-                                                  a.user?.fullName ||
-                                                  a.approver?.username ||
-                                                  a.user?.username ||
-                                                  a.approverId}
-                                              </button>
-                                              {approverHoverUserId ===
-                                                (a.user?.id || a.approverId) && (
-                                                <Popper
-                                                  open
-                                                  placement="top"
-                                                  anchorEl={approverHoverAnchorEl}
-                                                  style={{ zIndex: 1000 }}
-                                                >
-                                                  <div className="text-[10px] px-2 py-1 rounded bg-gray-900 text-white shadow">
-                                                    @{a.approver?.username || a.user?.username || ''}
-                                                  </div>
-                                                </Popper>
-                                              )}
-                                              {a.removed && (
-                                                <span className="text-[10px] text-gray-500">
-                                                  (removido)
-                                                </span>
-                                              )}
-                                            </span>
-                                          ) : (
-                                            <span
-                                              key={a.userId}
-                                              className="relative inline-flex items-center gap-1 text-[11px] text-gray-700 bg-white border border-gray-200 px-1.5 py-0.5 rounded group"
-                                            >
-                                              <Clock
-                                                size={12}
-                                                className="text-gray-700 cursor-help"
-                                              />{' '}
-                                              <button
-                                                className="hover:underline"
-                                                onClick={(e) => e.stopPropagation()}
-                                                onMouseEnter={(e) => {
-                                                  setApproverHoverUserId(a.user?.id || a.approverId);
-                                                  setApproverHoverAnchorEl(
-                                                    e.currentTarget as HTMLElement
-                                                  );
-                                                }}
-                                                onMouseLeave={() => {
-                                                  setApproverHoverUserId(null);
-                                                  setApproverHoverAnchorEl(null);
-                                                }}
-                                              >
-                                                {a.approver?.fullName ||
-                                                  a.user?.fullName ||
-                                                  a.approver?.username ||
-                                                  a.user?.username ||
-                                                  a.approverId}
-                                              </button>
-                                              {approverHoverUserId ===
-                                                (a.user?.id || a.approverId) && (
-                                                <Popper
-                                                  open
-                                                  placement="top"
-                                                  anchorEl={approverHoverAnchorEl}
-                                                  style={{ zIndex: 1000 }}
-                                                >
-                                                  <div className="text-[10px] px-2 py-1 rounded bg-gray-900 text-white shadow">
-                                                    @{a.approver?.username || a.user?.username || ''}
-                                                  </div>
-                                                </Popper>
-                                              )}
-                                              {a.removed && (
-                                                <span className="text-[10px] text-gray-500">
-                                                  (removido)
-                                                </span>
-                                              )}
-                                              {m.expiresAt && (
-                                                <div className=" hidden absolute left-0 top-full mt-1 bg-gray-900 text-white text-[10px] rounded px-2 py-1 opacity-0 group-hover:opacity-100 whitespace-nowrap">
-                                                  Aún tiene{' '}
-                                                  {(relativeIn(m.expiresAt) || '')
-                                                    .replace(/en:\s*/, '')
-                                                    .replace(/segundos?/, 's')
-                                                    .replace(/minutos?/, 'min')
-                                                    .replace(/horas?/, 'h')
-                                                    .replace(/días?/, 'd')
-                                                    .replace(/mes(es)?/, 'm')
-                                                    .replace(/años?/, 'a')}{' '}
-                                                  para aprobarlo
-                                                </div>
-                                              )}
-                                            </span>
-                                          )
-                                        )}
-                                    </div>
-                                  </div>
+                                    onViewComunicado={(msg) => setViewingComunicado(msg)}
+                                  />
                                 ))}
                                 {messagesItems.length === 0 && (
                                   <div className="py-8 text-center text-gray-500">
@@ -8591,8 +8023,27 @@ const ChannelManager: React.FC<ChannelManagerProps> = ({ currentUser }) => {
                   <div className="flex-1 overflow-y-auto custom-scrollbar p-6 space-y-6">
                     {/* Message Content */}
                     <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm relative">
-                      {/* Sent Date Header - Integrated */}
-                      <div className="flex items-center justify-between mb-4 pb-3 border-b border-gray-50 text-gray-400">
+                      {viewMessageData.extra?.comunicado ? (
+                         <div className="prose prose-sm prose-indigo max-w-none">
+                           <h2 className="text-xl font-bold text-gray-900 mb-4">
+                             {viewMessageData.extra.comunicado.title}
+                           </h2>
+                           {viewMessageData.extra.comunicado.header && (
+                             <div className="mb-6 p-3 bg-gray-50 rounded-lg border border-gray-100 text-xs text-gray-600 italic" dangerouslySetInnerHTML={{ __html: viewMessageData.extra.comunicado.header }} />
+                           )}
+                           <div className="text-gray-800 leading-relaxed text-sm" dangerouslySetInnerHTML={{ __html: viewMessageData.extra.comunicado.content }} />
+                           {viewMessageData.extra.comunicado.footer && (
+                             <div className="mt-6 pt-4 border-t border-gray-100 text-xs text-gray-500" dangerouslySetInnerHTML={{ __html: viewMessageData.extra.comunicado.footer }} />
+                           )}
+                         </div>
+                      ) : (
+                         <div className="text-base text-gray-800 leading-relaxed whitespace-pre-wrap">
+                           {viewMessageData.content}
+                         </div>
+                      )}
+
+                      {/* Sent Date Footer - Moved Below Message */}
+                      <div className="flex items-center justify-between mt-4 pt-3 border-t border-gray-50 text-gray-400">
                          <div className="flex items-center gap-2" title={new Date(viewMessageData.createdAt).toLocaleString()}>
                            <Send size={14} />
                            <span className="text-xs">
@@ -8615,25 +8066,6 @@ const ChannelManager: React.FC<ChannelManagerProps> = ({ currentUser }) => {
                            </button>
                          )}
                       </div>
-                      
-                      {viewMessageData.extra?.comunicado ? (
-                         <div className="prose prose-sm prose-indigo max-w-none">
-                           <h2 className="text-xl font-bold text-gray-900 mb-4">
-                             {viewMessageData.extra.comunicado.title}
-                           </h2>
-                           {viewMessageData.extra.comunicado.header && (
-                             <div className="mb-6 p-3 bg-gray-50 rounded-lg border border-gray-100 text-xs text-gray-600 italic" dangerouslySetInnerHTML={{ __html: viewMessageData.extra.comunicado.header }} />
-                           )}
-                           <div className="text-gray-800 leading-relaxed text-sm" dangerouslySetInnerHTML={{ __html: viewMessageData.extra.comunicado.content }} />
-                           {viewMessageData.extra.comunicado.footer && (
-                             <div className="mt-6 pt-4 border-t border-gray-100 text-xs text-gray-500" dangerouslySetInnerHTML={{ __html: viewMessageData.extra.comunicado.footer }} />
-                           )}
-                         </div>
-                      ) : (
-                         <div className="text-base text-gray-800 leading-relaxed whitespace-pre-wrap">
-                           {viewMessageData.content}
-                         </div>
-                      )}
                     </div>
 
                     {/* Schedule List */}
@@ -8830,7 +8262,11 @@ const ChannelManager: React.FC<ChannelManagerProps> = ({ currentUser }) => {
                         <div className={`flex gap-3 items-start ${new Date(viewMessageData.expiresAt).getTime() < new Date().getTime() ? 'opacity-50 grayscale' : ''}`}>
                           <div className="p-1.5 bg-amber-50 rounded text-amber-500 mt-0.5"><Hourglass size={14} /></div>
                           <div>
-                            <div className="text-[10px] uppercase font-bold text-amber-500">Vence</div>
+                            <div className="text-[10px] uppercase font-bold text-amber-500">
+                              {new Date(viewMessageData.expiresAt).getTime() < new Date().getTime()
+                                ? 'Venció'
+                                : 'Vence'}
+                            </div>
                             <SmartDate date={viewMessageData.expiresAt} />
                           </div>
                         </div>
@@ -8924,10 +8360,16 @@ const ChannelManager: React.FC<ChannelManagerProps> = ({ currentUser }) => {
           channels={channels}
           selectedParentChannel={
             selectedChannel?.parentId
-              ? channels.find((c) => c.id === selectedChannel.parentId)
-              : channels.find((c) => c.id === selectedChannel?.id) || selectedChannel
+              ? (parentChannel || findChannelById(channels, selectedChannel.parentId))
+              : selectedChannel || undefined
           }
           onSelect={(channel) => {
+            if (channel.parentId) {
+              const parent = channels.find((c) => c.id === channel.parentId) || findChannelById(channels, channel.parentId);
+              if (parent) setParentChannel(parent);
+            } else {
+              setParentChannel(null);
+            }
             setSelectedChannel(channel);
             setActiveTab('messages');
             setShowChannelSearch(false);
@@ -8991,6 +8433,8 @@ const ChannelManager: React.FC<ChannelManagerProps> = ({ currentUser }) => {
           </div>
         </div>
       )}
+
+      {showDesignPreview && <MessageDesignPreview onClose={() => setShowDesignPreview(false)} />}
     </>
   );
 };
