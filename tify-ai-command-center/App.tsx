@@ -37,6 +37,7 @@ import PublicTicketPurchase from './components/events/PublicTicketPurchase';
 import GuestRSVP from './components/events/GuestRSVP';
 import PublicShortener from './components/PublicShortener';
 import StyleDemo from './components/StyleDemo';
+import PublicMessageViewer from './components/PublicMessageViewer';
 
 const ShortLinkRedirect: React.FC<{ code: string }> = ({ code }) => {
   useEffect(() => {
@@ -124,6 +125,13 @@ const App: React.FC = () => {
       return !!window.location.pathname.match(/^\/short\/?$/i);
     }
     return false;
+  });
+  const [publicMessageId, setPublicMessageId] = useState<string | null>(() => {
+    if (typeof window !== 'undefined') {
+      const match = window.location.pathname.match(/^\/public\/msg\/([a-zA-Z0-9-]+)$/);
+      return match ? match[1] : null;
+    }
+    return null;
   });
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
   const userMenuRef = useRef<HTMLDivElement>(null);
@@ -264,6 +272,10 @@ const App: React.FC = () => {
 
   if (isPublicShortener) {
     return <PublicShortener />;
+  }
+
+  if (publicMessageId) {
+    return <PublicMessageViewer messageId={publicMessageId} />;
   }
 
   if (authMode !== 'ready') {

@@ -48,8 +48,8 @@ export const API_BASE = (() => {
   ) {
     return (process as any).env.TIFY_API_BASE;
   }
-  return 'https://tify-main-backend.vercel.app/api';
-  // return 'http://localhost:3333/api';
+  // return 'https://tify-main-backend.vercel.app/api';
+  return 'http://localhost:3333/api';
 })();
 export function getAuthToken(): string | null {
   return typeof localStorage !== 'undefined' ? localStorage.getItem('tify_token') : null;
@@ -337,6 +337,10 @@ export const api = {
     viewers: Array<{ id: string; username: string; fullName: string; count: number }>;
   }> => {
     return request(`${API_BASE}/messages/${id}/views`);
+  },
+
+  getPublicMessage: async (id: string): Promise<Message> => {
+    return request<Message>(`${API_BASE}/messages/${id}/public`);
   },
 
   visitChannel: async (id: string): Promise<{ ok: boolean }> => {

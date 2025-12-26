@@ -69,6 +69,7 @@ export interface Channel {
   title: string;
   description?: string;
   logoUrl?: string;
+  coverUrl?: string;
   icon: string;
   memberCount: number;
   isPublic: boolean;
@@ -112,7 +113,7 @@ export interface Message {
   extra?: any;
   createdAt: string;
   sender: UserProfileShort;
-  channel: { title: string; icon: string };
+  channel: { title: string; icon: string; isPublic?: boolean };
   category?: { name: string; color: string };
   approvals?: {
     id: string;
